@@ -127,6 +127,11 @@ interface AuctionTab {
 
 const DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
+function fmt(n: number, decimals = 1): string {
+  return parseFloat(n.toFixed(decimals)).toString()
+}
+
+
 export default function ModuleDetailPage() {
   const params = useParams()
   const moduleId = params.id as string
@@ -354,15 +359,15 @@ export default function ModuleDetailPage() {
           <p className="text-xs text-muted-foreground">If all positions resolve YES</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Total P&L</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Bot P&L</p>
           <p className={cn("mt-1 text-2xl font-bold", totalPnl >= 0 ? "text-success" : "text-destructive")}>
             {formatCurrency(totalPnl)}
           </p>
-          <p className="text-xs text-muted-foreground">{closedPositions.length} closed trades</p>
+          <p className="text-xs text-muted-foreground">Paper trades only</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wide">Win Rate</p>
-          <p className="mt-1 text-2xl font-bold">{winRate.toFixed(1)}%</p>
+          <p className="mt-1 text-2xl font-bold">{fmt(winRate)}%</p>
           <p className="text-xs text-muted-foreground">{wins}W / {closedPositions.length - wins}L</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
@@ -415,6 +420,7 @@ export default function ModuleDetailPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Daily Pacing
           </h2>
+          <p className="mt-1 mb-3 text-xs text-muted-foreground">Day-by-day breakdown of posting activity for this auction. Shows actual posts vs what we'd expect based on historical patterns.</p>
         </div>
         {pacing?.daily_table && pacing.daily_table.length > 0 ? (
           <div className="overflow-x-auto">
@@ -474,9 +480,10 @@ export default function ModuleDetailPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* DOW Heatmap */}
         <div className="rounded-lg border border-border bg-card p-6">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             DOW Averages Heatmap
           </h2>
+          <p className="mt-1 mb-3 text-xs text-muted-foreground">Historical average posts per day of the week. Greener = more posts typically. Based on recency-weighted data — recent weeks count more than older ones.</p>
           {dowAvg && Array.isArray(dowAvg) && dowAvg.length > 0 ? (
             <div className="space-y-4">
               <div>
@@ -495,8 +502,8 @@ export default function ModuleDetailPage() {
                         }}
                       >
                         <p className="text-xs font-semibold">{d.day}</p>
-                        <p className="mt-0.5 text-lg font-bold">{(d.avg || 0).toFixed(1)}</p>
-                        <p className="text-[10px] text-muted-foreground">&sigma;{(d.std || 0).toFixed(1)} n={d.samples || 0}</p>
+                        <p className="mt-0.5 text-lg font-bold">{fmt(d.avg || 0)}</p>
+                        <p className="text-[10px] text-muted-foreground">&sigma;{fmt(d.std || 0)} n={d.samples || 0}</p>
                       </div>
                     )
                   })}
@@ -510,9 +517,10 @@ export default function ModuleDetailPage() {
 
         {/* Pace Acceleration */}
         <div className="rounded-lg border border-border bg-card p-6">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Pace Acceleration
           </h2>
+          <p className="mt-1 mb-3 text-xs text-muted-foreground">Is posting speeding up or slowing down compared to earlier in the period? Compares the recent hourly rate to the prior rate.</p>
           {accel ? (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -567,16 +575,17 @@ export default function ModuleDetailPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Confidence Bands */}
         <div className="rounded-lg border border-border bg-card p-6">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Confidence Bands
           </h2>
+          <p className="mt-1 mb-3 text-xs text-muted-foreground">Our model's best guess at which bracket will win, ranked by probability. The wider the gap between #1 and #2, the more confident the prediction.</p>
           {bands && bands.length > 0 ? (
             <div className="space-y-4">
               <div className="rounded border border-primary/30 bg-primary/5 p-3 text-center">
                 <p className="text-xs text-muted-foreground">Projected Winner</p>
                 <p className="text-xl font-bold text-primary">{bands[0]?.bracket}</p>
                 <p className="text-sm text-muted-foreground">
-                  Confidence: {((bands[0]?.confidence || bands[0]?.probability || 0) * 100).toFixed(1)}%
+                  Confidence: {fmt((bands[0]?.confidence || bands[0]?.probability || 0) * 100)}%
                 </p>
               </div>
               <div className="space-y-2">
@@ -588,7 +597,7 @@ export default function ModuleDetailPage() {
                       <div key={i} className="space-y-0.5">
                         <div className="flex items-center justify-between text-sm">
                           <span className="font-medium">{b.bracket}</span>
-                          <span className="font-mono text-muted-foreground">{pct.toFixed(1)}%</span>
+                          <span className="font-mono text-muted-foreground">{fmt(pct)}%</span>
                         </div>
                         <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
                           <div
@@ -608,9 +617,10 @@ export default function ModuleDetailPage() {
 
         {/* Ensemble Sub-Model Breakdown */}
         <div className="rounded-lg border border-border bg-card p-6">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Ensemble Sub-Model Breakdown
           </h2>
+          <p className="mt-1 mb-3 text-xs text-muted-foreground">Four prediction models each estimate the final post count. Their outputs are blended using weights that shift as the week progresses — early week trusts history, late week trusts current pace.</p>
           {ensemble && Array.isArray(ensemble) && ensemble.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -626,16 +636,16 @@ export default function ModuleDetailPage() {
                   {ensemble.map((m: any, i: number) => (
                     <tr key={i} className="border-b border-border last:border-0">
                       <td className="py-2 font-medium">{m.model}</td>
-                      <td className="py-2 text-right font-mono">{m.projection?.toFixed(1)}</td>
-                      <td className="py-2 text-right font-mono">{m.weight?.toFixed(1)}%</td>
-                      <td className="py-2 text-right font-mono">{m.contribution?.toFixed(1)}</td>
+                      <td className="py-2 text-right font-mono">{fmt(m.projection || 0)}</td>
+                      <td className="py-2 text-right font-mono">{fmt(m.weight || 0)}%</td>
+                      <td className="py-2 text-right font-mono">{fmt(m.contribution || 0)}</td>
                     </tr>
                   ))}
                   <tr className="bg-muted/30 font-semibold">
                     <td className="py-2">Ensemble Average</td>
-                    <td className="py-2 text-right font-mono">{pacing?.ensemble_avg?.toFixed(1)}</td>
+                    <td className="py-2 text-right font-mono">{fmt(pacing?.ensemble_avg || 0)}</td>
                     <td className="py-2 text-right font-mono">100%</td>
-                    <td className="py-2 text-right font-mono">{pacing?.ensemble_avg?.toFixed(1)}</td>
+                    <td className="py-2 text-right font-mono">{fmt(pacing?.ensemble_avg || 0)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -649,13 +659,14 @@ export default function ModuleDetailPage() {
       {/* Current + Future Auction Cards */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {[
-          { label: "Current Auction", data: pacing?.current_auction },
-          { label: "Next Auction", data: pacing?.next_auction },
-        ].map(({ label, data }) => (
+          { label: "Current Auction", data: pacing?.current_auction, desc: "Live stats for the active auction period. Shows running total, pace, regime, and which bracket the model vs the market thinks will win." },
+          { label: "Next Auction", data: pacing?.next_auction, desc: "Upcoming auction period. Shows running total, pace, regime, and which bracket the model vs the market thinks will win." },
+        ].map(({ label, data, desc }) => (
           <div key={label} className="rounded-lg border border-border bg-card p-6">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               {label}
             </h2>
+            <p className="mt-1 mb-3 text-xs text-muted-foreground">{desc}</p>
             {data ? (
               <div className="space-y-3 text-sm">
                 {data.period && (
@@ -723,6 +734,7 @@ export default function ModuleDetailPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Open Positions ({openPositions.length})
           </h2>
+          <p className="mt-1 mb-3 text-xs text-muted-foreground">Your active bets in this auction. Shows what you'd win if each position resolves YES — each share pays out $1.00.</p>
         </div>
         {openPositions.length > 0 ? (
           <div className="overflow-x-auto">
@@ -754,8 +766,8 @@ export default function ModuleDetailPage() {
                         </span>
                       </td>
                       <td className="px-6 py-3 font-medium">{p.bracket}</td>
-                      <td className="px-6 py-3 text-right">{p.size.toFixed(1)}</td>
-                      <td className="px-6 py-3 text-right">{(p.avg_price * 100).toFixed(1)}&cent;</td>
+                      <td className="px-6 py-3 text-right">{fmt(p.size)}</td>
+                      <td className="px-6 py-3 text-right">{fmt(p.avg_price * 100)}&cent;</td>
                       <td className="px-6 py-3 text-right">{formatCurrency(cost)}</td>
                       <td className="px-6 py-3 text-right text-success">{formatCurrency(payout)}</td>
                       <td className="px-6 py-3 text-right font-medium text-success">+{formatCurrency(profit)}</td>
@@ -788,6 +800,7 @@ export default function ModuleDetailPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Recent Signals ({mySignals.length})
           </h2>
+          <p className="mt-1 mb-3 text-xs text-muted-foreground">Trade signals generated by the 4-model ensemble. Each signal shows the model's probability vs the market price, the edge (difference), and the Kelly-sized bet amount.</p>
         </div>
         {mySignals.length > 0 ? (
           <div className="max-h-[400px] overflow-y-auto">
@@ -836,6 +849,7 @@ export default function ModuleDetailPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Trade History ({trades?.total || 0})
           </h2>
+          <p className="mt-1 mb-3 text-xs text-muted-foreground">Log of every trade the bot has executed for this module.</p>
         </div>
         {trades?.data && trades.data.length > 0 ? (
           <div className="max-h-[400px] overflow-y-auto">
@@ -859,8 +873,8 @@ export default function ModuleDetailPage() {
                     <td className="px-6 py-2.5">
                       <span className={t.side === "BUY" ? "text-success" : "text-destructive"}>{t.side}</span>
                     </td>
-                    <td className="px-6 py-2.5 text-right">{t.size.toFixed(1)}</td>
-                    <td className="px-6 py-2.5 text-right">{(t.price * 100).toFixed(1)}&cent;</td>
+                    <td className="px-6 py-2.5 text-right">{fmt(t.size)}</td>
+                    <td className="px-6 py-2.5 text-right">{fmt(t.price * 100)}&cent;</td>
                     <td className="px-6 py-2.5 text-right">{formatCurrency(t.size * t.price)}</td>
                     <td className="px-6 py-2.5 text-right text-xs text-muted-foreground">{t.executor}</td>
                   </tr>
