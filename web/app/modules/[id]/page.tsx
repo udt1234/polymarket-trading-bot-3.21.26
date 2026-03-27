@@ -114,6 +114,17 @@ interface ModuleConfig {
   auto_optimize_periods: boolean
 }
 
+interface AuctionTab {
+  tracking_id: string
+  title: string
+  start_date: string
+  end_date: string
+  elapsed_days: number
+  remaining_days: number
+  status: "active" | "past" | "future"
+  is_active: boolean
+}
+
 const DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 export default function ModuleDetailPage() {
@@ -135,9 +146,17 @@ export default function ModuleDetailPage() {
   const { data: positions } = useApi<Position[]>(
     id ? `/api/portfolio/positions?status=all` : null
   )
+  const [activeTrackingId, setActiveTrackingId] = useState<string | null>(null)
+
+  const { data: auctions } = useApi<AuctionTab[]>(
+    id ? `/api/modules/${id}/auctions` : null
+  )
   const { data: regime } = useApi<any>("/api/analytics/regime")
+  const pacingUrl = id
+    ? `/api/modules/${id}/pacing${activeTrackingId ? `?tracking_id=${activeTrackingId}` : ""}`
+    : null
   const { data: pacing, refetch: refetchPacing } = useApi<PacingData>(
-    id ? `/api/modules/${id}/pacing` : null, [], 60000
+    pacingUrl, [activeTrackingId], 60000
   )
   const { data: config, refetch: refetchConfig } = useApi<ModuleConfig>(
     id ? `/api/modules/${id}/config` : null
@@ -352,6 +371,43 @@ export default function ModuleDetailPage() {
           <p className="text-xs text-muted-foreground">Max: {(module.max_position_pct * 100).toFixed(0)}% per bracket</p>
         </div>
       </div>
+
+      {/* Auction Tabs */}
+      {auctions && auctions.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto rounded-lg border border-border bg-card p-2">
+          {auctions.map((a) => {
+            const isSelected = activeTrackingId
+              ? activeTrackingId === a.tracking_id
+              : (pacing as any)?.tracking_id === a.tracking_id
+            const isPast = a.status === "past"
+            return (
+              <button
+                key={a.tracking_id}
+                onClick={() => setActiveTrackingId(a.tracking_id)}
+                className={cn(
+                  "flex-shrink-0 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                  isSelected
+                    ? "bg-primary text-primary-foreground"
+                    : isPast
+                      ? "text-muted-foreground/60 hover:bg-accent hover:text-foreground border border-dashed border-border"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )}
+              >
+                <span className="flex items-center gap-1.5">
+                  {isPast && <span className="text-[9px] rounded bg-muted px-1 py-0.5 uppercase">Past</span>}
+                  {a.start_date.slice(5)} → {a.end_date.slice(5)}
+                </span>
+                <span className="block text-[10px] opacity-75">
+                  {isPast
+                    ? "Resolved"
+                    : `${a.elapsed_days.toFixed(0)}d elapsed / ${a.remaining_days.toFixed(0)}d left`
+                  }
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Daily Pacing Table */}
       <div className="rounded-lg border border-border bg-card">

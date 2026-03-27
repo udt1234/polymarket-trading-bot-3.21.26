@@ -133,8 +133,76 @@ async def update_config(module_id: str, config: dict):
     return get_module_config(module_id)
 
 
+@router.get("/{module_id}/auctions")
+async def get_auctions(module_id: str, include_past: bool = True):
+    sb = get_supabase()
+    module = sb.table("modules").select("*").eq("id", module_id).single().execute()
+    if not module.data:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    from datetime import datetime, timezone
+    import httpx as hx
+
+    handle = "realDonaldTrump"
+    name_filter = "truth social"
+    now = datetime.now(timezone.utc)
+
+    async with hx.AsyncClient(timeout=15) as client:
+        r = await client.get("https://xtracker.polymarket.com/api/trackings", params={"platform": "truthsocial", "handle": handle})
+        all_trackings = r.json().get("data", [])
+
+    # Filter to this module's market type
+    module_trackings = [
+        t for t in all_trackings
+        if "trump" in t.get("title", "").lower() and name_filter in t.get("title", "").lower()
+    ]
+
+    results = []
+    for t in module_trackings:
+        tid = t.get("id") or t.get("trackingId")
+        start_str = t.get("startDate", "")
+        end_str = t.get("endDate", "")
+
+        try:
+            start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+            end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+        except Exception:
+            continue
+
+        elapsed = max((now - start_dt).total_seconds() / 86400, 0)
+        remaining = max((end_dt - now).total_seconds() / 86400, 0)
+        is_active = start_dt <= now <= end_dt
+        is_past = now > end_dt
+        is_future = now < start_dt
+
+        if is_past and not include_past:
+            continue
+
+        status = "active" if is_active else ("past" if is_past else "future")
+
+        results.append({
+            "tracking_id": str(tid),
+            "title": t.get("title", ""),
+            "start_date": start_str[:10],
+            "end_date": end_str[:10],
+            "elapsed_days": round(elapsed, 1),
+            "remaining_days": round(remaining, 1),
+            "status": status,
+            "is_active": is_active,
+        })
+
+    # Sort: active first (by start date), then future, then past (most recent first)
+    results.sort(key=lambda x: (
+        0 if x["status"] == "active" else (1 if x["status"] == "future" else 2),
+        x["start_date"] if x["status"] != "past" else "",
+        -x["elapsed_days"] if x["status"] == "past" else 0,
+    ))
+
+    return results
+
+
 @router.get("/{module_id}/pacing")
-async def get_pacing(module_id: str):
+async def get_pacing(module_id: str, tracking_id: str | None = Query(default=None)):
     sb = get_supabase()
     module = sb.table("modules").select("*").eq("id", module_id).single().execute()
     if not module.data:
@@ -142,22 +210,37 @@ async def get_pacing(module_id: str):
 
     from datetime import datetime, timezone, timedelta
     from api.modules.truth_social.data import (
-        fetch_active_tracking, fetch_xtracker_posts, parse_hourly_counts,
-        parse_daily_totals, get_xtracker_summary, compute_elapsed_days,
-        fetch_historical_weekly_totals, fetch_market_prices, extract_slug_from_tracking,
+        fetch_active_tracking, fetch_tracking_by_id, fetch_xtracker_stats,
+        parse_hourly_counts, parse_daily_totals, get_xtracker_summary,
+        compute_elapsed_days, fetch_historical_weekly_totals,
+        fetch_market_prices, extract_slug_from_tracking,
     )
     from api.modules.truth_social.regime import detect_regime
     from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
     from api.modules.truth_social.projection import ensemble_weights as ew, ensemble_projection
     import math
+    import asyncio
 
     cfg = get_module_config(module_id)
     handle = "realDonaldTrump"
     now = datetime.now(timezone.utc)
 
-    # Fetch live data from xTracker
-    tracking = await fetch_active_tracking(handle)
-    raw_data = await fetch_xtracker_posts(handle) if tracking else {}
+    # Fetch tracking - specific or default
+    if tracking_id:
+        tracking = await fetch_tracking_by_id(handle, tracking_id)
+    else:
+        tracking = await fetch_active_tracking(handle)
+
+    # Fetch stats for this specific tracking
+    if tracking:
+        tid = tracking.get("id") or tracking.get("trackingId")
+        if tid:
+            raw_data = await fetch_xtracker_stats(str(tid))
+            raw_data["_tracking"] = tracking
+        else:
+            raw_data = {}
+    else:
+        raw_data = {}
     summary = get_xtracker_summary(raw_data)
     hourly_counts = parse_hourly_counts(raw_data)
     daily_totals = parse_daily_totals(raw_data)
@@ -233,19 +316,28 @@ async def get_pacing(module_id: str):
     market_prices = await fetch_market_prices(slug) if slug else {}
     market_implied = max(market_prices, key=market_prices.get) if market_prices else None
 
-    # Build daily table with real data
-    days_prior = cfg.get("pacing_display_days_prior", 10)
-    days_future_count = cfg.get("pacing_display_days_future", 7)
+    # Build daily table with real data — scoped to auction period
     daily_lookup = {d["date"]: d["count"] for d in daily_totals}
+
+    # Determine date range from auction start/end + 1 day buffer after
+    if week_start_str and week_end_str:
+        table_start = datetime.strptime(week_start_str, "%Y-%m-%d").date()
+        table_end = datetime.strptime(week_end_str, "%Y-%m-%d").date() + timedelta(days=1)
+    else:
+        days_prior = cfg.get("pacing_display_days_prior", 10)
+        days_future_count = cfg.get("pacing_display_days_future", 7)
+        table_start = (now - timedelta(days=days_prior)).date()
+        table_end = (now + timedelta(days=days_future_count)).date()
 
     daily_table = []
     cumulative = 0
-    for d in range(-days_prior, days_future_count + 1):
-        dt = now + timedelta(days=d)
-        dt_str = dt.strftime("%Y-%m-%d")
-        is_today = d == 0
-        is_future = d > 0
-        dow = dt.weekday()
+    current_date = table_start
+    today_date = now.date()
+    while current_date <= table_end:
+        dt_str = current_date.strftime("%Y-%m-%d")
+        is_today = current_date == today_date
+        is_future = current_date > today_date
+        dow = current_date.weekday()
         actual = daily_lookup.get(dt_str)
         dow_avg = var.get(dow, {}).get("mean", round(hist_mean / 7, 1))
         dow_std = var.get(dow, {}).get("std", 0)
@@ -278,6 +370,7 @@ async def get_pacing(module_id: str):
             "is_today": is_today,
             "is_future": is_future,
         })
+        current_date += timedelta(days=1)
 
     # DOW averages heatmap
     dow_heatmap = []
@@ -339,7 +432,10 @@ async def get_pacing(module_id: str):
     except Exception:
         pass
 
+    active_tracking_id = str((tracking or {}).get("id") or (tracking or {}).get("trackingId") or "")
+
     return {
+        "tracking_id": active_tracking_id,
         "running_total": running_total,
         "elapsed_days": round(elapsed_days, 2),
         "remaining_days": round(remaining_days, 2),

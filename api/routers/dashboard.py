@@ -1,7 +1,10 @@
 from fastapi import APIRouter
 from api.dependencies import get_supabase
 from api.config import get_settings
-from api.services.wallet import fetch_wallet_summary, fetch_wallet_positions, fetch_wallet_trades, fetch_wallet_auctions
+from api.services.wallet import (
+    fetch_wallet_summary, fetch_wallet_positions, fetch_wallet_trades,
+    fetch_wallet_auctions, fetch_wallet_activity, build_performance_series,
+)
 
 router = APIRouter()
 
@@ -76,11 +79,22 @@ async def get_metrics():
 
 @router.get("/performance")
 async def get_performance(range: str = "7d"):
+    wallet = _get_active_wallet()
+    if wallet:
+        activities = await fetch_wallet_activity(wallet)
+        positions = await fetch_wallet_positions(wallet)
+        series = build_performance_series(activities, positions)
+        limit_map = {"24h": 1, "7d": 7, "30d": 30, "90d": 90, "all": 9999}
+        limit = limit_map.get(range, 7)
+        if limit < len(series):
+            series = series[-limit:]
+        return {"data": series, "source": "live"}
+
     sb = get_supabase()
     limit_map = {"24h": 1, "7d": 7, "30d": 30, "90d": 90, "all": 9999}
     limit = limit_map.get(range, 7)
     rows = sb.table("daily_pnl").select("*").order("date", desc=True).limit(limit).execute()
-    return {"data": list(reversed(rows.data))}
+    return {"data": list(reversed(rows.data)), "source": "paper"}
 
 
 @router.get("/recent-trades")

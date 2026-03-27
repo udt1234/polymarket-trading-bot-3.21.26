@@ -26,7 +26,7 @@ def normalize_bracket(raw: str) -> str:
     return BRACKET_ALIASES.get(raw, raw)
 
 
-async def fetch_active_tracking(handle: str = "realDonaldTrump") -> dict | None:
+async def _fetch_trackings_raw(handle: str = "realDonaldTrump") -> list:
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.get(
             f"{XTRACKER_BASE}/users/{handle}/trackings",
@@ -35,19 +35,59 @@ async def fetch_active_tracking(handle: str = "realDonaldTrump") -> dict | None:
         res.raise_for_status()
         data = res.json()
         trackings = data.get("data", []) if isinstance(data, dict) else data
-        if not isinstance(trackings, list):
-            return None
+        return trackings if isinstance(trackings, list) else []
 
-        now = datetime.now(timezone.utc)
-        for t in trackings:
-            start = t.get("startDate", "")
-            end = t.get("endDate", "")
-            if start and end:
-                s = datetime.fromisoformat(start.replace("Z", "+00:00"))
-                e = datetime.fromisoformat(end.replace("Z", "+00:00"))
-                if s <= now <= e:
-                    return t
+
+async def fetch_active_tracking(handle: str = "realDonaldTrump") -> dict | None:
+    trackings = await _fetch_trackings_raw(handle)
+    if not trackings:
+        return None
+
+    now = datetime.now(timezone.utc)
+    active = []
+    for t in trackings:
+        start = t.get("startDate", "")
+        end = t.get("endDate", "")
+        if start and end:
+            s = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            e = datetime.fromisoformat(end.replace("Z", "+00:00"))
+            if s <= now <= e:
+                active.append((t, s, e))
+
+    if not active:
         return trackings[0] if trackings else None
+
+    # Prefer the tracking with the earliest startDate (most elapsed time)
+    active.sort(key=lambda x: x[1])
+    return active[0][0]
+
+
+async def fetch_all_active_trackings(handle: str = "realDonaldTrump") -> list[dict]:
+    trackings = await _fetch_trackings_raw(handle)
+    now = datetime.now(timezone.utc)
+    active = []
+    for t in trackings:
+        start = t.get("startDate", "")
+        end = t.get("endDate", "")
+        if start and end:
+            s = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            e = datetime.fromisoformat(end.replace("Z", "+00:00"))
+            if s <= now <= e:
+                elapsed = (now - s).total_seconds() / 86400
+                t["_elapsed_days"] = round(elapsed, 2)
+                t["_remaining_days"] = round((e - now).total_seconds() / 86400, 2)
+                active.append(t)
+    active.sort(key=lambda x: x.get("startDate", ""))
+    return active
+
+
+async def fetch_tracking_by_id(handle: str, tracking_id: str) -> dict | None:
+    trackings = await _fetch_trackings_raw(handle)
+    for t in trackings:
+        tid = t.get("id") or t.get("trackingId")
+        if str(tid) == str(tracking_id):
+            return t
+    return None
 
 
 def extract_slug_from_tracking(tracking: dict) -> str | None:
