@@ -1,0 +1,8 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "cd api && uvicorn api.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/docs"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

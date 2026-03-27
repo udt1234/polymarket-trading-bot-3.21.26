@@ -1,5 +1,6 @@
 # Secrets
 .env
+.env.local
 *.credentials.json
 polymarket_credentials.json
 
@@ -36,3 +37,9 @@ Thumbs.db
 # Build
 dist/
 build/
+
+# Backtest data
+data/
+
+# MISC (unrelated files)
+MISC/
