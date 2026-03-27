@@ -165,13 +165,6 @@ def build_performance_series(activities: list[dict], positions: list[dict]) -> l
         elif a_type in ("REDEEM", "PAYOUT"):
             daily[day]["received"] += size
 
-    current_position_value = 0.0
-    for p in positions:
-        if not _is_resolved(p):
-            size = float(p.get("size", 0) or 0)
-            cur_price = float(p.get("curPrice", 0) or 0)
-            current_position_value += size * cur_price
-
     total_pnl_from_positions = sum(float(p.get("cashPnl", 0) or 0) for p in positions)
     total_invested = sum(float(p.get("initialValue", 0) or 0) for p in positions)
 

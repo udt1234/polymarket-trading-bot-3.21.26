@@ -1,6 +1,12 @@
+import asyncio
+import math
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from api.dependencies import get_supabase
+from api.modules.truth_social.data import _fetch_trackings_raw
 from api.modules.truth_social.module_config import get_module_config, save_module_config
 from api.modules.truth_social.enhanced_pacing import (
     recency_weighted_averages, dow_variance, pace_acceleration,
@@ -140,16 +146,11 @@ async def get_auctions(module_id: str, include_past: bool = True):
     if not module.data:
         raise HTTPException(status_code=404, detail="Module not found")
 
-    from datetime import datetime, timezone
-    import httpx as hx
-
     handle = "realDonaldTrump"
     name_filter = "truth social"
     now = datetime.now(timezone.utc)
 
-    async with hx.AsyncClient(timeout=15) as client:
-        r = await client.get("https://xtracker.polymarket.com/api/trackings", params={"platform": "truthsocial", "handle": handle})
-        all_trackings = r.json().get("data", [])
+    all_trackings = await _fetch_trackings_raw(handle)
 
     # Filter to this module's market type
     module_trackings = [
@@ -208,7 +209,6 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     if not module.data:
         raise HTTPException(status_code=404, detail="Module not found")
 
-    from datetime import datetime, timezone, timedelta
     from api.modules.truth_social.data import (
         fetch_active_tracking, fetch_tracking_by_id, fetch_xtracker_stats,
         parse_hourly_counts, parse_daily_totals, get_xtracker_summary,
@@ -218,8 +218,6 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     from api.modules.truth_social.regime import detect_regime
     from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
     from api.modules.truth_social.projection import ensemble_weights as ew, ensemble_projection
-    import math
-    import asyncio
 
     cfg = get_module_config(module_id)
     handle = "realDonaldTrump"
@@ -276,7 +274,6 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     # Hourly averages for DOW deviation
     hourly_avgs = {}
     if hourly_counts:
-        from collections import defaultdict
         by_hour = defaultdict(list)
         for h in hourly_counts:
             by_hour[h.get("hour", 0)].append(h["count"])
@@ -412,23 +409,19 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     # Find next auction tracking
     next_auction = None
     try:
-        from api.modules.truth_social.data import fetch_active_tracking as fat
-        import httpx as hx
-        async with hx.AsyncClient(timeout=15) as client:
-            r = await client.get("https://xtracker.polymarket.com/api/trackings", params={"platform": "truthsocial", "handle": "realDonaldTrump"})
-            all_trackings = r.json().get("data", [])
-            trump_future = [t for t in all_trackings
-                           if "trump" in t.get("title", "").lower() and "truth social" in t.get("title", "").lower()
-                           and t.get("startDate", "") > (tracking or {}).get("startDate", "")]
-            if trump_future:
-                nxt = trump_future[0]
-                next_auction = {
-                    "period": f"{nxt['startDate'][:10]} to {nxt['endDate'][:10]}",
-                    "title": nxt.get("title"),
-                    "running_total": 0,
-                    "days_elapsed": 0,
-                    "days_remaining": nxt.get("daysTotal", 7) if "daysTotal" in nxt else 7,
-                }
+        all_trackings = await _fetch_trackings_raw("realDonaldTrump")
+        trump_future = [t for t in all_trackings
+                        if "trump" in t.get("title", "").lower() and "truth social" in t.get("title", "").lower()
+                        and t.get("startDate", "") > (tracking or {}).get("startDate", "")]
+        if trump_future:
+            nxt = trump_future[0]
+            next_auction = {
+                "period": f"{nxt['startDate'][:10]} to {nxt['endDate'][:10]}",
+                "title": nxt.get("title"),
+                "running_total": 0,
+                "days_elapsed": 0,
+                "days_remaining": nxt.get("daysTotal", 7) if "daysTotal" in nxt else 7,
+            }
     except Exception:
         pass
 

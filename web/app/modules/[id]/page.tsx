@@ -156,7 +156,6 @@ export default function ModuleDetailPage() {
   const { data: auctions } = useApi<AuctionTab[]>(
     id ? `/api/modules/${id}/auctions` : null
   )
-  const { data: regime } = useApi<any>("/api/analytics/regime")
   const pacingUrl = id
     ? `/api/modules/${id}/pacing${activeTrackingId ? `?tracking_id=${activeTrackingId}` : ""}`
     : null

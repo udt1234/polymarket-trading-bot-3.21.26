@@ -1,8 +1,9 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from api.dependencies import get_supabase
+from api.middleware import _token_cache
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -29,7 +30,11 @@ async def login(req: LoginRequest):
 
 
 @router.post("/logout")
-async def logout():
+async def logout(request: Request):
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        _token_cache.pop(token, None)
     sb = get_supabase()
     sb.auth.sign_out()
     return {"ok": True}

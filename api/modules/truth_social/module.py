@@ -238,27 +238,6 @@ class TruthSocialModule(BaseModule):
                 )
                 signals.append(signal)
 
-                enhanced_meta = {
-                    "pace_acceleration": accel,
-                    "dow_deviation": dev,
-                    "regime": regime,
-                    "confidence_bands": conf_bands,
-                    "parquet_model_active": parquet_probs is not None,
-                    "recency_half_life": half_life,
-                }
-                sb.table("signals").insert({
-                    "module_id": module_id,
-                    "market_id": slug,
-                    "bracket": bracket_label,
-                    "side": "BUY",
-                    "edge": sizing["edge"],
-                    "model_prob": model_prob,
-                    "market_price": market_price,
-                    "kelly_pct": sizing["kelly_pct"],
-                    "approved": False,
-                    "metadata": enhanced_meta,
-                }).execute()
-
         self._log(sb, module_id, "decision", "info",
                   f"Cycle: slug={slug}, total={running_total}, elapsed={elapsed_days:.1f}d, "
                   f"regime={regime['label']}, prices={len(market_prices)}, signals={len(signals)}")

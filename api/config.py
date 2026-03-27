@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     circuit_breaker_max_consecutive_losses: int = 5
     circuit_breaker_cooldown_minutes: int = 30
 
+    # CORS
+    cors_origins: str = "http://localhost:3010"
+
     # Shadow mode
     shadow_mode: bool = False
 

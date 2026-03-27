@@ -148,7 +148,6 @@ def parse_hourly_counts(raw_data: dict) -> list[dict]:
 
 
 def get_xtracker_summary(raw_data: dict) -> dict:
-    """Extract summary stats from xTracker response."""
     stats = raw_data.get("stats", {})
     if not isinstance(stats, dict):
         return {}
@@ -164,7 +163,6 @@ def get_xtracker_summary(raw_data: dict) -> dict:
 
 
 def parse_daily_totals(raw_data: dict) -> list[dict]:
-    """Group hourly data into daily totals."""
     hourly = parse_hourly_counts(raw_data)
     by_date: dict[str, int] = {}
     for h in hourly:

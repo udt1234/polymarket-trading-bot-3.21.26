@@ -15,7 +15,10 @@ async def broadcast(event: str, data: dict):
         try:
             await ws.send_json(message)
         except Exception:
-            _connections.remove(ws)
+            try:
+                _connections.remove(ws)
+            except ValueError:
+                pass
 
 
 @router.websocket("/ws/feeds")
@@ -27,5 +30,8 @@ async def websocket_feed(websocket: WebSocket):
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        _connections.remove(websocket)
+        try:
+            _connections.remove(websocket)
+        except ValueError:
+            pass
         log.info(f"WebSocket disconnected ({len(_connections)} total)")

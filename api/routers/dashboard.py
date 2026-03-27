@@ -31,7 +31,6 @@ async def get_metrics():
     wallet = _get_active_wallet()
     if wallet:
         summary = await fetch_wallet_summary(wallet)
-        bot_positions = sb.table("positions").select("*").eq("status", "open").execute()
         active_mods = sb.table("modules").select("id", count="exact").eq("status", "active").execute().count
         return {
             "portfolio_value": summary["portfolio_value"],
