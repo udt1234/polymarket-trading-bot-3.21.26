@@ -209,9 +209,24 @@ export default function ModuleDetailPage() {
 
   const totalInvested = openPositions.reduce((s, p) => s + (p.size * p.avg_price), 0)
   const totalPnl = myPositions.reduce((s, p) => s + (p.realized_pnl || 0) + (p.unrealized_pnl || 0), 0)
-  const potentialWin = openPositions.reduce((s, p) => s + (p.size * (1 - p.avg_price)), 0)
   const wins = closedPositions.filter((p) => (p.realized_pnl || 0) > 0).length
   const winRate = closedPositions.length > 0 ? (wins / closedPositions.length) * 100 : 0
+
+  // Best-case scenario: which single bracket winning gives the highest net P&L?
+  // In a bracket auction, only 1 bracket wins. When it wins, that position pays $1/share.
+  // All other positions lose their full cost.
+  const bestScenario = openPositions.reduce((best, winningPos) => {
+    const winPayout = winningPos.size * 1.0 // winning bracket pays $1/share
+    const winCost = winningPos.size * winningPos.avg_price
+    const othersCost = openPositions
+      .filter((p) => p.bracket !== winningPos.bracket)
+      .reduce((s, p) => s + (p.size * p.avg_price), 0)
+    const netPnl = (winPayout - winCost) - othersCost
+    return netPnl > best.netPnl ? { bracket: winningPos.bracket, netPnl, payout: winPayout } : best
+  }, { bracket: "", netPnl: -Infinity, payout: 0 })
+
+  const potentialWin = bestScenario.netPnl > -Infinity ? bestScenario.netPnl : 0
+  const bestBracket = bestScenario.bracket
 
   if (!module) {
     return (
@@ -353,9 +368,13 @@ export default function ModuleDetailPage() {
           <p className="text-xs text-muted-foreground">{openPositions.length} open positions</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Potential Win</p>
-          <p className="mt-1 text-2xl font-bold text-success">{formatCurrency(potentialWin)}</p>
-          <p className="text-xs text-muted-foreground">If all positions resolve YES</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Best Outcome</p>
+          <p className={cn("mt-1 text-2xl font-bold", potentialWin >= 0 ? "text-success" : "text-destructive")}>
+            {potentialWin >= 0 ? "+" : ""}{formatCurrency(potentialWin)}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {bestBracket ? `If ${bestBracket} wins` : "No positions"}
+          </p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wide">Bot P&L</p>
@@ -745,18 +764,20 @@ export default function ModuleDetailPage() {
                   <th className="px-6 py-2 text-right">Shares</th>
                   <th className="px-6 py-2 text-right">Avg Price</th>
                   <th className="px-6 py-2 text-right">Cost</th>
-                  <th className="px-6 py-2 text-right">Potential Payout</th>
-                  <th className="px-6 py-2 text-right">Potential Profit</th>
-                  <th className="px-6 py-2 text-right">ROI</th>
-                  <th className="px-6 py-2 text-right">Optimal Entry</th>
+                  <th className="px-6 py-2 text-right">Payout If Wins</th>
+                  <th className="px-6 py-2 text-right">Net P&L If Wins</th>
+                  <th className="px-6 py-2 text-right">Net ROI</th>
                 </tr>
               </thead>
               <tbody>
                 {openPositions.map((p, i) => {
                   const cost = p.size * p.avg_price
                   const payout = p.size * 1.0
-                  const profit = payout - cost
-                  const roi = cost > 0 ? (profit / cost) * 100 : 0
+                  const othersCost = openPositions
+                    .filter((op) => op.bracket !== p.bracket)
+                    .reduce((s, op) => s + (op.size * op.avg_price), 0)
+                  const netPnl = (payout - cost) - othersCost
+                  const netRoi = totalInvested > 0 ? (netPnl / totalInvested) * 100 : 0
                   return (
                     <tr key={i} className="border-b border-border last:border-0 hover:bg-accent/50">
                       <td className="px-6 py-3">
@@ -766,24 +787,28 @@ export default function ModuleDetailPage() {
                       </td>
                       <td className="px-6 py-3 font-medium">{p.bracket}</td>
                       <td className="px-6 py-3 text-right">{fmt(p.size)}</td>
-                      <td className="px-6 py-3 text-right">{fmt(p.avg_price * 100)}&cent;</td>
+                      <td className="px-6 py-3 text-right">{fmt(p.avg_price * 100)}¢</td>
                       <td className="px-6 py-3 text-right">{formatCurrency(cost)}</td>
-                      <td className="px-6 py-3 text-right text-success">{formatCurrency(payout)}</td>
-                      <td className="px-6 py-3 text-right font-medium text-success">+{formatCurrency(profit)}</td>
-                      <td className="px-6 py-3 text-right font-medium text-success">+{roi.toFixed(0)}%</td>
-                      <td className="px-6 py-3 text-right text-xs text-muted-foreground">--</td>
+                      <td className="px-6 py-3 text-right">{formatCurrency(payout)}</td>
+                      <td className={cn("px-6 py-3 text-right font-medium", netPnl >= 0 ? "text-success" : "text-destructive")}>
+                        {netPnl >= 0 ? "+" : ""}{formatCurrency(netPnl)}
+                      </td>
+                      <td className={cn("px-6 py-3 text-right font-medium", netRoi >= 0 ? "text-success" : "text-destructive")}>
+                        {netRoi >= 0 ? "+" : ""}{netRoi.toFixed(0)}%
+                      </td>
                     </tr>
                   )
                 })}
                 <tr className="bg-muted/30 font-medium">
-                  <td className="px-6 py-3" colSpan={4}>Total</td>
+                  <td className="px-6 py-3" colSpan={4}>Total Invested</td>
                   <td className="px-6 py-3 text-right">{formatCurrency(totalInvested)}</td>
-                  <td className="px-6 py-3 text-right text-success">{formatCurrency(openPositions.reduce((s, p) => s + p.size, 0))}</td>
-                  <td className="px-6 py-3 text-right text-success">+{formatCurrency(potentialWin)}</td>
-                  <td className="px-6 py-3 text-right text-success">
-                    +{totalInvested > 0 ? ((potentialWin / totalInvested) * 100).toFixed(0) : 0}%
-                  </td>
                   <td className="px-6 py-3" />
+                  <td className={cn("px-6 py-3 text-right", potentialWin >= 0 ? "text-success" : "text-destructive")}>
+                    Best: {potentialWin >= 0 ? "+" : ""}{formatCurrency(potentialWin)}
+                  </td>
+                  <td className="px-6 py-3 text-right text-xs text-muted-foreground">
+                    if {bestBracket} wins
+                  </td>
                 </tr>
               </tbody>
             </table>
