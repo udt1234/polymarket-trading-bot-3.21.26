@@ -5,8 +5,7 @@ import { useApi } from "@/lib/hooks"
 import { MetricCard } from "@/components/dashboard/metric-card"
 import { PerformanceChart } from "@/components/dashboard/performance-chart"
 import { Activity, DollarSign, TrendingUp, BarChart3, Wallet, ChevronDown, ChevronRight } from "lucide-react"
-import { formatCurrency } from "@/lib/utils"
-import { cn } from "@/lib/utils"
+import { formatCurrency, formatDate, cn } from "@/lib/utils"
 
 interface Metrics {
   portfolio_value: number
@@ -85,7 +84,7 @@ function AuctionRow({ auction }: { auction: Auction }) {
           {auction.status}
         </span>
         <span className="flex-1 truncate text-sm font-medium">{auction.title}</span>
-        <span className="shrink-0 text-xs text-muted-foreground">{auction.end_date}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">{formatDate(auction.end_date)}</span>
         <span className="shrink-0 text-sm font-medium w-20 text-right">{formatCurrency(auction.total_cost)}</span>
         <span className={cn("shrink-0 text-sm font-medium w-20 text-right", auction.total_pnl >= 0 ? "text-success" : "text-destructive")}>
           {auction.total_pnl >= 0 ? "+" : ""}{formatCurrency(auction.total_pnl)}

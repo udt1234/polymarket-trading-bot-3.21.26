@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation"
 import { useState, useEffect, useCallback } from "react"
 import { useApi, useMutation } from "@/lib/hooks"
-import { formatCurrency, cn } from "@/lib/utils"
+import { formatCurrency, formatDate, formatDateShort, cn } from "@/lib/utils"
 import { StatusBadge } from "@/components/shared/status-badge"
 import {
   ChevronDown, ChevronUp, RefreshCw, Pause, Play, Power,
@@ -399,7 +399,7 @@ export default function ModuleDetailPage() {
               >
                 <span className="flex items-center gap-1.5">
                   {isPast && <span className="text-[9px] rounded bg-muted px-1 py-0.5 uppercase">Past</span>}
-                  {a.start_date.slice(5)} → {a.end_date.slice(5)}
+                  {formatDateShort(a.start_date)} → {formatDateShort(a.end_date)}
                 </span>
                 <span className="block text-[10px] opacity-75">
                   {isPast
@@ -446,7 +446,7 @@ export default function ModuleDetailPage() {
                       row.is_future && "text-muted-foreground italic"
                     )}
                   >
-                    <td className="px-4 py-2">{row.date}</td>
+                    <td className="px-4 py-2">{formatDate(row.date)}</td>
                     <td className="px-4 py-2">{row.day}</td>
                     <td className="px-4 py-2 text-right">{row.daily_posts ?? "—"}</td>
                     <td className="px-4 py-2 text-right">{row.running_total ?? "—"}</td>
@@ -671,7 +671,7 @@ export default function ModuleDetailPage() {
                 {data.period && (
                   <div className="flex justify-between border-b border-border pb-2">
                     <span className="text-muted-foreground">Period</span>
-                    <span className="font-mono text-xs">{data.period}</span>
+                    <span className="text-xs">{data.period?.split(" to ").map((d: string) => formatDate(d.trim())).join(" → ")}</span>
                   </div>
                 )}
                 {data.title && (
