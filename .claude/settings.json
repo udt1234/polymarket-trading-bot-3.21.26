@@ -1,0 +1,18 @@
+{
+  "enabledPlugins": {
+    "code-review@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true
+  },
+  "permissions": {
+    "deny": [
+      "Bash(python * --live)",
+      "Bash(curl * prod*)",
+      "Bash(*order*place*)",
+      "Bash(*execute*trade*)",
+      "Bash(*market_order*)",
+      "Bash(python * --env production)"
+    ]
+  }
+}

@@ -9,6 +9,7 @@ import {
   Briefcase,
   FlaskConical,
   BarChart3,
+  BookOpen,
   Settings,
 } from "lucide-react"
 
@@ -16,8 +17,8 @@ const navItems = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
   { href: "/modules", label: "Modules", icon: Puzzle },
   { href: "/portfolio", label: "Portfolio", icon: Briefcase },
-  { href: "/backtest", label: "Backtest", icon: FlaskConical },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/notes", label: "Notes", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings },
 ]
 

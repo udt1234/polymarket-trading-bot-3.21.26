@@ -2,89 +2,81 @@
 
 ## System Overview
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────┐
-│   Next.js PWA   │────▶│   FastAPI (API)   │────▶│  Supabase   │
-│   (web/)        │◀────│   (api/)          │◀────│  (Postgres) │
-│   Port 3000     │     │   Port 8000       │     │  + Auth     │
-└─────────────────┘     └──────┬───────────┘     └─────────────┘
-                               │
-                        ┌──────▼───────────┐
-                        │  Trading Engine   │
-                        │  - Scheduler      │
-                        │  - Risk Manager   │
-                        │  - Circuit Breaker│
-                        │  - Executor (P/L) │
-                        │  - Shadow Mode    │
-                        │  - Module Registry│
-                        └──────┬───────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │  Polymarket APIs    │
-                    │  - CLOB (orders)    │
-                    │  - Gamma (markets)  │
-                    │  - xTracker (data)  │
-                    └─────────────────────┘
+                    ┌──────────────────────────────────┐
+                    │        External Data Sources      │
+                    │  xTracker | Gamma | CLOB | News  │
+                    │  LunarCrush | Claude | Schedule  │
+                    └───────────────┬──────────────────┘
+                                    │
+┌─────────────────┐     ┌──────────▼─────────┐     ┌─────────────┐
+│   Next.js PWA   │────▶│   FastAPI (API)     │────▶│  Supabase   │
+│   (web/)        │◀────│   (api/)            │◀────│  (Postgres) │
+│   Port 3000     │     │   Port 8000         │     │  + Auth     │
+└─────────────────┘     └──────────┬─────────┘     └─────────────┘
+                                   │
+                        ┌──────────▼──────────┐
+                        │   Trading Engine     │
+                        │  Scheduler (5min)    │
+                        │  Risk Manager (15)   │
+                        │  Circuit Breaker     │
+                        │  Paper/Live Executor │
+                        │  Shadow Mode         │
+                        │  Module Registry     │
+                        └─────────────────────┘
 ```
 
-## Data Flow: Signal → Trade
-1. **Scheduler** fires every N seconds (APScheduler)
-2. **Module** evaluates its market → produces `Signal`
-3. **Risk Manager** runs 11 checks (edge, Kelly, exposure, drawdown, circuit breaker, etc.)
-4. **Executor** places order (Paper: simulate fill, Live: py-clob-client)
-5. **Shadow Executor** (optional): parallel paper execution for comparison
-6. **Order Manager** tracks state: CREATED → SUBMITTED → LIVE → FILLED → SETTLED
-7. **Position Manager** updates P&L, exposure
-
-## Module Auto-Discovery
-```python
-# Drop a package in api/modules/ with a Module class
-api/modules/
-├── base.py              # BaseModule(ABC) — evaluate() + get_status()
-└── truth_social/
-    ├── __init__.py       # Module = TruthSocialModule
-    ├── module.py         # evaluate() → Signal[]
-    ├── pacing.py         # 3 pacing models
-    ├── projection.py     # 4-model ensemble → bracket probabilities
-    ├── regime.py         # Z-score regime detection
-    ├── signals.py        # News modifiers + Kelly sizing
-    └── data.py           # xTracker + Google News fetchers
+## Signal Pipeline (per cycle)
+```
+1. Fetch Data ──→ xTracker (counts) + Gamma (prices) + News (4 queries)
+                  + LunarCrush (velocity) + Schedule (events)
+2. Regime     ──→ Z-score from history + Claude Haiku override from news
+3. Pacing     ──→ 5 models: Linear, Bayesian, DOW-Hourly, Historical, Hawkes
+4. Weights    ──→ %-based time weights + calibration Brier adjustment
+5. Projection ──→ Negative Binomial + Normal → bracket probabilities
+6. Normalize  ──→ Cross-bracket sum to 1.0
+7. Modify     ──→ Signal = News(50%) + LunarCrush(30%) + Schedule(20%)
+8. Rank       ──→ Top 3 brackets by edge × sqrt(liquidity) × confidence
+9. Size       ──→ Fractional Kelly (0.25x) with regime + time decay
+10. Risk      ──→ 15 checks (all must pass)
+11. Execute   ──→ Paper simulate or Live CLOB order
+12. Log       ──→ Signal + decision + metadata → Supabase
 ```
 
-## API Endpoints
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/auth/login` | POST | Supabase auth login |
-| `/api/dashboard/metrics` | GET | Overview metrics |
-| `/api/dashboard/performance` | GET | P&L time series |
-| `/api/modules/` | GET/POST | List/create modules |
-| `/api/modules/{id}` | GET/PUT/DELETE | Module CRUD |
-| `/api/portfolio/positions` | GET | Open/closed positions |
-| `/api/portfolio/exposure` | GET | Exposure breakdown |
-| `/api/trades/` | GET | Trade history (paginated) |
-| `/api/analytics/summary` | GET | Sharpe, Sortino, etc. |
-| `/api/logs/` | GET | Filterable log stream |
-| `/api/settings/risk` | GET/PUT | Risk parameters |
-| `/ws/feeds` | WS | Real-time updates |
+## Module File Map
+```
+api/modules/truth_social/
+├── module.py          # Main evaluate() loop — orchestrates all sub-models
+├── pacing.py          # 3 pacing functions (linear, bayesian, dow-hourly)
+├── enhanced_pacing.py # Recency weights, DOW variance, pace acceleration
+├── hawkes.py          # Self-exciting Hawkes process for burst detection
+├── projection.py      # Ensemble weights + bracket probs (NB + Normal)
+├── regime.py          # Z-score regime classification
+├── signals.py         # Signal modifier + Kelly sizing + bracket ranking
+├── data.py            # xTracker + Gamma + CLOB API fetchers
+├── news.py            # Google News RSS (4 queries, deduped)
+├── news_classifier.py # Claude Haiku regime override from headlines
+├── schedule.py        # Presidential schedule (factba.se + news fallback)
+├── parquet_history.py # S3 historical price data (pandas)
+└── module_config.py   # Runtime config (half-life, regime, parquet toggle)
+```
 
-## Database (Supabase)
-13 tables: modules, orders, trades, positions, daily_pnl, signals, logs, settings, statistical_tests, module_ab_tests, calibration_log, alerts, audit_log
+## Database (Supabase) — 13 Tables
+modules, orders, trades, positions, daily_pnl, signals, logs, settings,
+statistical_tests, module_ab_tests, calibration_log, alerts, audit_log
 
-RLS enabled on all tables. Single-user auth policy.
+## API Endpoints (Key)
+| Endpoint | Purpose |
+|----------|---------|
+| `/api/dashboard/metrics` | Overview KPIs + RSS/news metadata |
+| `/api/modules/{id}` | Module CRUD + auction detail |
+| `/api/portfolio/positions` | Open/closed positions + P&L |
+| `/api/analytics/summary` | Sharpe, Sortino, calibration |
+| `/api/settings/risk` | Risk parameter management |
 
-## Risk Manager Checks
-1. Circuit breaker (consecutive losses → cooldown)
-2. Edge threshold (min edge to trade)
-3. Kelly validation (positive Kelly only)
-4. Position size cap (15% max per market)
-5. Daily loss limit
-6. Weekly loss limit
-7. Max drawdown
-8. Portfolio exposure limit
-9. Single market exposure limit
-10. Correlated exposure limit
-11. Settlement decay (reduce near resolution)
-
-## Deploy
-- **Local first**: `uvicorn` + `npm run dev`
-- **Railway**: Single-service deploy via `railway.toml`
-- **Docker**: `docker-compose.yml` placeholder for future
+## Environment Variables (Required)
+```
+POLYMARKET_API_KEY, SECRET, PASSPHRASE, PRIVATE_KEY
+SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_KEY
+LUNARCRUSH_API_KEY
+ANTHROPIC_API_KEY
+```

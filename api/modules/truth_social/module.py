@@ -7,22 +7,32 @@ from api.modules.base import BaseModule
 from api.services.risk_manager import Signal
 from api.modules.truth_social.data import (
     fetch_xtracker_posts, fetch_active_tracking, extract_slug_from_tracking,
-    parse_hourly_counts, compute_running_total,
+    parse_hourly_counts, parse_daily_totals, compute_running_total,
     compute_elapsed_days, fetch_market_prices, fetch_historical_weekly_totals,
 )
 from api.modules.truth_social.news import fetch_google_news
 from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
 from api.modules.truth_social.projection import ensemble_weights, ensemble_projection
 from api.modules.truth_social.regime import detect_regime
-from api.modules.truth_social.signals import compute_signal_modifier, kelly_sizing, rank_brackets
+from api.modules.truth_social.signals import (
+    compute_signal_modifier, kelly_sizing, rank_brackets,
+    depth_adjusted_size, cross_bracket_arbitrage, contrarian_signal,
+)
 from api.modules.truth_social.enhanced_pacing import (
     recency_weighted_averages, regime_conditional_dow_averages,
     pace_acceleration, dow_deviation, ensemble_confidence_bands,
+    historical_hourly_averages,
 )
+from api.modules.truth_social.hawkes import hawkes_pace, fit_hawkes_params
+from api.modules.truth_social.news_classifier import classify_news_regime
+from api.modules.truth_social.schedule import fetch_presidential_schedule, compute_schedule_modifier
+from api.modules.truth_social.trends import fetch_google_trends, compute_trends_modifier
+from api.modules.truth_social.cnn_archive import fetch_cnn_truth_archive, compute_count_divergence
 from api.modules.truth_social.parquet_history import (
     PARQUET_CACHE_DIR, historical_price_pattern,
 )
 from api.modules.truth_social.module_config import get_module_config
+from api.services.lunarcrush import fetch_social_sentiment, fetch_creator_metrics, compute_lunarcrush_modifier
 from api.dependencies import get_supabase
 
 log = logging.getLogger(__name__)
@@ -85,19 +95,33 @@ class TruthSocialModule(BaseModule):
             self._log(sb, module_id, "decision", "warning", f"No market prices for slug={slug}")
             return []
 
-        # Historical data + news
+        # Historical data + news + social intelligence
         weekly_history = await fetch_historical_weekly_totals(self.HANDLE, weeks=12)
         news = await fetch_google_news("Trump")
+        lunar_sentiment = await fetch_social_sentiment("trump")
+        lunar_creator = await fetch_creator_metrics("realDonaldTrump", network="x")
+        schedule_events = await fetch_presidential_schedule()
+        trends_data = await fetch_google_trends("Trump Truth Social")
+        cnn_data = await fetch_cnn_truth_archive()
 
-        # Determine the week window from the tracking
-        week_start_str = tracking.get("startDate", "")[:10]
-        week_end_str = tracking.get("endDate", "")[:10]
+        # Determine the auction window from the tracking (preserve full timestamp)
+        week_start_str = tracking.get("startDate", "")
+        week_end_str = tracking.get("endDate", "")
         now = datetime.now(timezone.utc)
 
         if not week_start_str:
             days_since_monday = (now.weekday()) % 7
             week_start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_since_monday)
-            week_start_str = week_start.strftime("%Y-%m-%d")
+            week_start_str = week_start.isoformat()
+
+        # Compute total auction duration from actual timestamps
+        try:
+            auction_start = datetime.fromisoformat(week_start_str.replace("Z", "+00:00"))
+            auction_end = datetime.fromisoformat(week_end_str.replace("Z", "+00:00")) if week_end_str else auction_start + timedelta(days=7)
+            total_days = max((auction_end - auction_start).total_seconds() / 86400, 1.0)
+        except (ValueError, TypeError):
+            auction_start = None
+            total_days = 7.0
 
         # If we have hourly data, use it. Otherwise estimate from tracking info.
         if hourly_counts:
@@ -112,9 +136,17 @@ class TruthSocialModule(BaseModule):
             self._log(sb, module_id, "decision", "info",
                       f"No hourly data; using aggregate total={running_total}")
 
+        # Cross-reference with CNN archive for count verification
+        count_divergence = None
+        if cnn_data.get("available") and cnn_data.get("count_week", 0) > 0:
+            count_divergence = compute_count_divergence(running_total, cnn_data["count_week"])
+            if count_divergence.get("has_edge"):
+                self._log(sb, module_id, "decision", "info",
+                          f"Count divergence: xTracker={running_total}, CNN={cnn_data['count_week']} "
+                          f"(diff={count_divergence['diff']:+d})")
+
         elapsed_days = compute_elapsed_days(week_start_str, now)
-        remaining_days = max(7.0 - elapsed_days, 0.01)
-        total_days = 7.0
+        remaining_days = max(total_days - elapsed_days, 0.01)
 
         mod_cfg = get_module_config(module_id)
         half_life = mod_cfg.get("recency_half_life", 4.0)
@@ -127,10 +159,14 @@ class TruthSocialModule(BaseModule):
         pace = regular_pace(running_total, elapsed_days, total_days)
         bayes = bayesian_pace(running_total, elapsed_days, remaining_days, hist_mean, total_days)
 
-        # Build hourly averages for DOW model
-        hourly_avgs = {}
-        dow_weights = {i: 1.0 for i in range(7)}
-        if hourly_counts:
+        # Build hourly averages: prefer historical cross-week data, fall back to current week
+        hist_dir = str(Path(__file__).parent.parent.parent.parent / "_DataMetricPulls" / "historical")
+        hist_hourly = historical_hourly_averages(hist_dir, self.HANDLE)
+        if hist_hourly and hist_hourly.get("hourly"):
+            hourly_avgs = hist_hourly["hourly"]
+            log.debug(f"Using historical hourly averages ({len(hourly_avgs)} hours)")
+        elif hourly_counts:
+            hourly_avgs = {}
             for h in hourly_counts:
                 hr = h.get("hour", 0)
                 hourly_avgs.setdefault(hr, [])
@@ -138,6 +174,33 @@ class TruthSocialModule(BaseModule):
             hourly_avgs = {k: sum(v) / len(v) for k, v in hourly_avgs.items()}
         else:
             hourly_avgs = {h: hist_mean / 168 for h in range(24)}
+
+        # Regime detection (used for DOW weights, Kelly sizing, and signal modifiers)
+        regime = detect_regime(weekly_history) if len(weekly_history) >= 4 else {"label": "NORMAL", "zscore": 0, "trend": "STABLE", "volatility": 0.8}
+        regime_label = regime.get("label", "NORMAL")
+
+        # Claude API regime override: if news context suggests a different regime, override z-score
+        news_override = await classify_news_regime(
+            headlines=news.get("headlines", []),
+            conflict_score=news.get("conflict_score", 0),
+            schedule_events=news.get("schedule_events", []),
+            handle="Trump",
+        )
+        if news_override.get("override") and news_override["override"] != regime_label:
+            old_label = regime_label
+            regime_label = news_override["override"]
+            regime["label"] = regime_label
+            self._log(sb, module_id, "decision", "info",
+                      f"Regime override: {old_label} → {regime_label} ({news_override['reason']})")
+        daily_data_for_dow = parse_daily_totals(raw_data)
+        daily_dow_data = [{"dow": datetime.fromisoformat(d["date"]).weekday(), "count": d["count"]} for d in daily_data_for_dow if d.get("date")]
+        if daily_dow_data and mod_cfg.get("use_regime_conditional", True):
+            regimes_for_days = [regime_label] * len(daily_dow_data)
+            dow_day_avgs = regime_conditional_dow_averages(daily_dow_data, regimes_for_days, regime_label)
+            overall_daily_avg = hist_mean / 7.0
+            dow_weights = {d: (avg / overall_daily_avg if overall_daily_avg > 0 else 1.0) for d, avg in dow_day_avgs.items()}
+        else:
+            dow_weights = {i: 1.0 for i in range(7)}
 
         remaining_hours = []
         for d in range(int(remaining_days) + 1):
@@ -148,10 +211,15 @@ class TruthSocialModule(BaseModule):
 
         dow = dow_hourly_bayesian_pace(running_total, remaining_hours, hourly_avgs, dow_weights, hist_mean, elapsed_days, remaining_days)
 
-        model_outputs = {"pace": pace, "bayesian": bayes, "dow": dow, "historical": hist_mean}
-        weights = ensemble_weights(elapsed_days, total_days)
+        # Hawkes self-exciting process for burst detection
+        hawkes_params = fit_hawkes_params(hourly_counts)
+        hawkes_proj = hawkes_pace(
+            hourly_counts, len(remaining_hours), running_total,
+            mu=hawkes_params["mu"], alpha=hawkes_params["alpha"], beta=hawkes_params["beta"],
+        )
 
-        regime = detect_regime(weekly_history) if len(weekly_history) >= 4 else {"label": "NORMAL", "zscore": 0, "trend": "STABLE", "volatility": 0.8}
+        model_outputs = {"pace": pace, "bayesian": bayes, "dow": dow, "historical": hist_mean, "hawkes": hawkes_proj}
+        weights = ensemble_weights(elapsed_days, total_days, regime_label=regime_label)
 
         accel = pace_acceleration(hourly_counts)
 
@@ -177,11 +245,16 @@ class TruthSocialModule(BaseModule):
                 except Exception as e:
                     log.warning(f"Parquet model failed: {e}")
 
-        signal_mod = compute_signal_modifier(
+        news_mod = compute_signal_modifier(
             news.get("headline_count", 0),
             news.get("conflict_score", 0),
             news.get("schedule_events", []),
         )
+        lunar_mod = compute_lunarcrush_modifier(lunar_sentiment, lunar_creator)
+        sched_mod = compute_schedule_modifier(schedule_events)
+        trends_mod = compute_trends_modifier(trends_data)
+        # Blend: news 40%, LunarCrush 25%, schedule 20%, trends 15%
+        signal_mod = 0.4 * news_mod + 0.25 * lunar_mod + 0.2 * sched_mod + 0.15 * trends_mod
 
         if parquet_probs:
             model_outputs["parquet"] = sum(
@@ -194,7 +267,43 @@ class TruthSocialModule(BaseModule):
             weights = {k: v * scale for k, v in weights.items()}
             weights["parquet"] = parquet_w
 
-        bracket_probs = ensemble_projection(model_outputs, weights, hist_std, signal_mod)
+        # Fetch per-model calibration scores if available (future: track per pacing model)
+        calibration_scores = None
+        try:
+            cal_rows = sb.table("calibration_log").select("metadata").eq("module_id", module_id).not_.is_("brier_score", "null").order("resolved_at", desc=True).limit(20).execute()
+            if cal_rows.data:
+                from collections import defaultdict
+                model_briers = defaultdict(list)
+                for row in cal_rows.data:
+                    meta = row.get("metadata") or {}
+                    if isinstance(meta, dict) and "model_scores" in meta:
+                        for model, score in meta["model_scores"].items():
+                            model_briers[model].append(score)
+                if model_briers:
+                    calibration_scores = {m: sum(s) / len(s) for m, s in model_briers.items()}
+        except Exception:
+            pass
+
+        bracket_probs = ensemble_projection(model_outputs, weights, hist_std, signal_mod, calibration_scores)
+
+        # Cross-bracket arbitrage: detect probability mass misallocations
+        arb_opps = cross_bracket_arbitrage(bracket_probs, market_prices)
+        if arb_opps:
+            self._log(sb, module_id, "decision", "info",
+                      f"Arbitrage: {[f'{o['bracket']}({o['side']},{o['misallocation']:+.1%})' for o in arb_opps[:3]]}")
+
+        # Contrarian adjustment: fade overcrowded brackets
+        # (order_books not fetched per-bracket yet, so this is a placeholder for when we add it)
+        contrarian_adj = {}
+
+        # Apply contrarian adjustments to bracket probs
+        if contrarian_adj:
+            for bracket, adj in contrarian_adj.items():
+                if bracket in bracket_probs:
+                    bracket_probs[bracket] = max(bracket_probs[bracket] + adj, 0.001)
+            total = sum(bracket_probs.values())
+            if total > 0:
+                bracket_probs = {k: v / total for k, v in bracket_probs.items()}
 
         conf_bands = ensemble_confidence_bands(bracket_probs, top_n=mod_cfg.get("confidence_band_top_n", 3))
         if conf_bands:
@@ -235,12 +344,54 @@ class TruthSocialModule(BaseModule):
                     market_price=market_price,
                     kelly_pct=sizing["kelly_pct"],
                     confidence=1.0 - regime.get("volatility", 0.8) / 2,
+                    metadata={
+                        "regime": regime_label,
+                        "regime_override": news_override.get("override"),
+                        "running_total": running_total,
+                        "elapsed_days": round(elapsed_days, 2),
+                        "total_days": round(total_days, 2),
+                        "model_outputs": {k: round(v, 1) for k, v in model_outputs.items()},
+                        "weights": {k: round(v, 4) for k, v in weights.items()},
+                        "signal_mod": round(signal_mod, 3),
+                        "news_mod": round(news_mod, 3),
+                        "lunar_mod": round(lunar_mod, 3),
+                        "sched_mod": round(sched_mod, 3),
+                        "trends_mod": round(trends_mod, 3),
+                        "trends": {
+                            "interest": trends_data.get("interest", 0),
+                            "trend": trends_data.get("trend", "flat"),
+                            "change_pct": trends_data.get("change_pct", 0),
+                        },
+                        "arbitrage": [o for o in arb_opps[:2]] if arb_opps else [],
+                        "hawkes_params": hawkes_params,
+                        "momentum": accel.get("momentum", "steady"),
+                        "news": {
+                            "headline_count": news.get("headline_count", 0),
+                            "conflict_score": news.get("conflict_score", 0),
+                            "schedule_events": news.get("schedule_events", []),
+                            "top_headlines": news.get("headlines", [])[:5],
+                        },
+                        "lunarcrush": {
+                            "velocity": lunar_creator.get("velocity", 0),
+                            "dominance": lunar_creator.get("social_dominance", 0),
+                            "interactions": lunar_creator.get("interactions", 0),
+                        },
+                        "schedule": [e.get("event_type") for e in schedule_events[:3]] if schedule_events else [],
+                        "cnn_archive": {
+                            "count_week": cnn_data.get("count_week", 0),
+                            "available": cnn_data.get("available", False),
+                        },
+                        "count_divergence": count_divergence,
+                    },
                 )
                 signals.append(signal)
 
         self._log(sb, module_id, "decision", "info",
-                  f"Cycle: slug={slug}, total={running_total}, elapsed={elapsed_days:.1f}d, "
-                  f"regime={regime['label']}, prices={len(market_prices)}, signals={len(signals)}")
+                  f"Cycle: slug={slug}, total={running_total}, elapsed={elapsed_days:.1f}/{total_days:.1f}d, "
+                  f"regime={regime_label}, news={news.get('headline_count', 0)} headlines, "
+                  f"conflict={news.get('conflict_score', 0)}, lunar_vel={lunar_creator.get('velocity', 0)}, "
+                  f"sched={[e.get('event_type') for e in schedule_events[:3]]}, "
+                  f"signals={len(signals)}")
 
         return signals
 

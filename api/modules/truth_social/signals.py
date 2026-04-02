@@ -106,3 +106,87 @@ def rank_brackets(
 
     scored.sort(key=lambda x: x["score"], reverse=True)
     return scored[:3]
+
+
+def depth_adjusted_size(kelly_pct: float, order_book: dict, bankroll: float = 1000.0) -> float:
+    if not order_book:
+        return kelly_pct
+
+    target_size = bankroll * kelly_pct
+    available_depth = order_book.get("ask_depth_5", 0) if kelly_pct > 0 else order_book.get("bid_depth_5", 0)
+
+    if available_depth <= 0:
+        return kelly_pct * 0.25
+
+    # Don't take more than 30% of available depth to avoid moving price
+    max_size = available_depth * 0.30
+    if target_size > max_size:
+        return round(max_size / bankroll, 4)
+    return kelly_pct
+
+
+def cross_bracket_arbitrage(
+    bracket_probs: dict[str, float],
+    market_prices: dict[str, float],
+) -> list[dict]:
+    model_sum = sum(bracket_probs.values())
+    market_sum = sum(p for p in market_prices.values() if 0 < p < 1)
+
+    opportunities = []
+    for bracket, model_prob in bracket_probs.items():
+        market_price = market_prices.get(bracket, 0)
+        if market_price <= 0 or market_price >= 1:
+            continue
+
+        # Normalize both to proportions
+        model_share = model_prob / model_sum if model_sum > 0 else 0
+        market_share = market_price / market_sum if market_sum > 0 else 0
+
+        # Misallocation = difference in probability mass share
+        misallocation = model_share - market_share
+
+        if abs(misallocation) > 0.03:
+            opportunities.append({
+                "bracket": bracket,
+                "side": "BUY" if misallocation > 0 else "SELL",
+                "misallocation": round(misallocation, 4),
+                "model_share": round(model_share, 4),
+                "market_share": round(market_share, 4),
+            })
+
+    opportunities.sort(key=lambda x: abs(x["misallocation"]), reverse=True)
+    return opportunities
+
+
+def contrarian_signal(
+    market_prices: dict[str, float],
+    order_books: dict[str, dict] | None = None,
+) -> dict[str, float]:
+    if not order_books or len(market_prices) < 3:
+        return {}
+
+    # Detect overcrowded brackets by relative volume
+    volumes = {}
+    for bracket, book in order_books.items():
+        if isinstance(book, dict):
+            volumes[bracket] = book.get("bid_depth_5", 0) + book.get("ask_depth_5", 0)
+        else:
+            volumes[bracket] = float(book) if book else 0
+
+    if not volumes:
+        return {}
+
+    avg_vol = sum(volumes.values()) / len(volumes) if volumes else 1
+    adjustments = {}
+    for bracket, vol in volumes.items():
+        if avg_vol <= 0:
+            continue
+        vol_ratio = vol / avg_vol
+        # Overcrowded (>2x avg volume) = retail piling in, fade it
+        if vol_ratio > 2.0:
+            adjustments[bracket] = -0.03  # reduce model prob by 3%
+        # Undercrowded (<0.3x avg) = potential value
+        elif vol_ratio < 0.3:
+            adjustments[bracket] = 0.02  # boost model prob by 2%
+
+    return adjustments

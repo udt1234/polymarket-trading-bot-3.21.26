@@ -24,47 +24,55 @@ SCHEDULE_PATTERNS = {
 }
 
 
+SUPPLEMENTAL_QUERIES = {
+    "Trump": ["Trump Truth Social", "Trump rally speech", "Trump court trial"],
+    "Elon Musk": ["Elon Musk Twitter", "Elon Musk SpaceX Tesla", "Elon Musk DOGE"],
+}
+
+
 async def fetch_google_news(query: str = "Trump", max_results: int = 50) -> dict:
+    queries = [query] + SUPPLEMENTAL_QUERIES.get(query, [])
+    all_headlines = []
+    seen_titles = set()
+
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-        try:
-            res = await client.get(
-                GOOGLE_NEWS_RSS,
-                params={"q": query, "hl": "en-US", "gl": "US", "ceid": "US:en"},
-                headers={"User-Agent": "Mozilla/5.0"},
-            )
-            res.raise_for_status()
+        for q in queries:
+            try:
+                res = await client.get(
+                    GOOGLE_NEWS_RSS,
+                    params={"q": q, "hl": "en-US", "gl": "US", "ceid": "US:en"},
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                res.raise_for_status()
+                root = ElementTree.fromstring(res.content)
+                for item in root.findall(".//item")[:max_results]:
+                    title = item.findtext("title", "")
+                    if title and title not in seen_titles:
+                        seen_titles.add(title)
+                        all_headlines.append({"title": title, "pub_date": item.findtext("pubDate", "")})
+            except Exception as e:
+                log.debug(f"News fetch for '{q}' failed: {e}")
+                continue
 
-            root = ElementTree.fromstring(res.content)
-            items = root.findall(".//item")[:max_results]
+    if not all_headlines:
+        return {
+            "headline_count": 0, "headlines": [],
+            "conflict_score": 0, "schedule_events": [],
+            "query": query, "status": "error",
+        }
 
-            headlines = []
-            for item in items:
-                title = item.findtext("title", "")
-                pub_date = item.findtext("pubDate", "")
-                headlines.append({"title": title, "pub_date": pub_date})
+    headline_count = len(all_headlines)
+    conflict_score = _compute_conflict_score(all_headlines)
+    schedule_events = _detect_schedule_events(all_headlines)
 
-            headline_count = len(headlines)
-            conflict_score = _compute_conflict_score(headlines)
-            schedule_events = _detect_schedule_events(headlines)
-
-            return {
-                "headline_count": headline_count,
-                "conflict_score": conflict_score,
-                "schedule_events": schedule_events,
-                "query": query,
-                "status": "ok",
-            }
-
-        except Exception as e:
-            log.warning(f"Google News fetch failed: {e}")
-            return {
-                "headline_count": 0,
-                "conflict_score": 0,
-                "schedule_events": [],
-                "query": query,
-                "status": "error",
-                "error": str(e),
-            }
+    return {
+        "headline_count": headline_count,
+        "headlines": [h["title"] for h in all_headlines],
+        "conflict_score": conflict_score,
+        "schedule_events": schedule_events,
+        "query": query,
+        "status": "ok",
+    }
 
 
 def _compute_conflict_score(headlines: list[dict]) -> int:

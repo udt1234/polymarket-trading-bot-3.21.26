@@ -231,3 +231,32 @@ def optimal_entry_timing(historical_prices: list[dict], bracket: str) -> dict:
         "avg_price_overall": round(avg_overall, 4),
         "savings_pct": round(savings, 2),
     }
+
+
+def historical_hourly_averages(
+    historical_data_dir: str, handle: str,
+) -> dict[int, dict[int, float]]:
+    """
+    Load cross-week hourly averages from historical data.
+    Returns {dow: {hour: avg_count}} from imported historical files.
+    Falls back to empty if no data.
+    """
+    import json
+    from pathlib import Path
+
+    stats_path = Path(historical_data_dir) / handle / "dow_hourly_stats.json"
+    if not stats_path.exists():
+        return {}
+
+    try:
+        with open(stats_path) as f:
+            stats = json.load(f)
+        hourly = stats.get("hourly_averages", {})
+        dow = stats.get("dow_averages", {})
+        # Convert string keys to int
+        return {
+            "hourly": {int(k): v for k, v in hourly.items()},
+            "dow": {int(k): v for k, v in dow.items()},
+        }
+    except Exception:
+        return {}

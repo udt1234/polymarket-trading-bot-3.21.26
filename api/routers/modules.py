@@ -451,6 +451,73 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     }
 
 
+@router.get("/{module_id}/data-sources")
+async def module_data_sources(module_id: str):
+    """Return status of all data sources + historical data for this module."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    sb = get_supabase()
+    module = sb.table("modules").select("*").eq("id", module_id).single().execute()
+    if not module.data:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    # Determine handle from module name
+    name = module.data.get("name", "").lower()
+    if "truth" in name or "trump" in name:
+        handle = "realDonaldTrump"
+    elif "elon" in name:
+        handle = "elonmusk"
+    else:
+        handle = "unknown"
+
+    hist_dir = _Path(__file__).parent.parent.parent / "_DataMetricPulls" / "historical" / handle
+
+    # Check what local historical data exists
+    local_files = {}
+    for fname in ["hourly.json", "daily.json", "weekly_totals.json", "dow_hourly_stats.json",
+                   "all_trackings.json", "daily_from_xtracker.json", "hourly.parquet"]:
+        fpath = hist_dir / fname
+        if fpath.exists():
+            size = fpath.stat().st_size
+            local_files[fname] = {"exists": True, "size_kb": round(size / 1024, 1)}
+        else:
+            local_files[fname] = {"exists": False}
+
+    # Load stats summary if available
+    stats = {}
+    stats_path = hist_dir / "dow_hourly_stats.json"
+    if stats_path.exists():
+        try:
+            with open(stats_path) as f:
+                stats = _json.load(f)
+        except Exception:
+            pass
+
+    # Get most recent signal with metadata
+    recent_signal = None
+    try:
+        res = sb.table("signals").select("metadata,created_at").eq("module_id", module_id).order("created_at", desc=True).limit(1).execute()
+        if res.data and res.data[0].get("metadata"):
+            recent_signal = res.data[0]
+    except Exception:
+        pass
+
+    return {
+        "handle": handle,
+        "historical_files": local_files,
+        "stats_summary": {
+            "dow_averages": stats.get("dow_averages", {}),
+            "hourly_averages": stats.get("hourly_averages", {}),
+            "total_posts": stats.get("total_posts", 0),
+            "total_days": stats.get("total_days", 0),
+            "date_range": stats.get("date_range", {}),
+        },
+        "recent_signal_context": recent_signal.get("metadata") if recent_signal else None,
+        "recent_signal_time": recent_signal.get("created_at") if recent_signal else None,
+    }
+
+
 @router.get("/{module_id}/parquet/search")
 async def parquet_search(module_id: str, q: str = Query(..., min_length=1)):
     results = await search_parquet_markets(q)

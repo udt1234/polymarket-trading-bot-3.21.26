@@ -156,6 +156,9 @@ export default function ModuleDetailPage() {
   const { data: auctions } = useApi<AuctionTab[]>(
     id ? `/api/modules/${id}/auctions` : null
   )
+  const { data: dataSources } = useApi<any>(
+    id ? `/api/modules/${id}/data-sources` : null
+  )
   const pacingUrl = id
     ? `/api/modules/${id}/pacing${activeTrackingId ? `?tracking_id=${activeTrackingId}` : ""}`
     : null
@@ -909,6 +912,139 @@ export default function ModuleDetailPage() {
         ) : (
           <p className="px-6 py-8 text-center text-sm text-muted-foreground">No trades yet</p>
         )}
+      </div>
+
+      {/* Data Sources & Signal Context */}
+      <div className="rounded-lg border border-border bg-card">
+        <div className="border-b border-border px-6 py-3">
+          <span className="font-semibold">Data Sources & Context</span>
+        </div>
+        <div className="p-6 space-y-4">
+          {dataSources?.historical_files && (
+            <div>
+              <p className="text-sm font-medium mb-2">Historical Data Files</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {Object.entries(dataSources.historical_files).map(([name, info]: [string, any]) => (
+                  <div key={name} className={cn(
+                    "rounded-md border p-2 text-xs",
+                    info.exists ? "border-green-500/30 bg-green-500/5" : "border-border bg-accent/20"
+                  )}>
+                    <span className="font-mono text-[10px]">{name}</span>
+                    {info.exists ? (
+                      <span className="ml-1 text-green-400">({info.size_kb} KB)</span>
+                    ) : (
+                      <span className="ml-1 text-muted-foreground">(not imported)</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {dataSources.stats_summary?.total_posts > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Historical: {dataSources.stats_summary.total_posts.toLocaleString()} posts over {dataSources.stats_summary.total_days} days
+                  ({dataSources.stats_summary.date_range?.start} to {dataSources.stats_summary.date_range?.end})
+                </p>
+              )}
+            </div>
+          )}
+
+          {dataSources?.recent_signal_context && (
+            <div>
+              <p className="text-sm font-medium mb-2">
+                Last Signal Context
+                {dataSources.recent_signal_time && (
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {new Date(dataSources.recent_signal_time).toLocaleString()}
+                  </span>
+                )}
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {dataSources.recent_signal_context.regime && (
+                  <div className="rounded-md bg-accent/30 p-2 text-xs">
+                    <span className="text-muted-foreground">Regime:</span>{" "}
+                    <span className="font-medium">{dataSources.recent_signal_context.regime}</span>
+                    {dataSources.recent_signal_context.regime_override && (
+                      <span className="text-yellow-400"> (AI override)</span>
+                    )}
+                  </div>
+                )}
+                {dataSources.recent_signal_context.running_total != null && (
+                  <div className="rounded-md bg-accent/30 p-2 text-xs">
+                    <span className="text-muted-foreground">Count:</span>{" "}
+                    <span className="font-medium">{dataSources.recent_signal_context.running_total}</span>
+                    <span className="text-muted-foreground"> / {dataSources.recent_signal_context.elapsed_days}d</span>
+                  </div>
+                )}
+                {dataSources.recent_signal_context.signal_mod != null && (
+                  <div className="rounded-md bg-accent/30 p-2 text-xs">
+                    <span className="text-muted-foreground">Signal Mod:</span>{" "}
+                    <span className="font-medium">{dataSources.recent_signal_context.signal_mod}x</span>
+                  </div>
+                )}
+                {dataSources.recent_signal_context.momentum && (
+                  <div className="rounded-md bg-accent/30 p-2 text-xs">
+                    <span className="text-muted-foreground">Momentum:</span>{" "}
+                    <span className="font-medium">{dataSources.recent_signal_context.momentum}</span>
+                  </div>
+                )}
+              </div>
+
+              {dataSources.recent_signal_context.news && (
+                <div className="mt-2 rounded-md bg-accent/20 p-2">
+                  <p className="text-xs font-medium mb-1">
+                    News: {dataSources.recent_signal_context.news.headline_count} headlines,
+                    conflict={dataSources.recent_signal_context.news.conflict_score}
+                    {dataSources.recent_signal_context.news.schedule_events?.length > 0 && (
+                      <>, events: {dataSources.recent_signal_context.news.schedule_events.join(", ")}</>
+                    )}
+                  </p>
+                  {dataSources.recent_signal_context.news.top_headlines?.slice(0, 3).map((h: string, i: number) => (
+                    <p key={i} className="text-[10px] text-muted-foreground truncate">{h}</p>
+                  ))}
+                </div>
+              )}
+
+              {dataSources.recent_signal_context.lunarcrush && (
+                <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
+                  <span>LunarCrush: vel={dataSources.recent_signal_context.lunarcrush.velocity}</span>
+                  <span>dom={dataSources.recent_signal_context.lunarcrush.dominance}</span>
+                  <span>interactions={dataSources.recent_signal_context.lunarcrush.interactions?.toLocaleString()}</span>
+                </div>
+              )}
+
+              {dataSources.recent_signal_context.trends && (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Google Trends: {dataSources.recent_signal_context.trends.trend} ({dataSources.recent_signal_context.trends.change_pct > 0 ? "+" : ""}{dataSources.recent_signal_context.trends.change_pct}%)
+                </div>
+              )}
+
+              {dataSources.recent_signal_context.count_divergence?.has_edge && (
+                <div className="mt-1 text-xs text-yellow-400">
+                  Count divergence: xTracker={dataSources.recent_signal_context.count_divergence.xtracker} vs CNN={dataSources.recent_signal_context.count_divergence.cnn} (diff: {dataSources.recent_signal_context.count_divergence.diff > 0 ? "+" : ""}{dataSources.recent_signal_context.count_divergence.diff})
+                </div>
+              )}
+
+              {dataSources.recent_signal_context.model_outputs && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium mb-1">Model Projections</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(dataSources.recent_signal_context.model_outputs).map(([model, val]: [string, any]) => (
+                      <div key={model} className="rounded-md bg-accent/30 px-2 py-1 text-[10px]">
+                        <span className="text-muted-foreground">{model}:</span> <span className="font-medium">{Math.round(val)}</span>
+                        {dataSources.recent_signal_context.weights?.[model] && (
+                          <span className="text-muted-foreground"> ({(dataSources.recent_signal_context.weights[model] * 100).toFixed(0)}%)</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!dataSources?.recent_signal_context && !dataSources?.historical_files && (
+            <p className="text-sm text-muted-foreground">No data yet. Run the import scripts and start the engine.</p>
+          )}
+        </div>
       </div>
     </div>
   )

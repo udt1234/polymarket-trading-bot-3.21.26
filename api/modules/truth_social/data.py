@@ -211,6 +211,25 @@ async def fetch_market_prices(slug: str) -> dict[str, float]:
         return prices
 
 
+async def fetch_market_volumes(slug: str) -> dict[str, float]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        res = await client.get(f"{GAMMA_BASE}/events", params={"slug": slug})
+        res.raise_for_status()
+        events = res.json()
+        if not isinstance(events, list) or not events:
+            return {}
+
+        markets = events[0].get("markets", [])
+        volumes = {}
+        for m in markets:
+            raw_bracket = m.get("groupItemTitle", m.get("question", ""))
+            bracket = normalize_bracket(raw_bracket)
+            vol = m.get("volume", m.get("volumeNum", 0))
+            if vol:
+                volumes[bracket] = float(vol)
+        return volumes
+
+
 async def fetch_market_prices_auto(handle: str = "realDonaldTrump") -> tuple[dict[str, float], str]:
     tracking = await fetch_active_tracking(handle)
     if not tracking:
@@ -223,6 +242,12 @@ async def fetch_market_prices_auto(handle: str = "realDonaldTrump") -> tuple[dic
 
 
 async def fetch_historical_weekly_totals(handle: str = "realDonaldTrump", weeks: int = 12) -> list[float]:
+    # Try local historical data first (from import scripts — more complete)
+    local = _load_local_weekly_totals(handle, weeks)
+    if local:
+        return local
+
+    # Fallback: fetch live from xTracker API
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.get(
             f"{XTRACKER_BASE}/users/{handle}/trackings",
@@ -245,6 +270,30 @@ async def fetch_historical_weekly_totals(handle: str = "realDonaldTrump", weeks:
                 weekly_totals.append(float(target))
 
     return list(reversed(weekly_totals)) if weekly_totals else [100.0] * 4
+
+
+def _load_local_weekly_totals(handle: str, weeks: int) -> list[float] | None:
+    import json as _json
+    from pathlib import Path as _Path
+
+    path = _Path(__file__).parent.parent.parent.parent / "_DataMetricPulls" / "historical" / handle / "weekly_totals.json"
+    if not path.exists():
+        return None
+
+    try:
+        with open(path) as f:
+            data = _json.load(f)
+        if not data:
+            return None
+
+        totals = [entry.get("total", 0) for entry in data if entry.get("total", 0) > 0]
+        if len(totals) < 4:
+            return None
+
+        # Return the most recent N weeks
+        return totals[-weeks:]
+    except Exception:
+        return None
 
 
 async def fetch_order_book(token_id: str) -> dict:

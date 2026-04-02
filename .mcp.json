@@ -1,3 +1,9 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "polymarket": {
+      "command": "python",
+      "args": ["mcp-polymarket/server.py"],
+      "cwd": "C:\\Users\\darwi\\OneDrive\\Desktop\\Claude Code\\PolyMarket"
+    }
+  }
 }

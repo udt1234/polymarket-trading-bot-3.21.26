@@ -1,7 +1,15 @@
-# Polymarket Bot — New Session Prompt
+# DEPRECATED — Do Not Use
 
-Copy everything below the --- line and paste as your first message in Claude Code opened from:
-`C:\Users\darwi\OneDrive\Desktop\Claude Code\PolyMarket`
+This file is obsolete. Claude Code now auto-loads context from:
+- `CLAUDE.md` (project root) — conventions, agents, rules
+- `_InstructionalFiles/` — architecture, strategy, features, API, design, handoff
+- `.claude/` — agents, skills, commands, settings
+
+No manual prompt pasting needed. Just open Claude Code in the project directory.
+
+---
+
+# (Original content below for reference only)
 
 ---
 

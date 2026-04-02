@@ -55,16 +55,29 @@ cd web && npm install && npm run dev  # localhost:3000
 - **Order state machine**: CREATED → SUBMITTED → LIVE → FILLED → SETTLED
 - **Paper/Live executor swap**: Toggle without changing strategy code
 
+## Non-Negotiable Rules
+- **ALWAYS limit orders** — NEVER market orders
+- NEVER hardcode API keys — use env vars only
+- NEVER place real orders without PAPER_MODE check
+- ALWAYS run 15 risk checks before order placement
+- Update `lessons.md` after every bug fix
+
+## Agents, Skills, Commands
+See root `CLAUDE.md` for full list. Key agents:
+- `@qa-reviewer` — before commit
+- `@verify-bot` — before PR on trading code
+- `@risk-auditor` — before going live
+
 ## Documentation Rules
 - **Update FEATURES.md** after every feature addition or change
 - **Update HANDOFF.md** at end of major work sessions
+- **Update lessons.md** after every bug fix
 
 ## Conventions
-- 200-line max on all .md files
+- 150-line max on all .md files
 - Secrets in `.env`, never hardcode
 - Conventional commits (feat:, fix:, refactor:, docs:, chore:)
 - No over-engineering — build what's needed now
-- DefibotX = visual inspiration only (layout/cards/charts), not content
 
 ## Nav Structure
-Dashboard | Modules | Portfolio | Trades | Analytics | Logs | Settings
+Dashboard | Modules | Portfolio | Trades | Backtest | Analytics | Notes | Logs | Settings

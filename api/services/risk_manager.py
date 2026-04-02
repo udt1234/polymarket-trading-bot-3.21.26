@@ -1,6 +1,6 @@
 import time
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from api.config import get_settings
 from api.dependencies import get_supabase
@@ -19,6 +19,7 @@ class Signal:
     market_price: float
     kelly_pct: float
     confidence: float = 1.0
+    metadata: dict = field(default_factory=dict)
 
 
 class RiskManager:
@@ -253,6 +254,7 @@ class RiskManager:
                 "kelly_pct": signal.kelly_pct,
                 "approved": False,
                 "rejection_reason": reason,
+                "metadata": signal.metadata if signal.metadata else {},
             }).execute()
         except Exception:
             pass

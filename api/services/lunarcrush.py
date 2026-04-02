@@ -38,7 +38,38 @@ async def fetch_social_sentiment(topic: str) -> dict:
         return _neutral_sentiment()
 
 
-def compute_lunarcrush_modifier(sentiment_data: dict) -> float:
+async def fetch_creator_metrics(screen_name: str, network: str = "x") -> dict:
+    settings = get_settings()
+    if not settings.lunarcrush_api_key:
+        return {"interactions": 0, "posts_active": 0, "followers": 0, "velocity": 0.0}
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            res = await client.get(
+                f"{LUNARCRUSH_BASE}/creator/{network}/{screen_name}/v1",
+                headers={"Authorization": f"Bearer {settings.lunarcrush_api_key}"},
+            )
+            res.raise_for_status()
+            data = res.json().get("data", res.json())
+
+        interactions = data.get("interactions", 0)
+        posts = data.get("posts_active", 0)
+        velocity = interactions / max(posts, 1)
+
+        return {
+            "interactions": interactions,
+            "posts_active": posts,
+            "followers": data.get("followers", 0),
+            "velocity": round(velocity, 2),
+            "social_dominance": data.get("social_dominance", 0),
+            "influencer_rank": data.get("influencer_rank", 0),
+        }
+    except Exception as e:
+        log.warning(f"LunarCrush creator fetch error: {e}")
+        return {"interactions": 0, "posts_active": 0, "followers": 0, "velocity": 0.0}
+
+
+def compute_lunarcrush_modifier(sentiment_data: dict, creator_data: dict | None = None) -> float:
     if not sentiment_data or all(v == 0 for v in sentiment_data.values()):
         return 1.0
 
@@ -72,6 +103,19 @@ def compute_lunarcrush_modifier(sentiment_data: dict) -> float:
 
     if social_volume > 10000 and sentiment > 70:
         mod += 0.10
+
+    # Engagement velocity: high velocity = likely to keep posting (behavioral reinforcement)
+    if creator_data:
+        velocity = creator_data.get("velocity", 0)
+        dominance = creator_data.get("social_dominance", 0)
+        if velocity > 500:
+            mod += 0.12
+        elif velocity > 200:
+            mod += 0.06
+        if dominance > 5:
+            mod += 0.08
+        elif dominance > 2:
+            mod += 0.04
 
     return max(0.5, min(mod, 1.5))
 

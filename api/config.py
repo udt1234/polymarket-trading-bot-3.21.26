@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # LunarCrush
     lunarcrush_api_key: str = ""
 
+    # Anthropic (for news regime classification)
+    anthropic_api_key: str = ""
+
     model_config = {"env_file": str(_env_file), "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
