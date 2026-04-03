@@ -50,6 +50,7 @@ class TradingEngine:
         self.scheduler.add_job(self._run_cycle, "interval", seconds=interval, max_instances=1)
         self.scheduler.add_job(self._run_walk_forward, "interval", hours=6, max_instances=1)
         self.scheduler.add_job(self._run_resolutions, "interval", minutes=30, max_instances=1)
+        self.scheduler.add_job(self._run_auction_monitor, "interval", hours=1, max_instances=1)
         self.scheduler.start()
         self._running = True
         log.info(f"Engine started: interval={interval}s, paper={settings.paper_mode}, shadow={settings.shadow_mode}, multi={self._multi_mode}")
@@ -144,6 +145,78 @@ class TradingEngine:
             check_resolutions(risk_manager=self.risk_manager)
         except Exception as e:
             log.error(f"Resolution check error: {e}")
+
+    def _run_auction_monitor(self):
+        try:
+            import asyncio
+            from api.modules.truth_social.data import _fetch_trackings_raw
+            from api.services.notifications import notify_auction_gap, notify_new_auction
+
+            sb = get_supabase()
+            modules = sb.table("modules").select("id,name,market_slug").in_("status", ["active", "paused", "paper"]).execute()
+            handles = {"Truth Social": "realDonaldTrump", "Elon": "elonmusk"}
+
+            for mod in (modules.data or []):
+                name = mod.get("name", "")
+                handle = None
+                for key, h in handles.items():
+                    if key.lower() in name.lower():
+                        handle = h
+                        break
+                if not handle:
+                    continue
+
+                trackings = asyncio.get_event_loop().run_until_complete(_fetch_trackings_raw(handle))
+                if not trackings:
+                    continue
+
+                now = datetime.now(timezone.utc)
+                active = []
+                most_recent_end = None
+                for t in trackings:
+                    start_str = t.get("startDate", "")
+                    end_str = t.get("endDate", "")
+                    if not start_str or not end_str:
+                        continue
+                    s = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                    e = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                    if s <= now <= e:
+                        active.append(t)
+                    if most_recent_end is None or e > most_recent_end:
+                        most_recent_end = e
+
+                if not active and most_recent_end:
+                    gap_hours = (now - most_recent_end).total_seconds() / 3600
+                    if gap_hours > 2:
+                        asyncio.get_event_loop().run_until_complete(
+                            notify_auction_gap(handle, most_recent_end.strftime("%Y-%m-%d %H:%M"), gap_hours)
+                        )
+                        log.warning(f"Auction gap for {handle}: {gap_hours:.0f}h since last auction ended")
+
+                known_ids = set()
+                try:
+                    known_rows = sb.table("logs").select("metadata").eq("log_type", "system").like("message", "%New Auction%").execute()
+                    for row in (known_rows.data or []):
+                        meta = row.get("metadata") or {}
+                        if meta.get("tracking_id"):
+                            known_ids.add(str(meta["tracking_id"]))
+                except Exception:
+                    pass
+
+                for t in active:
+                    tid = str(t.get("id") or t.get("trackingId") or "")
+                    if tid and tid not in known_ids:
+                        asyncio.get_event_loop().run_until_complete(
+                            notify_new_auction(handle, t.get("title", ""), t.get("startDate", "")[:10], t.get("endDate", "")[:10])
+                        )
+                        sb.table("logs").insert({
+                            "log_type": "system", "severity": "info", "module_id": mod["id"],
+                            "message": f"New Auction: {t.get('title', '')}",
+                            "metadata": {"tracking_id": tid, "handle": handle},
+                        }).execute()
+
+        except Exception as e:
+            log.error(f"Auction monitor error: {e}")
 
     def _run_walk_forward(self):
         sb = get_supabase()

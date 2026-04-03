@@ -48,15 +48,35 @@ class BacktestResult:
     daily_pnl: list = field(default_factory=list)
 
 
+RELEVANCE_KEYWORDS = [
+    "truth social", "posts", "tweets", "tweet", "count",
+    "temperature", "how many", "number of",
+]
+
+
 async def fetch_gamma_events(query: str, limit: int = 20) -> list[dict]:
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.get(f"{GAMMA_BASE}/events", params={
-            "q": query, "closed": "false", "limit": limit,
+            "q": query, "closed": "false", "limit": min(limit * 3, 100),
         })
         res.raise_for_status()
         events = res.json()
-        return [
-            {
+
+        results = []
+        for e in events:
+            title = (e.get("title", "") or "").lower()
+            slug = (e.get("slug", "") or "").lower()
+            markets = e.get("markets", [])
+            has_brackets = len(markets) >= 3
+
+            query_lower = query.lower()
+            title_match = query_lower in title or query_lower in slug
+            keyword_match = any(kw in title for kw in RELEVANCE_KEYWORDS)
+
+            if not (title_match or (keyword_match and has_brackets)):
+                continue
+
+            results.append({
                 "id": e.get("id"),
                 "title": e.get("title", ""),
                 "slug": e.get("slug", ""),
@@ -70,11 +90,13 @@ async def fetch_gamma_events(query: str, limit: int = 20) -> list[dict]:
                         "condition_id": m.get("conditionId", ""),
                         "slug": m.get("slug", ""),
                     }
-                    for m in e.get("markets", [])
+                    for m in markets
                 ],
-            }
-            for e in events
-        ]
+            })
+            if len(results) >= limit:
+                break
+
+        return results
 
 
 async def fetch_price_history(clob_token_id: str, start_ts: int, end_ts: int, fidelity: int = 60) -> list[dict]:

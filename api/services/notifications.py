@@ -7,11 +7,17 @@ log = logging.getLogger(__name__)
 
 
 async def send_slack(message: str, blocks: list[dict] | None = None):
-    sb = get_supabase()
-    notif_settings = sb.table("settings").select("value").eq("key", "notifications").single().execute()
-    webhook_url = None
-    if notif_settings.data:
-        webhook_url = notif_settings.data.get("value", {}).get("slack_webhook")
+    import os
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+
+    if not webhook_url:
+        try:
+            sb = get_supabase()
+            notif_settings = sb.table("settings").select("value").eq("key", "notifications").single().execute()
+            if notif_settings.data:
+                webhook_url = notif_settings.data.get("value", {}).get("slack_webhook")
+        except Exception:
+            pass
 
     if not webhook_url:
         log.debug("Slack webhook not configured — skipping notification")
@@ -60,4 +66,16 @@ async def notify_regime_shift(old_regime: str, new_regime: str, zscore: float):
 async def notify_walk_forward_alert(module_id: str, reason: str, action: str):
     await send_slack(
         f":microscope: *Walk-Forward Alert* | Module: {module_id} | {reason} | Action: {action}"
+    )
+
+
+async def notify_auction_gap(handle: str, last_end: str, hours_gap: float):
+    await send_slack(
+        f":warning: *Auction Gap Detected* | {handle} | Last auction ended {last_end} | {hours_gap:.0f}h with no new auction | Check xTracker"
+    )
+
+
+async def notify_new_auction(handle: str, title: str, start: str, end: str):
+    await send_slack(
+        f":new: *New Auction* | {handle} | {title} | {start} → {end}"
     )
