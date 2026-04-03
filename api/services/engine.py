@@ -141,7 +141,7 @@ class TradingEngine:
 
     def _run_resolutions(self):
         try:
-            check_resolutions()
+            check_resolutions(risk_manager=self.risk_manager)
         except Exception as e:
             log.error(f"Resolution check error: {e}")
 
@@ -168,8 +168,8 @@ class TradingEngine:
                 peak = max(values) if values else 1000
                 current = values[0] if values else 1000
                 self.risk_manager.update_pnl(daily, weekly, peak, current)
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"Risk state sync failed — loss limits may be stale: {e}")
 
     def _log_execution(self, signal, result):
         try:

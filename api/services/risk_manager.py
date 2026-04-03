@@ -19,6 +19,10 @@ class Signal:
     market_price: float
     kelly_pct: float
     confidence: float = 1.0
+    best_bid: float = 0.0
+    best_ask: float = 1.0
+    bid_depth_5: float = 0.0
+    ask_depth_5: float = 0.0
     metadata: dict = field(default_factory=dict)
 
 
@@ -108,8 +112,9 @@ class RiskManager:
             new_notional = signal.kelly_pct * settings.bankroll
             if (total_exposure + new_notional) / settings.bankroll > settings.max_portfolio_exposure:
                 return False, f"portfolio exposure {(total_exposure + new_notional) / settings.bankroll:.2%} exceeds {settings.max_portfolio_exposure:.0%}"
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"Portfolio exposure check failed (fail-closed): {e}")
+            return False, "portfolio exposure check unavailable — DB error"
         return True, ""
 
     def _check_single_market_exposure(self, signal: Signal, settings) -> tuple[bool, str]:
@@ -120,8 +125,9 @@ class RiskManager:
             new_notional = signal.kelly_pct * settings.bankroll
             if (existing + new_notional) / settings.bankroll > settings.max_single_market_exposure:
                 return False, f"single market exposure exceeded for {signal.bracket}"
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"Single market exposure check failed (fail-closed): {e}")
+            return False, "single market exposure check unavailable — DB error"
         return True, ""
 
     def _check_correlated_exposure(self, signal: Signal, settings) -> tuple[bool, str]:
@@ -132,8 +138,9 @@ class RiskManager:
             new_notional = signal.kelly_pct * settings.bankroll
             if (correlated + new_notional) / settings.bankroll > settings.max_correlated_exposure:
                 return False, f"correlated exposure exceeded for {signal.market_id}"
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"Correlated exposure check failed (fail-closed): {e}")
+            return False, "correlated exposure check unavailable — DB error"
         return True, ""
 
     def _check_duplicate(self, signal: Signal, settings) -> tuple[bool, str]:
@@ -152,11 +159,11 @@ class RiskManager:
                 orig_edge = pos["avg_price"]
                 if orig_edge > 0:
                     entry_edge = signal.market_price - orig_edge
-                    # Only allow if edge increased by at least 3%
                     if signal.edge < entry_edge + 0.03:
                         return False, f"duplicate bracket {signal.bracket}: edge not improved by 3%+ (current={signal.edge:.4f})"
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"Duplicate check failed (fail-closed): {e}")
+            return False, "duplicate check unavailable — DB error"
         return True, ""
 
     def _check_cross_module_correlation(self, signal: Signal, settings) -> tuple[bool, str]:
@@ -192,8 +199,9 @@ class RiskManager:
             total = similar_notional + new_notional
             if len(module_ids) >= 2 and total / settings.bankroll > 0.30:
                 return False, f"cross-module correlation: {len(module_ids)} modules, {total / settings.bankroll:.1%} in similar brackets"
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"Cross-module correlation check failed (fail-closed): {e}")
+            return False, "cross-module correlation check unavailable — DB error"
         return True, ""
 
     def _check_settlement_decay(self, signal: Signal, settings) -> tuple[bool, str]:
@@ -209,18 +217,27 @@ class RiskManager:
                     max_kelly = signal.kelly_pct * (hours_remaining / 24)
                     if max_kelly < 0.005:
                         return False, f"settlement decay reduced kelly to {max_kelly:.4f}"
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"Settlement decay check failed (fail-closed): {e}")
+            return False, "settlement decay check unavailable — DB error"
         return True, ""
 
     def _check_spread(self, signal: Signal, settings) -> tuple[bool, str]:
-        spread = abs(signal.market_price - signal.model_prob)
-        if signal.market_price > 0.05 and signal.market_price < 0.95:
-            if settings.slippage_tolerance > 0 and spread < settings.slippage_tolerance * 0.5:
-                pass
+        spread = signal.best_ask - signal.best_bid
+        if spread <= 0 and signal.best_bid == 0 and signal.best_ask == 1:
+            return False, "no order book data available — cannot verify spread"
+        if settings.slippage_tolerance > 0 and spread > settings.slippage_tolerance:
+            return False, f"bid-ask spread {spread:.4f} exceeds tolerance {settings.slippage_tolerance}"
         return True, ""
 
     def _check_liquidity(self, signal: Signal, settings) -> tuple[bool, str]:
+        depth = signal.ask_depth_5 if signal.side == "BUY" else signal.bid_depth_5
+        target_size = signal.kelly_pct * settings.bankroll
+        if depth <= 0:
+            return False, "no order book depth available"
+        max_fill = depth * 0.30
+        if target_size > max_fill:
+            return False, f"order size ${target_size:.2f} exceeds 30% of depth ${depth:.2f}"
         return True, ""
 
     def record_loss(self):

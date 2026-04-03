@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import math
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from api.modules.base import BaseModule
@@ -9,6 +8,7 @@ from api.modules.truth_social.data import (
     fetch_xtracker_posts, fetch_active_tracking, extract_slug_from_tracking,
     parse_hourly_counts, parse_daily_totals, compute_running_total,
     compute_elapsed_days, fetch_market_prices, fetch_historical_weekly_totals,
+    fetch_order_books_for_brackets,
 )
 from api.modules.truth_social.news import fetch_google_news
 from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
@@ -16,7 +16,7 @@ from api.modules.truth_social.projection import ensemble_weights, ensemble_proje
 from api.modules.truth_social.regime import detect_regime
 from api.modules.truth_social.signals import (
     compute_signal_modifier, kelly_sizing, rank_brackets,
-    depth_adjusted_size, cross_bracket_arbitrage, contrarian_signal,
+    cross_bracket_arbitrage,
 )
 from api.modules.truth_social.enhanced_pacing import (
     recency_weighted_averages, regime_conditional_dow_averages,
@@ -292,9 +292,13 @@ class TruthSocialModule(BaseModule):
             self._log(sb, module_id, "decision", "info",
                       f"Arbitrage: {[f'{o['bracket']}({o['side']},{o['misallocation']:+.1%})' for o in arb_opps[:3]]}")
 
-        # Contrarian adjustment: fade overcrowded brackets
-        # (order_books not fetched per-bracket yet, so this is a placeholder for when we add it)
-        contrarian_adj = {}
+        # Fetch order books for top brackets (needed for spread + liquidity risk checks)
+        top_brackets_for_books = rank_brackets(bracket_probs, market_prices)
+        top_bracket_names_for_books = [b["bracket"] for b in top_brackets_for_books]
+        order_books = await fetch_order_books_for_brackets(slug, top_bracket_names_for_books)
+
+        from api.modules.truth_social.signals import contrarian_signal
+        contrarian_adj = contrarian_signal(market_prices, order_books) if order_books else {}
 
         # Apply contrarian adjustments to bracket probs
         if contrarian_adj:
@@ -334,6 +338,7 @@ class TruthSocialModule(BaseModule):
             )
 
             if sizing["action"] == "BUY" and sizing["kelly_pct"] > 0:
+                book = order_books.get(bracket_label, {})
                 signal = Signal(
                     module_id=module_id,
                     market_id=slug,
@@ -344,6 +349,10 @@ class TruthSocialModule(BaseModule):
                     market_price=market_price,
                     kelly_pct=sizing["kelly_pct"],
                     confidence=1.0 - regime.get("volatility", 0.8) / 2,
+                    best_bid=book.get("best_bid", 0.0),
+                    best_ask=book.get("best_ask", 1.0),
+                    bid_depth_5=book.get("bid_depth_5", 0.0),
+                    ask_depth_5=book.get("ask_depth_5", 0.0),
                     metadata={
                         "regime": regime_label,
                         "regime_override": news_override.get("override"),

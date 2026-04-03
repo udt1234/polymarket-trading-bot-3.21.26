@@ -10,6 +10,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("hpack").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 from api.config import get_settings
+from api.dependencies import get_supabase
 from api.middleware import require_auth
 from api.routers import auth, dashboard, modules, portfolio, trades, analytics, logs, settings as settings_router
 from api.routers.backtest import router as backtest_router
@@ -64,3 +65,32 @@ app.include_router(ws_router)
 @app.get("/api/engine/status")
 async def engine_status():
     return engine.status
+
+
+@app.post("/api/engine/stop")
+async def engine_stop():
+    sb = get_supabase()
+    engine.stop()
+    open_positions = sb.table("positions").select("id,module_id,bracket,size,avg_price").eq("status", "open").execute()
+    closed_count = 0
+    for pos in (open_positions.data or []):
+        sb.table("positions").update({
+            "status": "closed",
+            "exit_price": pos["avg_price"],
+            "realized_pnl": 0,
+        }).eq("id", pos["id"]).execute()
+        closed_count += 1
+    sb.table("logs").insert({
+        "log_type": "system",
+        "severity": "critical",
+        "message": f"GLOBAL KILL SWITCH: engine stopped, {closed_count} positions closed",
+        "metadata": {"action": "global_kill", "positions_closed": closed_count},
+    }).execute()
+    return {"ok": True, "engine_stopped": True, "positions_closed": closed_count}
+
+
+@app.post("/api/engine/start")
+async def engine_start():
+    settings = get_settings()
+    engine.start(interval=settings.default_interval)
+    return {"ok": True, "status": engine.status}

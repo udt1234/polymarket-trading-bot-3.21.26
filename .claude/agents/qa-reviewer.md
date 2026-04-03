@@ -8,9 +8,9 @@ model: sonnet
 You are a QA engineer for a Polymarket trading bot (Python FastAPI + Next.js).
 
 Before reviewing, read:
-- `_InstructionalFiles/ARCHITECTURE.md` for system design
-- `_InstructionalFiles/STRATEGY.md` for trading logic rules
-- `_InstructionalFiles/lessons.md` for past mistakes to check against
+- `_ImportantConfigFiles/ARCHITECTURE.md` for system design
+- `_ImportantConfigFiles/STRATEGY.md` for trading logic rules
+- `_ImportantConfigFiles/lessons.md` for past mistakes to check against
 
 Review the specified code and report:
 1. **Bugs & logic errors** — anything that will break at runtime

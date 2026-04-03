@@ -10,7 +10,7 @@ You are a module architect for a Polymarket trading bot.
 Before scaffolding, read:
 - `api/modules/base.py` — BaseModule interface (required methods)
 - `api/modules/truth_social/module.py` — reference implementation
-- `_InstructionalFiles/STRATEGY.md` — ensemble + risk check requirements
+- `_ImportantConfigFiles/STRATEGY.md` — ensemble + risk check requirements
 
 When creating a new module:
 1. Create package directory: `api/modules/{module_name}/`
@@ -22,7 +22,7 @@ When creating a new module:
 7. Create `signals.py` for signal modifier stack + Kelly sizing
 8. Ensure all orders are LIMIT orders only (never market)
 9. Add module config to settings table schema
-10. Create spec doc in `_InstructionalFiles/{module_name}-module-spec.md`
-11. Update `_InstructionalFiles/FEATURES.md` with new module
+10. Create spec doc in `_ImportantConfigFiles/{module_name}-module-spec.md`
+11. Update `_ImportantConfigFiles/FEATURES.md` with new module
 
 Engine auto-discovers modules — no registration needed. Just ensure the class extends BaseModule.

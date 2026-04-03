@@ -13,11 +13,11 @@ When invoked:
 3. Read the changed source files for full context
 
 Update these docs as needed (ONLY sections affected by changes):
-- `_InstructionalFiles/FEATURES.md` — if features were added/changed
-- `_InstructionalFiles/ARCHITECTURE.md` — if system design changed
-- `_InstructionalFiles/STRATEGY.md` — if trading logic changed
-- `_InstructionalFiles/HANDOFF.md` — always update current state + what's next
-- `_InstructionalFiles/lessons.md` — if bugs were fixed (append new entry)
+- `_ImportantConfigFiles/FEATURES.md` — if features were added/changed
+- `_ImportantConfigFiles/ARCHITECTURE.md` — if system design changed
+- `_ImportantConfigFiles/STRATEGY.md` — if trading logic changed
+- `_ImportantConfigFiles/HANDOFF.md` — always update current state + what's next
+- `_ImportantConfigFiles/lessons.md` — if bugs were fixed (append new entry)
 - `CLAUDE.md` — if conventions or key files changed
 
 Rules:

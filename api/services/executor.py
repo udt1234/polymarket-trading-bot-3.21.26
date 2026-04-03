@@ -125,6 +125,7 @@ class LiveExecutor:
                 "price": signal.market_price,
                 "size": size,
                 "side": side,
+                "type": "GTC",
             })
 
             sb.table("orders").update({

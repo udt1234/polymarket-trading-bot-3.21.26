@@ -8,7 +8,7 @@ from api.modules.truth_social.data import fetch_market_prices
 log = logging.getLogger(__name__)
 
 
-def check_resolutions():
+def check_resolutions(risk_manager=None):
     sb = get_supabase()
     now = datetime.now(timezone.utc).isoformat()
 
@@ -29,7 +29,7 @@ def check_resolutions():
             continue
 
         try:
-            _resolve_module(sb, module)
+            _resolve_module(sb, module, risk_manager=risk_manager)
         except Exception as e:
             log.error(f"Resolution failed for module {module['name']}: {e}")
             sb.table("logs").insert({
@@ -40,7 +40,7 @@ def check_resolutions():
             }).execute()
 
 
-def _resolve_module(sb, module):
+def _resolve_module(sb, module, risk_manager=None):
     module_id = module["id"]
     slug = module.get("market_slug")
     if not slug:
@@ -76,6 +76,12 @@ def _resolve_module(sb, module):
             "realized_pnl": round(pnl, 6),
             "closed_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", pos["id"]).execute()
+
+        if risk_manager:
+            if pnl >= 0:
+                risk_manager.record_win()
+            else:
+                risk_manager.record_loss()
 
     _record_calibration(sb, module_id, slug, final_prices, winning_bracket)
 

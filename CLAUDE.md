@@ -9,7 +9,7 @@ Automated Polymarket trading bot deployed on Railway.
 ## Key Files
 - docker-compose.yml, railway.toml
 - web/ — Next.js dashboard with Recharts
-- _InstructionalFiles/ — detailed architecture, strategy, features, API docs
+- _ImportantConfigFiles/ — detailed architecture, strategy, features, API docs
 
 ## Deploy
 - Push to Railway via git
@@ -64,7 +64,7 @@ Automated Polymarket trading bot deployed on Railway.
 - For code review: use @qa-reviewer or /feature-dev:code-reviewer
 
 ## After Every Bug Fix
-Update `_InstructionalFiles/lessons.md` with what went wrong and the rule to prevent it.
+Update `_ImportantConfigFiles/lessons.md` with what went wrong and the rule to prevent it.
 
 ## Documentation Rules
 - Update FEATURES.md after every feature addition or change

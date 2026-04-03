@@ -2,7 +2,7 @@ import httpx
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
@@ -209,6 +209,43 @@ async def fetch_market_prices(slug: str) -> dict[str, float]:
                     prices[bracket] = price
 
         return prices
+
+
+async def fetch_bracket_token_ids(slug: str) -> dict[str, str]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        res = await client.get(f"{GAMMA_BASE}/events", params={"slug": slug})
+        res.raise_for_status()
+        events = res.json()
+        if not isinstance(events, list) or not events:
+            return {}
+
+        markets = events[0].get("markets", [])
+        token_map = {}
+        for m in markets:
+            raw_bracket = m.get("groupItemTitle", m.get("question", ""))
+            bracket = normalize_bracket(raw_bracket)
+            token_ids = m.get("clobTokenIds", "[]")
+            if isinstance(token_ids, str):
+                token_ids = json.loads(token_ids)
+            if token_ids:
+                token_map[bracket] = token_ids[0]
+        return token_map
+
+
+async def fetch_order_books_for_brackets(slug: str, brackets: list[str]) -> dict[str, dict]:
+    token_map = await fetch_bracket_token_ids(slug)
+    if not token_map:
+        return {}
+
+    books = {}
+    for bracket in brackets:
+        token_id = token_map.get(bracket)
+        if not token_id:
+            continue
+        book = await fetch_order_book(token_id)
+        books[bracket] = book
+        await asyncio.sleep(RATE_LIMITS["clob"])
+    return books
 
 
 async def fetch_market_volumes(slug: str) -> dict[str, float]:
