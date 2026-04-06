@@ -193,19 +193,43 @@ export function PaceAcceleration({ accel }: { accel: any }) {
   )
 }
 
+function bracketSortKey(bracket: string): number {
+  const m = bracket.match(/^(\d+)/)
+  if (m) return parseInt(m[1])
+  if (bracket.startsWith("<")) return -1
+  if (bracket.includes("+")) return 9999
+  return 5000
+}
+
+function probColor(rank: number): string {
+  if (rank === 0) return "#ef4444"    // red - highest
+  if (rank === 1) return "#f97316"    // orange
+  if (rank === 2) return "#eab308"    // yellow
+  if (rank <= 5) return "#94a3b8"     // slate
+  return "#64748b"                     // grey
+}
+
 export function ConfidenceBands({ bands, allProbs }: { bands: any[] | undefined; allProbs: Record<string, number> | undefined }) {
-  const sorted = allProbs
-    ? Object.entries(allProbs).sort((a, b) => b[1] - a[1]).map(([bracket, prob]) => ({ bracket, probability: prob }))
+  const bracketOrder = allProbs
+    ? Object.entries(allProbs)
+        .map(([bracket, prob]) => ({ bracket, probability: prob }))
+        .sort((a, b) => bracketSortKey(a.bracket) - bracketSortKey(b.bracket))
     : bands || []
-  const topBracket = sorted[0]
+
+  // Rank by probability to assign colors
+  const byProb = [...bracketOrder].sort((a, b) => b.probability - a.probability)
+  const rankMap: Record<string, number> = {}
+  byProb.forEach((b, i) => { rankMap[b.bracket] = i })
+
+  const topBracket = byProb[0]
 
   return (
     <div className="rounded-lg border border-border bg-card p-6">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
         Confidence Bands
       </h2>
-      <p className="mt-1 mb-3 text-xs text-muted-foreground">All brackets ranked by model probability. Wider bar = higher confidence.</p>
-      {sorted.length > 0 ? (
+      <p className="mt-1 mb-3 text-xs text-muted-foreground">All brackets in order. Bar color shows rank: red = most likely, orange = 2nd, yellow = 3rd, grey = unlikely.</p>
+      {bracketOrder.length > 0 ? (
         <div className="space-y-4">
           <div className="rounded border border-primary/30 bg-primary/5 p-3 text-center">
             <p className="text-xs text-muted-foreground">Projected Winner</p>
@@ -215,18 +239,20 @@ export function ConfidenceBands({ bands, allProbs }: { bands: any[] | undefined;
             </p>
           </div>
           <div className="space-y-1.5">
-            {sorted.map((b, i) => {
+            {bracketOrder.map((b, i) => {
               const pct = b.probability * 100
+              const rank = rankMap[b.bracket] ?? 99
+              const color = probColor(rank)
               return (
                 <div key={i} className="space-y-0.5">
                   <div className="flex items-center justify-between text-sm">
-                    <span className={cn("font-medium", i === 0 && "text-primary")}>{b.bracket}</span>
+                    <span className={cn("font-medium", rank === 0 && "font-bold")}>{b.bracket}</span>
                     <span className="font-mono text-muted-foreground">{fmt(pct)}%</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                     <div
-                      className={cn("h-full rounded-full transition-all", i === 0 ? "bg-primary" : "bg-primary/60")}
-                      style={{ width: `${Math.min(pct * 4, 100)}%` }}
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(pct * 4, 100)}%`, backgroundColor: color }}
                     />
                   </div>
                 </div>

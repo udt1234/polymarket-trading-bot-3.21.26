@@ -499,7 +499,8 @@ export default function ModuleDetailPage() {
         {(() => {
           const data = pacing?.current_auction
           const selectedAuc = auctions?.find((a) => a.tracking_id === (activeTrackingId || (pacing as any)?.tracking_id))
-          const pastAucs = (auctions || []).filter((a) => a.status === "past").slice(0, 6)
+          const pastAucs = (auctions || []).filter((a) => a.status === "past")
+            .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 6)
           return (
             <div className="rounded-lg border border-border bg-card p-6">
               <div className="flex items-center gap-2 mb-3">
@@ -562,26 +563,35 @@ export default function ModuleDetailPage() {
                   <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-2">Recent Auctions</p>
                   <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
                     {pastAucs.map((a) => {
-                      const walletAuc = relevantAuctions.find((wa: any) =>
-                        (wa.slug || "").toLowerCase().includes(
-                          a.start_date.replace(/-/g, "").slice(4)
-                        ) || (wa.end_date || "").slice(0, 10) === a.end_date
-                      )
+                      const aSlug = a.market_link?.split("/").pop()?.toLowerCase() || ""
+                      const walletAuc = relevantAuctions.find((wa: any) => {
+                        const waSlug = (wa.slug || "").toLowerCase()
+                        if (aSlug && waSlug === aSlug) return true
+                        if ((wa.end_date || "").slice(0, 10) === a.end_date) return true
+                        if ((wa.slug || "").includes(a.start_date.slice(5).replace("-0", "-").replace("-", "-"))) return true
+                        return false
+                      })
                       const pnl = walletAuc?.total_pnl ?? 0
                       const won = walletAuc?.status === "won"
+                      // Find winning bracket (highest value bid in resolved auction)
+                      const winBid = walletAuc?.bids?.find((b: any) => (b.pnl || 0) > 0)
+                      const winBracket = winBid?.outcome || winBid?.title?.match(/\d+-\d+|\d+\+/)?.[0] || ""
                       return (
                         <button
                           key={a.tracking_id}
                           onClick={() => setActiveTrackingId(a.tracking_id)}
                           className={cn(
                             "rounded border p-1.5 text-center text-[9px] transition-colors",
-                            won ? "border-success/40 bg-success/10" : "border-destructive/40 bg-destructive/10",
+                            won ? "border-success/40 bg-success/10" :
+                            pnl !== 0 ? "border-destructive/40 bg-destructive/10" :
+                            "border-border bg-muted/30",
                             "hover:opacity-80"
                           )}
                         >
                           <p className="font-semibold text-foreground">{formatDateShort(a.start_date).replace(/, \d{4}$/, "")}</p>
-                          <p className={cn("font-bold", pnl >= 0 ? "text-success" : "text-destructive")}>
-                            {pnl >= 0 ? "+" : ""}{formatCurrency(pnl)}
+                          {winBracket && <p className="text-[8px] text-muted-foreground">{winBracket}</p>}
+                          <p className={cn("font-bold", pnl > 0 ? "text-success" : pnl < 0 ? "text-destructive" : "text-muted-foreground")}>
+                            {pnl > 0 ? "+" : ""}{pnl !== 0 ? formatCurrency(pnl) : "--"}
                           </p>
                         </button>
                       )

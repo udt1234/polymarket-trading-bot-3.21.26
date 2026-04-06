@@ -13,7 +13,11 @@ from api.modules.truth_social.news import fetch_google_news
 from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
 from api.modules.truth_social.projection import ensemble_weights
 from api.modules.truth_social.regime import detect_regime
-from api.modules.truth_social.signals import compute_signal_modifier, kelly_sizing
+from api.modules.truth_social.signals import (
+    compute_signal_modifier, kelly_sizing, rank_brackets,
+    cross_bracket_arbitrage, depth_adjusted_size,
+)
+from api.modules.elon_tweets.module_config import get_module_config
 from api.modules.truth_social.hawkes import hawkes_pace, fit_hawkes_params
 from api.modules.truth_social.news_classifier import classify_news_regime
 from api.modules.truth_social.enhanced_pacing import (
@@ -108,7 +112,8 @@ class ElonTweetsModule(BaseModule):
         elapsed_days = compute_elapsed_days(week_start_str, now)
         remaining_days = max(total_days - elapsed_days, 0.01)
 
-        rw = recency_weighted_averages(weekly_history, half_life=4.0)
+        mod_cfg = get_module_config(module_id)
+        rw = recency_weighted_averages(weekly_history, half_life=mod_cfg.get("recency_half_life", 4.0))
         hist_mean = rw["mean"] if rw["mean"] > 0 else (sum(weekly_history) / len(weekly_history) if weekly_history else 100.0)
         hist_std = rw["std"] if rw["std"] > 0 else 30.0
 
@@ -162,7 +167,8 @@ class ElonTweetsModule(BaseModule):
                       f"Regime override: {old_label} -> {regime_label} ({news_override['reason']})")
 
         model_outputs = {"pace": pace, "bayesian": bayes, "dow": dow, "historical": hist_mean, "hawkes": hawkes_proj}
-        weights = ensemble_weights(elapsed_days, total_days, regime_label=regime_label)
+        enabled_models = mod_cfg.get("enabled_models", ["pace", "bayesian", "dow", "historical", "hawkes"])
+        weights = ensemble_weights(elapsed_days, total_days, regime_label=regime_label, enabled_models=enabled_models)
 
         # Signal modifier stack: news 60%, LunarCrush 40% (no presidential schedule for Elon)
         news_mod = compute_signal_modifier(
@@ -193,6 +199,7 @@ class ElonTweetsModule(BaseModule):
             )
 
             if sizing["action"] == "BUY" and sizing["kelly_pct"] > 0:
+                sizing["kelly_pct"] = depth_adjusted_size(sizing["kelly_pct"], {}, bankroll=module.get("budget", 100))
                 signal = Signal(
                     module_id=module_id, market_id=slug, bracket=bracket_label,
                     side="BUY", edge=sizing["edge"], model_prob=model_prob,

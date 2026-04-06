@@ -30,17 +30,19 @@ RATE_DELAY = 0.5
 
 
 async def fetch_all_trackings(handle: str) -> list[dict]:
+    platform = "truthsocial" if handle == "realDonaldTrump" else "x"
+    name_filter = "truth social" if handle == "realDonaldTrump" else "tweets"
     async with httpx.AsyncClient(timeout=30) as client:
         res = await client.get(
             f"{XTRACKER_BASE}/users/{handle}/trackings",
-            params={"platform": "truthsocial"},
+            params={"platform": platform},
         )
         res.raise_for_status()
         data = res.json()
         items = data.get("data", data) if isinstance(data, dict) else data
         if isinstance(items, dict):
             items = items.get("trackings", [])
-        return [t for t in items if "truth social" in t.get("title", "").lower()]
+        return [t for t in items if name_filter in t.get("title", "").lower()]
 
 
 def extract_slug(tracking: dict) -> str | None:
@@ -131,7 +133,8 @@ async def main():
 
     print("Fetching trackings...")
     trackings = await fetch_all_trackings(args.handle)
-    print(f"  Found {len(trackings)} Trump Truth Social trackings")
+    label = "Trump Truth Social" if args.handle == "realDonaldTrump" else "Elon Tweets"
+    print(f"  Found {len(trackings)} {label} trackings")
 
     if args.weeks > 0:
         cutoff = datetime.now(timezone.utc) - timedelta(weeks=args.weeks)
@@ -147,7 +150,8 @@ async def main():
     # Get module_id from Supabase
     module_id = None
     if sb:
-        mod = sb.table("modules").select("id").ilike("name", "%truth social%").limit(1).execute()
+        search = "%truth social%" if args.handle == "realDonaldTrump" else "%elon%"
+        mod = sb.table("modules").select("id").ilike("name", search).limit(1).execute()
         if mod.data:
             module_id = mod.data[0]["id"]
             print(f"  Module ID: {module_id}")

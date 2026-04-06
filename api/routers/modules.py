@@ -19,6 +19,23 @@ from api.modules.truth_social.parquet_history import (
 
 router = APIRouter()
 
+DOW_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _detect_handle(module_data: dict) -> str:
+    name = (module_data.get("name", "") or "").lower()
+    if "truth" in name or "trump" in name:
+        return "realDonaldTrump"
+    if "elon" in name:
+        return "elonmusk"
+    return "realDonaldTrump"
+
+
+def _detect_name_filter(handle: str) -> str:
+    if handle == "elonmusk":
+        return "tweets"
+    return "truth social"
+
 
 class ModuleCreate(BaseModel):
     name: str
@@ -147,16 +164,15 @@ async def get_auctions(module_id: str, include_past: bool = True):
     if not module.data:
         raise HTTPException(status_code=404, detail="Module not found")
 
-    handle = "realDonaldTrump"
-    name_filter = "truth social"
+    handle = _detect_handle(module.data)
+    name_filter = _detect_name_filter(handle)
     now = datetime.now(timezone.utc)
 
     all_trackings = await _fetch_trackings_raw(handle)
 
-    # Filter to this module's market type
     module_trackings = [
         t for t in all_trackings
-        if "trump" in t.get("title", "").lower() and name_filter in t.get("title", "").lower()
+        if name_filter in t.get("title", "").lower()
     ]
 
     results = []
@@ -202,9 +218,6 @@ async def get_auctions(module_id: str, include_past: bool = True):
     ))
 
     return results
-
-
-DOW_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def _compute_pacing_models(running_total, elapsed_days, remaining_days, total_days, hist_mean, hist_std, hourly_counts, var, now, cfg):
@@ -349,7 +362,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     from api.modules.truth_social.regime import detect_regime
 
     cfg = get_module_config(module_id)
-    handle = "realDonaldTrump"
+    handle = _detect_handle(module.data)
     now = datetime.now(timezone.utc)
 
     if tracking_id:
@@ -561,8 +574,7 @@ async def deep_dive_posts(
     if not module.data:
         raise HTTPException(status_code=404, detail="Module not found")
 
-    name = module.data.get("name", "").lower()
-    handle = "realDonaldTrump" if "truth" in name or "trump" in name else "elonmusk"
+    handle = _detect_handle(module.data)
 
     hist_path = Path(__file__).resolve().parent.parent.parent / "_DataMetricPulls" / "historical" / handle / "hourly.json"
     if not hist_path.exists():
@@ -679,14 +691,7 @@ async def module_data_sources(module_id: str):
     if not module.data:
         raise HTTPException(status_code=404, detail="Module not found")
 
-    # Determine handle from module name
-    name = module.data.get("name", "").lower()
-    if "truth" in name or "trump" in name:
-        handle = "realDonaldTrump"
-    elif "elon" in name:
-        handle = "elonmusk"
-    else:
-        handle = "unknown"
+    handle = _detect_handle(module.data)
 
     hist_dir = _Path(__file__).parent.parent.parent / "_DataMetricPulls" / "historical" / handle
 
