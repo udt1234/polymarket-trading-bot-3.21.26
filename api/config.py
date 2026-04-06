@@ -1,6 +1,5 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings
-from functools import lru_cache
 
 _env_file = Path(__file__).resolve().parent.parent / ".env"
 

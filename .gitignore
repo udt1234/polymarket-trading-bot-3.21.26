@@ -43,3 +43,6 @@ data/
 
 # MISC (unrelated files)
 MISC/
+
+# Playwright cache
+.playwright-mcp/

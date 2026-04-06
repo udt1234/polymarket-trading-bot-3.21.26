@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { cn } from "@/lib/utils"
+import { Card } from "@/components/shared/card"
 
 const tabs = [
   { id: "setup", label: "Setup Notes" },
@@ -12,10 +13,6 @@ const tabs = [
   { id: "risk", label: "Risk Rules" },
   { id: "changelog", label: "Changelog" },
 ]
-
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("rounded-lg border border-border bg-card p-4", className)}>{children}</div>
-}
 
 function Badge({ children, variant = "default" }: { children: React.ReactNode; variant?: string }) {
   const colors: Record<string, string> = {

@@ -16,7 +16,7 @@ from api.modules.truth_social.projection import ensemble_weights, ensemble_proje
 from api.modules.truth_social.regime import detect_regime
 from api.modules.truth_social.signals import (
     compute_signal_modifier, kelly_sizing, rank_brackets,
-    cross_bracket_arbitrage,
+    cross_bracket_arbitrage, depth_adjusted_size,
 )
 from api.modules.truth_social.enhanced_pacing import (
     recency_weighted_averages, regime_conditional_dow_averages,
@@ -95,8 +95,11 @@ class TruthSocialModule(BaseModule):
             self._log(sb, module_id, "decision", "warning", f"No market prices for slug={slug}")
             return []
 
+        mod_cfg = get_module_config(module_id)
+
         # Historical data + news + social intelligence
-        weekly_history = await fetch_historical_weekly_totals(self.HANDLE, weeks=12)
+        n_periods = mod_cfg.get("historical_periods", 9)
+        weekly_history = await fetch_historical_weekly_totals(self.HANDLE, weeks=max(n_periods, 12))
         news = await fetch_google_news("Trump")
         lunar_sentiment = await fetch_social_sentiment("trump")
         lunar_creator = await fetch_creator_metrics("realDonaldTrump", network="x")
@@ -148,7 +151,6 @@ class TruthSocialModule(BaseModule):
         elapsed_days = compute_elapsed_days(week_start_str, now)
         remaining_days = max(total_days - elapsed_days, 0.01)
 
-        mod_cfg = get_module_config(module_id)
         half_life = mod_cfg.get("recency_half_life", 4.0)
 
         rw = recency_weighted_averages(weekly_history, half_life=half_life)
@@ -219,7 +221,8 @@ class TruthSocialModule(BaseModule):
         )
 
         model_outputs = {"pace": pace, "bayesian": bayes, "dow": dow, "historical": hist_mean, "hawkes": hawkes_proj}
-        weights = ensemble_weights(elapsed_days, total_days, regime_label=regime_label)
+        enabled_models = cfg.get("enabled_models", ["pace", "bayesian", "dow", "historical", "hawkes"])
+        weights = ensemble_weights(elapsed_days, total_days, regime_label=regime_label, enabled_models=enabled_models)
 
         accel = pace_acceleration(hourly_counts)
 
@@ -339,6 +342,8 @@ class TruthSocialModule(BaseModule):
 
             if sizing["action"] == "BUY" and sizing["kelly_pct"] > 0:
                 book = order_books.get(bracket_label, {})
+                if book:
+                    sizing["kelly_pct"] = depth_adjusted_size(sizing["kelly_pct"], book, bankroll=module.get("budget", 100))
                 signal = Signal(
                     module_id=module_id,
                     market_id=slug,

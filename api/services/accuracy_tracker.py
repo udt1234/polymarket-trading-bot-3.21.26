@@ -5,6 +5,21 @@ from api.dependencies import get_supabase
 log = logging.getLogger(__name__)
 
 
+def _group_by_week(data: list[dict], score_key: str = "brier_score", date_key: str = "resolved_at") -> dict[str, list]:
+    week_groups = {}
+    for r in data:
+        dt = r.get(date_key, "")[:10]
+        if not dt:
+            continue
+        try:
+            d = datetime.fromisoformat(dt)
+            week_key = (d - timedelta(days=d.weekday())).strftime("%Y-%m-%d")
+        except (ValueError, TypeError):
+            continue
+        week_groups.setdefault(week_key, []).append(r[score_key])
+    return week_groups
+
+
 def compute_accuracy_report(module_id: str = None) -> dict:
     sb = get_supabase()
     query = sb.table("calibration_log").select("*").not_.is_("brier_score", "null")
@@ -32,17 +47,7 @@ def compute_accuracy_report(module_id: str = None) -> dict:
         for b, v in sorted(bracket_groups.items())
     ]
 
-    week_groups = {}
-    for r in data:
-        dt = r.get("resolved_at", "")[:10]
-        if not dt:
-            continue
-        try:
-            d = datetime.fromisoformat(dt)
-            week_key = (d - timedelta(days=d.weekday())).strftime("%Y-%m-%d")
-        except (ValueError, TypeError):
-            continue
-        week_groups.setdefault(week_key, []).append(r["brier_score"])
+    week_groups = _group_by_week(data)
 
     by_week = [
         {"week": w, "brier": round(sum(v) / len(v), 6), "count": len(v)}
@@ -106,17 +111,7 @@ def get_accuracy_trend(module_id: str = None, weeks: int = 12) -> dict:
     if not rows.data:
         return {"weeks": [], "trend": "insufficient_data", "improving": None}
 
-    week_groups = {}
-    for r in rows.data:
-        dt = r.get("resolved_at", "")[:10]
-        if not dt:
-            continue
-        try:
-            d = datetime.fromisoformat(dt)
-            week_key = (d - timedelta(days=d.weekday())).strftime("%Y-%m-%d")
-        except (ValueError, TypeError):
-            continue
-        week_groups.setdefault(week_key, []).append(r["brier_score"])
+    week_groups = _group_by_week(rows.data)
 
     weekly = [
         {"week": w, "brier": round(sum(v) / len(v), 6), "count": len(v)}

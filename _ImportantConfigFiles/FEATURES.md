@@ -41,8 +41,28 @@
 | Google Trends | Interest-over-time momentum | Trump |
 | Polymarket Parquet | Historical price data | Both |
 
+## Truth Social Module Dashboard
+- **DOW Averages Heatmap**: 7-day grid, recency-weighted, green intensity scale
+- **Hourly Posts Clock**: SVG clock face with 24-hour posts/hr (4yr historical data)
+- **Daily Pacing Table**: Day-by-day actual vs expected, deviation, status indicators
+- **Pace Acceleration**: Current vs prior posting rate with momentum label
+- **Confidence Bands**: Top 3 projected brackets with probability bars
+- **Ensemble Breakdown**: 4-model projections with weights and contributions
+- **Bid Prices by Day & Hour**: 7x24 heatmap from `price_snapshots` (green=cheap)
+- **Bid Prices by Days Since Launch**: Bracket price evolution over auction lifecycle
+- **Positions Table**: AVG->NOW prices, current market value, unrealized P&L
+- **Auction Selector**: Dropdown with Active/Past groups (replaced horizontal tabs)
+- **Current Value Card**: Shows market value (not cost basis) with unrealized P&L
+
+## Historical Data Pipeline
+- **Post data**: CNN archive (32K+ posts, 2022-02 to present, hourly granularity)
+- **Price data**: CLOB API `/prices-history` backfill (23K+ snapshots, all 17 auctions)
+- **Ongoing collection**: Hourly price snapshots via `snapshots.py` scheduler
+- **Supabase table**: `price_snapshots` (dow, hour_of_day, elapsed_days, tracking_id)
+
 ## Historical Data Scripts
-- `scripts/import_cnn_archive.py` — CNN archive → hourly/daily/weekly + stats
+- `scripts/import_cnn_archive.py` — CNN archive -> hourly/daily/weekly + stats
+- `scripts/backfill_prices.py` — CLOB API -> price_snapshots for all past auctions
 - `scripts/fetch_historical_auctions.py` — all past xTracker auctions
 - `scripts/import_historical.py` — generic CSV/JSON importer
 

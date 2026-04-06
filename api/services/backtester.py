@@ -57,7 +57,7 @@ RELEVANCE_KEYWORDS = [
 async def fetch_gamma_events(query: str, limit: int = 20) -> list[dict]:
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.get(f"{GAMMA_BASE}/events", params={
-            "q": query, "closed": "false", "limit": min(limit * 3, 100),
+            "q": query, "limit": min(limit * 3, 100),
         })
         res.raise_for_status()
         events = res.json()

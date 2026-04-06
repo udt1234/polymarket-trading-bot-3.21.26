@@ -10,6 +10,8 @@ DEFAULT_CONFIG = {
     "pacing_display_days_prior": 10,
     "pacing_display_days_future": 7,
     "dow_weights_source": "recency",
+    "enabled_models": ["pace", "bayesian", "dow", "historical", "hawkes"],
+    "strategy_preset": "full",
 }
 
 

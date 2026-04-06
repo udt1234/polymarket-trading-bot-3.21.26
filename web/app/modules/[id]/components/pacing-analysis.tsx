@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react"
 
@@ -192,35 +193,40 @@ export function PaceAcceleration({ accel }: { accel: any }) {
   )
 }
 
-export function ConfidenceBands({ bands }: { bands: any[] | undefined }) {
+export function ConfidenceBands({ bands, allProbs }: { bands: any[] | undefined; allProbs: Record<string, number> | undefined }) {
+  const sorted = allProbs
+    ? Object.entries(allProbs).sort((a, b) => b[1] - a[1]).map(([bracket, prob]) => ({ bracket, probability: prob }))
+    : bands || []
+  const topBracket = sorted[0]
+
   return (
     <div className="rounded-lg border border-border bg-card p-6">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
         Confidence Bands
       </h2>
-      <p className="mt-1 mb-3 text-xs text-muted-foreground">Our model's best guess at which bracket will win, ranked by probability. The wider the gap between #1 and #2, the more confident the prediction.</p>
-      {bands && bands.length > 0 ? (
+      <p className="mt-1 mb-3 text-xs text-muted-foreground">All brackets ranked by model probability. Wider bar = higher confidence.</p>
+      {sorted.length > 0 ? (
         <div className="space-y-4">
           <div className="rounded border border-primary/30 bg-primary/5 p-3 text-center">
             <p className="text-xs text-muted-foreground">Projected Winner</p>
-            <p className="text-xl font-bold text-primary">{bands[0]?.bracket}</p>
+            <p className="text-xl font-bold text-primary">{topBracket?.bracket}</p>
             <p className="text-sm text-muted-foreground">
-              Confidence: {fmt((bands[0]?.confidence || bands[0]?.probability || 0) * 100)}%
+              Confidence: {fmt((topBracket?.probability || 0) * 100)}%
             </p>
           </div>
-          <div className="space-y-2">
-            {bands.slice(0, 3).map((b, i) => {
+          <div className="space-y-1.5">
+            {sorted.map((b, i) => {
               const pct = b.probability * 100
               return (
                 <div key={i} className="space-y-0.5">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{b.bracket}</span>
+                    <span className={cn("font-medium", i === 0 && "text-primary")}>{b.bracket}</span>
                     <span className="font-mono text-muted-foreground">{fmt(pct)}%</span>
                   </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                     <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${Math.min(pct * 2, 100)}%` }}
+                      className={cn("h-full rounded-full transition-all", i === 0 ? "bg-primary" : "bg-primary/60")}
+                      style={{ width: `${Math.min(pct * 4, 100)}%` }}
                     />
                   </div>
                 </div>
@@ -236,17 +242,35 @@ export function ConfidenceBands({ bands }: { bands: any[] | undefined }) {
 }
 
 export function EnsembleBreakdown({ ensemble, ensembleAvg }: { ensemble: any[] | undefined; ensembleAvg: number }) {
+  const [disabledModels, setDisabledModels] = useState<Set<string>>(new Set())
+
+  const toggleModel = (model: string) => {
+    setDisabledModels((prev) => {
+      const next = new Set(prev)
+      if (next.has(model)) next.delete(model)
+      else next.add(model)
+      return next
+    })
+  }
+
+  const activeModels = (ensemble || []).filter((m: any) => !disabledModels.has(m.model))
+  const totalWeight = activeModels.reduce((s: number, m: any) => s + (m.weight || 0), 0)
+  const previewAvg = totalWeight > 0
+    ? activeModels.reduce((s: number, m: any) => s + (m.projection || 0) * ((m.weight || 0) / totalWeight), 0)
+    : 0
+
   return (
     <div className="rounded-lg border border-border bg-card p-6">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
         Ensemble Sub-Model Breakdown
       </h2>
-      <p className="mt-1 mb-3 text-xs text-muted-foreground">Four prediction models each estimate the final post count. Their outputs are blended using weights that shift as the week progresses — early week trusts history, late week trusts current pace.</p>
+      <p className="mt-1 mb-3 text-xs text-muted-foreground">5 models estimate the final post count. Toggle models on/off to preview different blends. Save changes in Config above to persist.</p>
       {ensemble && Array.isArray(ensemble) && ensemble.length > 0 ? (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-xs text-muted-foreground">
+                <th className="py-2 text-center w-10">On</th>
                 <th className="py-2 text-left">Model</th>
                 <th className="py-2 text-right">Projection</th>
                 <th className="py-2 text-right">Weight</th>
@@ -254,19 +278,41 @@ export function EnsembleBreakdown({ ensemble, ensembleAvg }: { ensemble: any[] |
               </tr>
             </thead>
             <tbody>
-              {ensemble.map((m: any, i: number) => (
-                <tr key={i} className="border-b border-border last:border-0">
-                  <td className="py-2 font-medium">{m.model}</td>
-                  <td className="py-2 text-right font-mono">{fmt(m.projection || 0)}</td>
-                  <td className="py-2 text-right font-mono">{fmt(m.weight || 0)}%</td>
-                  <td className="py-2 text-right font-mono">{fmt(m.contribution || 0)}</td>
-                </tr>
-              ))}
+              {ensemble.map((m: any, i: number) => {
+                const isOff = disabledModels.has(m.model)
+                const adjWeight = !isOff && totalWeight > 0 ? ((m.weight || 0) / totalWeight * 100) : 0
+                const adjContrib = !isOff ? (m.projection || 0) * (adjWeight / 100) : 0
+                return (
+                  <tr key={i} className={cn("border-b border-border last:border-0", isOff && "opacity-40")}>
+                    <td className="py-2 text-center">
+                      <button
+                        onClick={() => toggleModel(m.model)}
+                        className={cn(
+                          "h-5 w-9 rounded-full transition-colors relative",
+                          isOff ? "bg-muted" : "bg-primary"
+                        )}
+                      >
+                        <span className={cn(
+                          "absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform",
+                          isOff ? "left-0.5" : "left-[18px]"
+                        )} />
+                      </button>
+                    </td>
+                    <td className="py-2 font-medium">{m.model}</td>
+                    <td className="py-2 text-right font-mono">{fmt(m.projection || 0)}</td>
+                    <td className="py-2 text-right font-mono">{fmt(isOff ? 0 : adjWeight)}%</td>
+                    <td className="py-2 text-right font-mono">{fmt(isOff ? 0 : adjContrib)}</td>
+                  </tr>
+                )
+              })}
               <tr className="bg-muted/30 font-semibold">
-                <td className="py-2">Ensemble Average</td>
-                <td className="py-2 text-right font-mono">{fmt(ensembleAvg || 0)}</td>
+                <td className="py-2" />
+                <td className="py-2">
+                  {disabledModels.size > 0 ? "Preview Avg" : "Ensemble Average"}
+                </td>
+                <td className="py-2 text-right font-mono">{fmt(disabledModels.size > 0 ? previewAvg : ensembleAvg)}</td>
                 <td className="py-2 text-right font-mono">100%</td>
-                <td className="py-2 text-right font-mono">{fmt(ensembleAvg || 0)}</td>
+                <td className="py-2 text-right font-mono">{fmt(disabledModels.size > 0 ? previewAvg : ensembleAvg)}</td>
               </tr>
             </tbody>
           </table>

@@ -70,6 +70,8 @@ interface ModuleConfig {
   parquet_model: boolean
   dow_weights_source: "recency" | "equal" | "regime"
   auto_optimize_periods: boolean
+  enabled_models: string[]
+  strategy_preset: string
 }
 
 interface AuctionTab {
@@ -81,6 +83,7 @@ interface AuctionTab {
   remaining_days: number
   status: "active" | "past" | "future"
   is_active: boolean
+  market_link?: string
 }
 
 function fmt(n: number, decimals = 1): string {
@@ -99,12 +102,15 @@ export default function ModuleDetailPage() {
   const id = module?.id
 
   const { data: moduleSignals } = useApi<Signal[]>(
-    id ? `/api/dashboard/recent-signals?limit=30` : null
+    id ? `/api/dashboard/recent-signals?limit=50&module_id=${id}` : null
   )
   const { data: trades } = useApi<{ data: Trade[]; total: number }>(
     id ? `/api/trades/?module_id=${id}&limit=20` : null
   )
-  const { data: positions } = useApi<Position[]>(
+  const { data: walletAuctions } = useApi<any[]>(
+    `/api/dashboard/auctions`
+  )
+  const { data: paperPositions } = useApi<Position[]>(
     id ? `/api/portfolio/positions?status=all` : null
   )
   const [activeTrackingId, setActiveTrackingId] = useState<string | null>(null)
@@ -130,6 +136,12 @@ export default function ModuleDetailPage() {
 
   const [lastRefresh, setLastRefresh] = useState(new Date())
   const [configOpen, setConfigOpen] = useState(false)
+  const ALL_MODELS = ["pace", "bayesian", "dow", "historical", "hawkes"]
+  const PRESETS: Record<string, string[]> = {
+    full: ["pace", "bayesian", "dow", "historical", "hawkes"],
+    conservative: ["pace", "bayesian"],
+    momentum: ["pace", "hawkes", "dow"],
+  }
   const [localConfig, setLocalConfig] = useState<ModuleConfig>({
     historical_periods: 9,
     recency_half_life: 4.0,
@@ -137,6 +149,8 @@ export default function ModuleDetailPage() {
     parquet_model: false,
     dow_weights_source: "recency",
     auto_optimize_periods: false,
+    enabled_models: ALL_MODELS,
+    strategy_preset: "full",
   })
 
   useEffect(() => {
@@ -164,15 +178,58 @@ export default function ModuleDetailPage() {
     refetchPacing()
   }, [localConfig, saveConfig, refetchConfig, refetchPacing])
 
-  const mySignals = (moduleSignals || []).filter((s: any) => s.module_id === id)
-  const myPositions = (positions || []).filter((p: any) => p.module_id === id)
+  const mySignals = moduleSignals || []
+
+  // Use real wallet data when available, fallback to paper positions
+  const moduleName = module?.name?.toLowerCase() || ""
+  const isLive = walletAuctions && walletAuctions.length > 0
+  const relevantAuctions = (walletAuctions || []).filter((a: any) => {
+    const slug = (a.slug || "").toLowerCase()
+    if (moduleName.includes("truth") || moduleName.includes("trump")) {
+      return slug.includes("truth-social") || slug.includes("trump")
+    }
+    if (moduleName.includes("elon")) {
+      return slug.includes("elon") || slug.includes("tweets")
+    }
+    return false
+  })
+
+  // Get the selected auction's slug for filtering positions
+  const selectedAuctionId = activeTrackingId || (pacing as any)?.tracking_id
+  const selectedAuction = auctions?.find((a) => a.tracking_id === selectedAuctionId)
+  const selectedSlug = selectedAuction?.market_link
+    ? selectedAuction.market_link.split("/").pop()?.toLowerCase() || ""
+    : ""
+
+  // Flatten wallet auction bids into position-like objects, tagged with auction slug
+  const walletPositions: (Position & { auction_slug?: string })[] = relevantAuctions.flatMap((a: any) =>
+    (a.bids || []).map((b: any) => ({
+      bracket: b.outcome || b.title?.match(/\d+-\d+|\d+\+|<\d+/)?.[0] || b.title || "",
+      side: "BUY",
+      size: b.size || 0,
+      avg_price: b.avg_price || 0,
+      realized_pnl: a.status !== "open" ? (b.pnl || 0) : 0,
+      unrealized_pnl: a.status === "open" ? (b.pnl || 0) : 0,
+      status: a.status === "open" ? "open" : "closed",
+      auction_slug: (a.slug || "").toLowerCase(),
+    }))
+  )
+
+  // Filter positions: if an auction is selected, show only that auction's positions
+  const filteredPositions = selectedSlug && isLive
+    ? walletPositions.filter((p) => (p as any).auction_slug === selectedSlug)
+    : walletPositions
+
+  const myPositions = isLive ? filteredPositions : (paperPositions || []).filter((p: any) => p.module_id === id)
+  const allPositions = isLive ? walletPositions : (paperPositions || []).filter((p: any) => p.module_id === id)
   const openPositions = myPositions.filter((p) => p.status === "open")
-  const closedPositions = myPositions.filter((p) => p.status === "closed")
+  const closedPositions = myPositions.filter((p) => p.status !== "open")
 
   const totalInvested = openPositions.reduce((s, p) => s + (p.size * p.avg_price), 0)
-  const totalPnl = myPositions.reduce((s, p) => s + (p.realized_pnl || 0) + (p.unrealized_pnl || 0), 0)
-  const wins = closedPositions.filter((p) => (p.realized_pnl || 0) > 0).length
-  const winRate = closedPositions.length > 0 ? (wins / closedPositions.length) * 100 : 0
+  const allClosedPositions = allPositions.filter((p) => p.status !== "open")
+  const totalPnl = allPositions.reduce((s, p) => s + (p.realized_pnl || 0) + (p.unrealized_pnl || 0), 0)
+  const wins = allClosedPositions.filter((p) => (p.realized_pnl || 0) > 0).length
+  const winRate = allClosedPositions.length > 0 ? (wins / allClosedPositions.length) * 100 : 0
 
   const bestScenario = openPositions.reduce((best, winningPos) => {
     const winPayout = winningPos.size * 1.0
@@ -198,34 +255,66 @@ export default function ModuleDetailPage() {
   return (
     <div className="space-y-6">
       {/* Top Bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">{module.name}</h1>
           <StatusBadge status={module.status} />
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">
-            Updated {lastRefresh.toLocaleTimeString()}
-          </span>
-          <button
-            onClick={() => { refetchPacing(); setLastRefresh(new Date()) }}
-            className="rounded-md border border-border p-1.5 hover:bg-accent"
-          >
+        {auctions && auctions.length > 0 && (() => {
+          const activeAuctions = auctions.filter((a) => a.status === "active" || a.status === "future")
+          const pastAuctions = auctions.filter((a) => a.status === "past")
+          const selectedId = activeTrackingId || (pacing as any)?.tracking_id
+          const selected = auctions.find((a) => a.tracking_id === selectedId)
+          return (
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedId || ""}
+                onChange={(e) => setActiveTrackingId(e.target.value)}
+                className="w-64 rounded border border-border bg-background px-2 py-1 text-xs"
+              >
+                {activeAuctions.length > 0 && (
+                  <optgroup label="Active">
+                    {activeAuctions.map((a) => (
+                      <option key={a.tracking_id} value={a.tracking_id}>
+                        {formatDateShort(a.start_date)} - {formatDateShort(a.end_date)} ({a.remaining_days.toFixed(0)}d left)
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {pastAuctions.length > 0 && (
+                  <optgroup label="Past">
+                    {pastAuctions.map((a) => (
+                      <option key={a.tracking_id} value={a.tracking_id}>
+                        {formatDateShort(a.start_date)} - {formatDateShort(a.end_date)}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              {selected?.market_link && (
+                <a href={selected.market_link} target="_blank" rel="noopener noreferrer"
+                  className="rounded border border-border px-2 py-1 text-xs text-primary hover:bg-accent">
+                  Polymarket
+                </a>
+              )}
+            </div>
+          )
+        })()}
+        <div className="flex items-center gap-2">
+          <button onClick={() => { refetchPacing(); setLastRefresh(new Date()) }}
+            className="rounded-md border border-border p-1.5 hover:bg-accent">
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
-          <button
-            onClick={() => togglePause()}
-            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
-          >
-            {module.status === "active" ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          <button onClick={() => togglePause()}
+            className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent">
+            {module.status === "active" ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
             {module.status === "active" ? "Pause" : "Resume"}
           </button>
           <button
-            onClick={() => { if (confirm("Kill this module? All positions will be closed.")) killSwitch() }}
-            className="flex items-center gap-1.5 rounded-md border border-destructive px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10"
-          >
-            <Power className="h-3.5 w-3.5" />
-            Kill Switch
+            onClick={() => { if (confirm("Kill this module?")) killSwitch() }}
+            className="flex items-center gap-1 rounded-md border border-destructive px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10">
+            <Power className="h-3 w-3" />
+            Kill
           </button>
         </div>
       </div>
@@ -294,6 +383,50 @@ export default function ModuleDetailPage() {
                 <span className="text-sm">Auto-Optimize</span>
               </label>
             </div>
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase mb-2">Ensemble Models</p>
+              <div className="flex flex-wrap items-center gap-4">
+                <label className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Preset</span>
+                  <select
+                    value={localConfig.strategy_preset}
+                    onChange={(e) => {
+                      const preset = e.target.value
+                      const models = PRESETS[preset] || ALL_MODELS
+                      setLocalConfig({ ...localConfig, strategy_preset: preset, enabled_models: models })
+                    }}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  >
+                    <option value="full">Full (5 models)</option>
+                    <option value="conservative">Conservative (Pace + Bayesian)</option>
+                    <option value="momentum">Momentum (Pace + Hawkes + DOW)</option>
+                  </select>
+                </label>
+                {ALL_MODELS.map((model) => (
+                  <label key={model} className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={localConfig.enabled_models.includes(model)}
+                      onChange={(e) => {
+                        const models = e.target.checked
+                          ? [...localConfig.enabled_models, model]
+                          : localConfig.enabled_models.filter((m) => m !== model)
+                        const matchedPreset = Object.entries(PRESETS).find(
+                          ([, v]) => v.length === models.length && v.every((m) => models.includes(m))
+                        )
+                        setLocalConfig({
+                          ...localConfig,
+                          enabled_models: models,
+                          strategy_preset: matchedPreset ? matchedPreset[0] : "custom",
+                        })
+                      }}
+                      className="rounded border-border"
+                    />
+                    <span className="text-sm capitalize">{model}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
             <div className="mt-4 flex justify-end">
               <button
                 onClick={handleSaveConfig}
@@ -315,20 +448,20 @@ export default function ModuleDetailPage() {
         const fmtDollars = (n: number) => `$${Math.round(Math.abs(n)).toLocaleString()}`
         const fmtDollarsSigned = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.round(Math.abs(n)).toLocaleString()}`
         return (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
-            <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-wrap gap-4" style={{ "--card-w": "180px" } as any}>
+            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Cost Basis</p>
               <p className="mt-1 text-2xl font-bold">{fmtDollars(totalInvested)}</p>
               <p className="text-xs text-muted-foreground">{openPositions.length} open position{openPositions.length !== 1 ? "s" : ""}</p>
             </div>
-            <div className="rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Current Value</p>
               <p className="mt-1 text-2xl font-bold">{fmtDollars(marketValue)}</p>
               <p className={cn("text-xs", unrealizedPnl >= 0 ? "text-success" : "text-destructive")}>
                 {fmtDollarsSigned(unrealizedPnl)} unrealized
               </p>
             </div>
-            <div className="rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Best Outcome</p>
               <p className={cn("mt-1 text-2xl font-bold", potentialWin >= 0 ? "text-success" : "text-destructive")}>
                 {fmtDollarsSigned(potentialWin)}
@@ -337,19 +470,21 @@ export default function ModuleDetailPage() {
                 {bestBracket ? `If ${bestBracket} wins` : "No positions"}
               </p>
             </div>
-            <div className="rounded-lg border border-border bg-card p-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Bot P&L</p>
+            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Total P&L</p>
               <p className={cn("mt-1 text-2xl font-bold", totalPnl >= 0 ? "text-success" : "text-destructive")}>
                 {fmtDollarsSigned(totalPnl)}
               </p>
-              <p className="text-xs text-muted-foreground">Paper trades only</p>
+              <p className="text-xs text-muted-foreground">
+                {isLive ? `${relevantAuctions.length} auctions` : "Paper trades"}
+              </p>
             </div>
-            <div className="rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Win Rate</p>
               <p className="mt-1 text-2xl font-bold">{fmt(winRate)}%</p>
               <p className="text-xs text-muted-foreground">{wins}W / {closedPositions.length - wins}L</p>
             </div>
-            <div className="rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Budget</p>
               <p className="mt-1 text-2xl font-bold">{fmtDollars(module.budget)}</p>
               <p className="text-xs text-muted-foreground">Max: {(module.max_position_pct * 100).toFixed(0)}% per bracket</p>
@@ -358,68 +493,29 @@ export default function ModuleDetailPage() {
         )
       })()}
 
-      {/* Auction Selector */}
-      {auctions && auctions.length > 0 && (() => {
-        const activeAuctions = auctions.filter((a) => a.status === "active" || a.status === "future")
-        const pastAuctions = auctions.filter((a) => a.status === "past")
-        const selectedId = activeTrackingId || (pacing as any)?.tracking_id
-        const selected = auctions.find((a) => a.tracking_id === selectedId)
-        return (
-          <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Auction</span>
-            <select
-              value={selectedId || ""}
-              onChange={(e) => setActiveTrackingId(e.target.value)}
-              className="flex-1 rounded border border-border bg-background px-3 py-1.5 text-sm"
-            >
-              {activeAuctions.length > 0 && (
-                <optgroup label="Active">
-                  {activeAuctions.map((a) => (
-                    <option key={a.tracking_id} value={a.tracking_id}>
-                      {formatDateShort(a.start_date)} → {formatDateShort(a.end_date)}
-                      {` (${a.elapsed_days.toFixed(0)}d elapsed / ${a.remaining_days.toFixed(0)}d left)`}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {pastAuctions.length > 0 && (
-                <optgroup label="Past (Resolved)">
-                  {pastAuctions.map((a) => (
-                    <option key={a.tracking_id} value={a.tracking_id}>
-                      {formatDateShort(a.start_date)} → {formatDateShort(a.end_date)} — Resolved
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-            {selected && (
-              <span className={cn(
-                "rounded px-2 py-0.5 text-xs font-medium",
-                selected.status === "active" ? "bg-success/20 text-success" :
-                selected.status === "past" ? "bg-muted text-muted-foreground" :
-                "bg-primary/20 text-primary"
-              )}>
-                {selected.status === "active" ? "Active" : selected.status === "past" ? "Resolved" : "Upcoming"}
-              </span>
-            )}
-          </div>
-        )
-      })()}
-
-      {/* Auction Info + Confidence + Ensemble — 2x2 grid */}
+      {/* Row 1: Current Auction + Confidence Bands */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Top Left: Current Auction */}
         {(() => {
           const data = pacing?.current_auction
+          const selectedAuc = auctions?.find((a) => a.tracking_id === (activeTrackingId || (pacing as any)?.tracking_id))
+          const pastAucs = (auctions || []).filter((a) => a.status === "past").slice(0, 6)
           return (
             <div className="rounded-lg border border-border bg-card p-6">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Current Auction</h2>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Current Auction</h2>
+                {selectedAuc?.market_link && (
+                  <a href={selectedAuc.market_link} target="_blank" rel="noopener noreferrer"
+                    className="text-primary hover:text-primary/80 text-sm">
+                    &#128279;
+                  </a>
+                )}
+              </div>
               {data ? (
-                <div className="mt-3 space-y-3 text-sm">
+                <div className="space-y-3 text-sm">
                   {data.period && (
                     <div className="flex justify-between border-b border-border pb-2">
                       <span className="text-muted-foreground">Period</span>
-                      <span className="text-xs">{data.period?.split(" to ").map((d: string) => formatDate(d.trim())).join(" → ")}</span>
+                      <span className="text-xs">{data.period?.split(" to ").map((d: string) => formatDate(d.trim())).join(" -> ")}</span>
                     </div>
                   )}
                   <div className="flex justify-between border-b border-border pb-2">
@@ -450,7 +546,7 @@ export default function ModuleDetailPage() {
                     </div>
                   )}
                   {data.ensemble_avg != null && (
-                    <div className="flex justify-between">
+                    <div className="flex justify-between border-b border-border pb-2">
                       <span className="text-muted-foreground">Ensemble Avg</span>
                       <span className="font-bold">{data.ensemble_avg} posts</span>
                     </div>
@@ -459,65 +555,118 @@ export default function ModuleDetailPage() {
               ) : (
                 <p className="py-4 text-center text-sm text-muted-foreground">No data yet</p>
               )}
-            </div>
-          )
-        })()}
-        {/* Top Right: Confidence Bands */}
-        <ConfidenceBands bands={pacing?.confidence_bands} />
-        {/* Bottom Left: Next Auction */}
-        {(() => {
-          const data = pacing?.next_auction
-          return (
-            <div className="rounded-lg border border-border bg-card p-6">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Next Auction</h2>
-              {data ? (
-                <div className="mt-3 space-y-3 text-sm">
-                  {data.period && (
-                    <div className="flex justify-between border-b border-border pb-2">
-                      <span className="text-muted-foreground">Period</span>
-                      <span className="text-xs">{data.period?.split(" to ").map((d: string) => formatDate(d.trim())).join(" → ")}</span>
-                    </div>
-                  )}
-                  {data.title && (
-                    <div className="flex justify-between border-b border-border pb-2">
-                      <span className="text-muted-foreground">Market</span>
-                      <span className="text-xs max-w-[250px] truncate">{data.title}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between border-b border-border pb-2">
-                    <span className="text-muted-foreground">Days Remaining</span>
-                    <span>{data.days_remaining ?? 7}</span>
+              {/* Past Auction Results */}
+              {pastAucs.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-border">
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-2">Recent Auctions</p>
+                  <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+                    {pastAucs.map((a) => {
+                      const walletAuc = relevantAuctions.find((wa: any) =>
+                        (wa.slug || "").toLowerCase().includes(
+                          a.start_date.replace(/-/g, "").slice(4)
+                        ) || (wa.end_date || "").slice(0, 10) === a.end_date
+                      )
+                      const pnl = walletAuc?.total_pnl ?? 0
+                      const won = walletAuc?.status === "won"
+                      return (
+                        <button
+                          key={a.tracking_id}
+                          onClick={() => setActiveTrackingId(a.tracking_id)}
+                          className={cn(
+                            "rounded border p-1.5 text-center text-[9px] transition-colors",
+                            won ? "border-success/40 bg-success/10" : "border-destructive/40 bg-destructive/10",
+                            "hover:opacity-80"
+                          )}
+                        >
+                          <p className="font-semibold text-foreground">{formatDateShort(a.start_date).replace(/, \d{4}$/, "")}</p>
+                          <p className={cn("font-bold", pnl >= 0 ? "text-success" : "text-destructive")}>
+                            {pnl >= 0 ? "+" : ""}{formatCurrency(pnl)}
+                          </p>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
-              ) : (
-                <p className="py-4 text-center text-sm text-muted-foreground">No upcoming auction</p>
               )}
             </div>
           )
         })()}
-        {/* Bottom Right: Ensemble Breakdown */}
-        <EnsembleBreakdown ensemble={pacing?.ensemble_breakdown} ensembleAvg={pacing?.ensemble_avg || 0} />
+        <ConfidenceBands bands={pacing?.confidence_bands} allProbs={pacing?.all_bracket_probs} />
       </div>
 
-      {/* Open Positions (moved up) */}
+      {/* Row 2: Ensemble Breakdown + Pacing */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <EnsembleBreakdown ensemble={pacing?.ensemble_breakdown} ensembleAvg={pacing?.ensemble_avg || 0} />
+        <DailyPacingTable pacing={pacing} />
+      </div>
+
+      {/* Row 3: DOW Heatmap + Pace Acceleration */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <DowHeatmap dowAvg={pacing?.dow_heatmap} />
+        <PaceAcceleration accel={pacing?.pace_acceleration} />
+      </div>
+
+      {/* Open Positions */}
       <PositionsTable
         openPositions={openPositions}
         totalInvested={totalInvested}
         potentialWin={potentialWin}
         bestBracket={bestBracket}
         marketPrices={pacing?.market_prices}
+        auctionLabel={selectedAuction ? `${formatDateShort(selectedAuction.start_date)} - ${formatDateShort(selectedAuction.end_date)}` : undefined}
       />
 
-      {/* Pacing & Heatmaps */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <DailyPacingTable pacing={pacing} />
-        <HourlyHeatmap hourlyAvg={pacing?.hourly_heatmap} historicalHourly={pacing?.historical_hourly_heatmap} />
-      </div>
+      {/* Closed Positions */}
+      {closedPositions.length > 0 && (
+        <div className="rounded-lg border border-border bg-card">
+          <div className="border-b border-border px-6 py-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Closed Positions ({closedPositions.length})
+            </h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-muted-foreground">
+                  <th className="px-6 py-2 text-left">Bracket</th>
+                  <th className="px-6 py-2 text-right">Shares</th>
+                  <th className="px-6 py-2 text-right">Avg Price</th>
+                  <th className="px-6 py-2 text-right">Cost</th>
+                  <th className="px-6 py-2 text-right">P&L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {closedPositions.map((p, i) => {
+                  const cost = p.size * p.avg_price
+                  const pnl = p.realized_pnl || 0
+                  return (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="px-6 py-2 font-medium">{p.bracket}</td>
+                      <td className="px-6 py-2 text-right">{fmt(p.size)}</td>
+                      <td className="px-6 py-2 text-right">{fmt(p.avg_price * 100)}¢</td>
+                      <td className="px-6 py-2 text-right">{formatCurrency(cost)}</td>
+                      <td className={cn("px-6 py-2 text-right font-medium", pnl >= 0 ? "text-success" : "text-destructive")}>
+                        {pnl >= 0 ? "+" : ""}{formatCurrency(pnl)}
+                      </td>
+                    </tr>
+                  )
+                })}
+                <tr className="bg-muted/30 font-medium">
+                  <td className="px-6 py-2" colSpan={4}>Total Realized</td>
+                  <td className={cn("px-6 py-2 text-right",
+                    closedPositions.reduce((s, p) => s + (p.realized_pnl || 0), 0) >= 0 ? "text-success" : "text-destructive"
+                  )}>
+                    {formatCurrency(closedPositions.reduce((s, p) => s + (p.realized_pnl || 0), 0))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <DowHeatmap dowAvg={pacing?.dow_heatmap} />
-        <PaceAcceleration accel={pacing?.pace_acceleration} />
-      </div>
+      {/* Hourly Heatmap */}
+      <HourlyHeatmap hourlyAvg={pacing?.hourly_heatmap} historicalHourly={pacing?.historical_hourly_heatmap} />
 
       <PriceByDowHourHeatmap data={priceHeatmaps?.by_dow_hour} />
 

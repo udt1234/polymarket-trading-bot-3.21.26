@@ -1,4 +1,3 @@
-import json
 import logging
 from api.modules.truth_social.data import (
     fetch_active_tracking as _fetch_active_tracking,

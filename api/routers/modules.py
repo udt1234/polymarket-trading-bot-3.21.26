@@ -2,6 +2,7 @@ import asyncio
 import math
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -190,6 +191,7 @@ async def get_auctions(module_id: str, include_past: bool = True):
             "remaining_days": round(remaining, 1),
             "status": status,
             "is_active": is_active,
+            "market_link": t.get("marketLink", ""),
         })
 
     # Sort: active first (by start date), then future, then past (most recent first)
@@ -202,76 +204,16 @@ async def get_auctions(module_id: str, include_past: bool = True):
     return results
 
 
-@router.get("/{module_id}/pacing")
-async def get_pacing(module_id: str, tracking_id: str | None = Query(default=None)):
-    sb = get_supabase()
-    module = sb.table("modules").select("*").eq("id", module_id).single().execute()
-    if not module.data:
-        raise HTTPException(status_code=404, detail="Module not found")
+DOW_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-    from api.modules.truth_social.data import (
-        fetch_active_tracking, fetch_tracking_by_id, fetch_xtracker_stats,
-        parse_hourly_counts, parse_daily_totals, get_xtracker_summary,
-        compute_elapsed_days, fetch_historical_weekly_totals,
-        fetch_market_prices, extract_slug_from_tracking,
-    )
-    from api.modules.truth_social.regime import detect_regime
+
+def _compute_pacing_models(running_total, elapsed_days, remaining_days, total_days, hist_mean, hist_std, hourly_counts, var, now, cfg):
     from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
     from api.modules.truth_social.projection import ensemble_weights as ew, ensemble_projection
 
-    cfg = get_module_config(module_id)
-    handle = "realDonaldTrump"
-    now = datetime.now(timezone.utc)
+    pace_val = regular_pace(running_total, elapsed_days, total_days) if elapsed_days > 0 else hist_mean
+    bayes_val = bayesian_pace(running_total, elapsed_days, remaining_days, hist_mean, total_days)
 
-    # Fetch tracking - specific or default
-    if tracking_id:
-        tracking = await fetch_tracking_by_id(handle, tracking_id)
-    else:
-        tracking = await fetch_active_tracking(handle)
-
-    # Fetch stats for this specific tracking
-    if tracking:
-        tid = tracking.get("id") or tracking.get("trackingId")
-        if tid:
-            raw_data = await fetch_xtracker_stats(str(tid))
-            raw_data["_tracking"] = tracking
-        else:
-            raw_data = {}
-    else:
-        raw_data = {}
-    summary = get_xtracker_summary(raw_data)
-    hourly_counts = parse_hourly_counts(raw_data)
-    daily_totals = parse_daily_totals(raw_data)
-    weekly_history = await fetch_historical_weekly_totals(handle, weeks=cfg.get("historical_periods", 9))
-
-    week_start_str = (tracking or {}).get("startDate", "")[:10]
-    week_end_str = (tracking or {}).get("endDate", "")[:10]
-
-    running_total = summary.get("total", 0) or (sum(d["count"] for d in daily_totals) if daily_totals else 0)
-    elapsed_days = summary.get("days_elapsed", 0) or compute_elapsed_days(week_start_str, now) if week_start_str else 0
-    remaining_days = summary.get("days_remaining", 0) or max(7.0 - elapsed_days, 0.01)
-    total_days = summary.get("days_total", 7)
-
-    # Recency-weighted stats
-    rw = recency_weighted_averages(weekly_history, half_life=cfg.get("recency_half_life", 4.0))
-    hist_mean = rw["mean"] if rw["mean"] > 0 else 100.0
-    hist_std = rw["std"] if rw["std"] > 0 else 30.0
-
-    # DOW variance from daily data
-    dow_day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    dow_data = []
-    for d in daily_totals:
-        try:
-            dt = datetime.strptime(d["date"], "%Y-%m-%d")
-            dow_data.append({"dow": dt.weekday(), "count": d["count"]})
-        except Exception:
-            pass
-    var = dow_variance(dow_data, half_life=cfg.get("recency_half_life", 4.0))
-
-    # Pace acceleration
-    accel = pace_acceleration(hourly_counts)
-
-    # Hourly averages for DOW deviation
     hourly_avgs = {}
     if hourly_counts:
         by_hour = defaultdict(list)
@@ -279,52 +221,35 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
             by_hour[h.get("hour", 0)].append(h["count"])
         hourly_avgs = {k: sum(v) / len(v) for k, v in by_hour.items()}
 
-    # DOW deviation
-    dow_avg_today = var.get(now.weekday(), {}).get("mean", hist_mean / 7.0)
-    dev = dow_deviation(running_total, now.hour, now.weekday(), dow_avg_today, hourly_avgs) if hourly_avgs else None
-
-    # Regime
-    regime = detect_regime(weekly_history) if len(weekly_history) >= 4 else {"label": "NORMAL", "zscore": 0, "trend": "STABLE", "volatility": 0.8}
-
-    # Pacing models
-    pace_val = regular_pace(running_total, elapsed_days, total_days) if elapsed_days > 0 else hist_mean
-    bayes_val = bayesian_pace(running_total, elapsed_days, remaining_days, hist_mean, total_days)
-
-    # DOW-adjusted
     remaining_hours = []
     for d in range(int(remaining_days) + 1):
         future_date = now + timedelta(days=d)
         start_hr = now.hour + 1 if d == 0 else 0
         for hr in range(start_hr, 24):
             remaining_hours.append({"hour": hr, "dow": future_date.weekday()})
+
     dow_weights_map = {i: var.get(i, {}).get("mean", hist_mean / 7) / max(hist_mean / 7, 0.1) for i in range(7)}
     dow_val = dow_hourly_bayesian_pace(running_total, remaining_hours, hourly_avgs, dow_weights_map, hist_mean, elapsed_days, remaining_days)
 
     model_outputs = {"pace": pace_val, "bayesian": bayes_val, "dow": dow_val, "historical": hist_mean}
-    weights = ew(elapsed_days, total_days)
+    enabled_models = cfg.get("enabled_models", ["pace", "bayesian", "dow", "historical", "hawkes"])
+    weights = ew(elapsed_days, total_days, enabled_models=enabled_models)
     bracket_probs = ensemble_projection(model_outputs, weights, hist_std)
     conf_bands = ensemble_confidence_bands(bracket_probs, top_n=cfg.get("confidence_band_top_n", 3))
-
-    # Ensemble average
     ensemble_avg = sum(model_outputs[k] * weights.get(k, 0) for k in model_outputs)
 
-    # Market prices for comparison
-    slug = extract_slug_from_tracking(tracking) if tracking else None
-    market_prices = await fetch_market_prices(slug) if slug else {}
-    market_implied = max(market_prices, key=market_prices.get) if market_prices else None
+    return model_outputs, weights, conf_bands, ensemble_avg, hourly_avgs, dow_weights_map, bracket_probs
 
-    # Build daily table with real data — scoped to auction period
+
+def _build_daily_table(daily_totals, week_start_str, week_end_str, now, var, hist_mean, dow_weights_map, cfg):
     daily_lookup = {d["date"]: d["count"] for d in daily_totals}
 
-    # Determine date range from auction start/end + 1 day buffer after
     if week_start_str and week_end_str:
         table_start = datetime.strptime(week_start_str, "%Y-%m-%d").date()
         table_end = datetime.strptime(week_end_str, "%Y-%m-%d").date() + timedelta(days=1)
     else:
-        days_prior = cfg.get("pacing_display_days_prior", 10)
-        days_future_count = cfg.get("pacing_display_days_future", 7)
-        table_start = (now - timedelta(days=days_prior)).date()
-        table_end = (now + timedelta(days=days_future_count)).date()
+        table_start = (now - timedelta(days=cfg.get("pacing_display_days_prior", 10))).date()
+        table_end = (now + timedelta(days=cfg.get("pacing_display_days_future", 7))).date()
 
     daily_table = []
     cumulative = 0
@@ -354,59 +279,167 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
             status = "no_data"
 
         daily_table.append({
-            "date": dt_str,
-            "day": dow_day_names[dow],
-            "dow": dow,
+            "date": dt_str, "day": DOW_DAY_NAMES[dow], "dow": dow,
             "daily_posts": actual,
             "running_total": cumulative if actual is not None else None,
-            "dow_avg": round(dow_avg, 1),
-            "dow_weight": dow_weight,
+            "dow_avg": round(dow_avg, 1), "dow_weight": dow_weight,
             "dow_std": round(dow_std, 1),
             "deviation": round(deviation, 1) if deviation is not None else None,
-            "status": status,
-            "is_today": is_today,
-            "is_future": is_future,
+            "status": status, "is_today": is_today, "is_future": is_future,
         })
         current_date += timedelta(days=1)
+    return daily_table
 
-    # DOW averages heatmap
-    dow_heatmap = []
-    for i in range(7):
-        v = var.get(i, {})
-        dow_heatmap.append({
-            "day": dow_day_names[i],
-            "dow": i,
-            "avg": round(v.get("mean", 0), 1),
-            "std": round(v.get("std", 0), 1),
-            "samples": v.get("samples", 0),
-        })
 
-    # Ensemble sub-model breakdown
-    ensemble_breakdown = []
-    for model_name, projection in model_outputs.items():
-        w = weights.get(model_name, 0)
-        ensemble_breakdown.append({
-            "model": model_name.replace("_", " ").title(),
-            "projection": round(projection, 1),
-            "weight": round(w * 100, 1),
-            "contribution": round(projection * w, 1),
-        })
+def _build_dow_heatmap(var):
+    return [
+        {"day": DOW_DAY_NAMES[i], "dow": i,
+         "avg": round(var.get(i, {}).get("mean", 0), 1),
+         "std": round(var.get(i, {}).get("std", 0), 1),
+         "samples": var.get(i, {}).get("samples", 0)}
+        for i in range(7)
+    ]
 
-    # Current + next auction
+
+def _build_historical_hourly_heatmap(hist_hourly: dict) -> list[dict]:
+    hourly = hist_hourly.get("hourly", {}) if isinstance(hist_hourly, dict) else {}
+    if not hourly:
+        return []
+    return [
+        {"hour": hr, "avg": round(hourly.get(hr, 0), 2), "source": "historical"}
+        for hr in range(24)
+    ]
+
+
+def _build_hourly_heatmap(hourly_counts: list[dict]) -> list[dict]:
+    by_hour = defaultdict(list)
+    for h in hourly_counts:
+        by_hour[h.get("hour", 0)].append(h["count"])
+    return [
+        {"hour": hr, "avg": round(sum(vals) / len(vals), 2) if vals else 0,
+         "std": round((sum((v - sum(vals)/len(vals))**2 for v in vals)/len(vals))**0.5, 2) if len(vals) > 1 else 0,
+         "samples": len(vals)}
+        for hr, vals in sorted(((h, by_hour.get(h, [])) for h in range(24)), key=lambda x: x[0])
+    ]
+
+
+def _build_ensemble_breakdown(model_outputs, weights):
+    return [
+        {"model": name.replace("_", " ").title(),
+         "projection": round(proj, 1),
+         "weight": round(weights.get(name, 0) * 100, 1),
+         "contribution": round(proj * weights.get(name, 0), 1)}
+        for name, proj in model_outputs.items()
+    ]
+
+
+@router.get("/{module_id}/pacing")
+async def get_pacing(module_id: str, tracking_id: str | None = Query(default=None)):
+    sb = get_supabase()
+    module = sb.table("modules").select("*").eq("id", module_id).single().execute()
+    if not module.data:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    from api.modules.truth_social.data import (
+        fetch_active_tracking, fetch_tracking_by_id, fetch_xtracker_stats,
+        parse_hourly_counts, parse_daily_totals, get_xtracker_summary,
+        compute_elapsed_days, fetch_historical_weekly_totals,
+        fetch_market_prices, extract_slug_from_tracking,
+    )
+    from api.modules.truth_social.regime import detect_regime
+
+    cfg = get_module_config(module_id)
+    handle = "realDonaldTrump"
+    now = datetime.now(timezone.utc)
+
+    if tracking_id:
+        tracking = await fetch_tracking_by_id(handle, tracking_id)
+    else:
+        tracking = await fetch_active_tracking(handle)
+
+    if tracking:
+        tid = tracking.get("id") or tracking.get("trackingId")
+        raw_data = await fetch_xtracker_stats(str(tid)) if tid else {}
+        if tid:
+            raw_data["_tracking"] = tracking
+    else:
+        raw_data = {}
+
+    summary = get_xtracker_summary(raw_data)
+    hourly_counts = parse_hourly_counts(raw_data)
+    daily_totals = parse_daily_totals(raw_data)
+    weekly_history = await fetch_historical_weekly_totals(handle, weeks=cfg.get("historical_periods", 9))
+
+    week_start_str = (tracking or {}).get("startDate", "")[:10]
+    week_end_str = (tracking or {}).get("endDate", "")[:10]
+
+    running_total = summary.get("total", 0) or (sum(d["count"] for d in daily_totals) if daily_totals else 0)
+    elapsed_days = summary.get("days_elapsed", 0) or compute_elapsed_days(week_start_str, now) if week_start_str else 0
+    remaining_days = summary.get("days_remaining", 0) or max(7.0 - elapsed_days, 0.01)
+    total_days = summary.get("days_total", 7)
+
+    rw = recency_weighted_averages(weekly_history, half_life=cfg.get("recency_half_life", 4.0))
+    hist_mean = rw["mean"] if rw["mean"] > 0 else 100.0
+    hist_std = rw["std"] if rw["std"] > 0 else 30.0
+
+    dow_data = []
+    for d in daily_totals:
+        try:
+            dt = datetime.strptime(d["date"], "%Y-%m-%d")
+            dow_data.append({"dow": dt.weekday(), "count": d["count"]})
+        except Exception:
+            pass
+    var = dow_variance(dow_data, half_life=cfg.get("recency_half_life", 4.0))
+
+    accel = pace_acceleration(hourly_counts)
+
+    model_outputs, weights, conf_bands, ensemble_avg, hourly_avgs, dow_weights_map, bracket_probs = _compute_pacing_models(
+        running_total, elapsed_days, remaining_days, total_days,
+        hist_mean, hist_std, hourly_counts, var, now, cfg,
+    )
+
+    dow_avg_today = var.get(now.weekday(), {}).get("mean", hist_mean / 7.0)
+    dev = dow_deviation(running_total, now.hour, now.weekday(), dow_avg_today, hourly_avgs) if hourly_avgs else None
+
+    regime = detect_regime(weekly_history) if len(weekly_history) >= 4 else {"label": "NORMAL", "zscore": 0, "trend": "STABLE", "volatility": 0.8}
+
+    slug = extract_slug_from_tracking(tracking) if tracking else None
+    market_prices = await fetch_market_prices(slug) if slug else {}
+    market_implied = max(market_prices, key=market_prices.get) if market_prices else None
+
+    from api.modules.truth_social.enhanced_pacing import optimal_entry_timing
+    entry_timing = {}
+    if conf_bands:
+        top_bracket = conf_bands[0]["bracket"]
+        snap_rows = sb.table("price_snapshots").select("bracket,price,hour_of_day,dow").eq("module_id", module.data["id"]).execute()
+        price_data = [{"bracket": r["bracket"], "price": r["price"], "hour": r["hour_of_day"], "dow": r["dow"]} for r in (snap_rows.data or [])]
+        if price_data:
+            entry_timing = optimal_entry_timing(price_data, top_bracket)
+
+    daily_table = _build_daily_table(daily_totals, week_start_str, week_end_str, now, var, hist_mean, dow_weights_map, cfg)
+    dow_heatmap = _build_dow_heatmap(var)
+    hourly_heatmap = _build_hourly_heatmap(hourly_counts)
+
+    from api.modules.truth_social.enhanced_pacing import historical_hourly_averages
+    hist_dir = str(Path(__file__).resolve().parent.parent.parent / "_DataMetricPulls" / "historical")
+    hist_hourly = historical_hourly_averages(hist_dir, handle)
+    historical_hourly_heatmap = _build_historical_hourly_heatmap(hist_hourly)
+
+    ensemble_breakdown = _build_ensemble_breakdown(model_outputs, weights)
+
     current_auction = {
         "period": f"{week_start_str} to {week_end_str}" if week_start_str else None,
         "title": (tracking or {}).get("title"),
         "running_total": running_total,
         "days_elapsed": round(elapsed_days, 1),
         "days_remaining": round(remaining_days, 1),
-        "pace": summary.get("pace", round(pace_val, 0)),
+        "pace": summary.get("pace", round(list(model_outputs.values())[0], 0)),
         "regime": regime,
         "projected_winner": conf_bands[0]["bracket"] if conf_bands else None,
         "market_implied_winner": market_implied,
         "ensemble_avg": round(ensemble_avg, 1),
     }
 
-    # Find next auction tracking
     next_auction = None
     try:
         all_trackings = await _fetch_trackings_raw("realDonaldTrump")
@@ -418,8 +451,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
             next_auction = {
                 "period": f"{nxt['startDate'][:10]} to {nxt['endDate'][:10]}",
                 "title": nxt.get("title"),
-                "running_total": 0,
-                "days_elapsed": 0,
+                "running_total": 0, "days_elapsed": 0,
                 "days_remaining": nxt.get("daysTotal", 7) if "daysTotal" in nxt else 7,
             }
     except Exception:
@@ -436,9 +468,12 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         "recency_weighted": rw,
         "dow_variance": var,
         "dow_heatmap": dow_heatmap,
+        "hourly_heatmap": hourly_heatmap,
+        "historical_hourly_heatmap": historical_hourly_heatmap,
         "pace_acceleration": accel,
         "dow_deviation": dev,
         "confidence_bands": conf_bands,
+        "all_bracket_probs": {k: round(v, 4) for k, v in bracket_probs.items()} if bracket_probs else {},
         "regime": regime,
         "daily_table": daily_table,
         "ensemble_breakdown": ensemble_breakdown,
@@ -447,8 +482,68 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         "next_auction": next_auction,
         "market_prices": market_prices,
         "market_implied_winner": market_implied,
+        "optimal_entry_timing": entry_timing,
         "timestamp": now.isoformat(),
     }
+
+
+@router.get("/{module_id}/price-heatmaps")
+async def get_price_heatmaps(module_id: str):
+    sb = get_supabase()
+    rows = sb.table("price_snapshots").select(
+        "bracket,price,dow,hour_of_day,elapsed_days"
+    ).eq("module_id", module_id).order("snapshot_hour").execute()
+
+    if not rows.data:
+        return {"by_dow_hour": [], "by_elapsed_day": [], "snapshot_count": 0}
+
+    by_dow_hour = defaultdict(lambda: defaultdict(list))
+    by_elapsed = defaultdict(lambda: defaultdict(list))
+
+    for r in rows.data:
+        price = r.get("price") or 0
+        bracket = r.get("bracket", "")
+        if not bracket or price <= 0:
+            continue
+        by_dow_hour[(r["dow"], r["hour_of_day"])][bracket].append(price)
+        if r.get("elapsed_days") is not None:
+            by_elapsed[int(r["elapsed_days"])][bracket].append(price)
+
+    dow_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    dow_hour_rows = []
+    for dow in range(7):
+        for hour in range(24):
+            cell = by_dow_hour.get((dow, hour), {})
+            for bracket, prices in cell.items():
+                dow_hour_rows.append({
+                    "dow": dow, "day": dow_names[dow], "hour": hour,
+                    "bracket": bracket,
+                    "avg_price": round(sum(prices) / len(prices), 4),
+                    "min_price": round(min(prices), 4),
+                    "max_price": round(max(prices), 4),
+                    "samples": len(prices),
+                })
+
+    elapsed_rows = []
+    for day_bucket in sorted(by_elapsed.keys()):
+        for bracket, prices in by_elapsed[day_bucket].items():
+            elapsed_rows.append({
+                "elapsed_day": day_bucket,
+                "bracket": bracket,
+                "avg_price": round(sum(prices) / len(prices), 4),
+                "min_price": round(min(prices), 4),
+                "max_price": round(max(prices), 4),
+                "samples": len(prices),
+            })
+
+    return {"by_dow_hour": dow_hour_rows, "by_elapsed_day": elapsed_rows, "snapshot_count": len(rows.data)}
+
+
+@router.post("/{module_id}/price-snapshot")
+async def trigger_price_snapshot(module_id: str):
+    from api.services.snapshots import take_price_snapshot
+    take_price_snapshot()
+    return {"status": "ok", "message": "Price snapshot triggered"}
 
 
 @router.get("/{module_id}/data-sources")

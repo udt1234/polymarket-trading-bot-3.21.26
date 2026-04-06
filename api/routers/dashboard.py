@@ -134,7 +134,10 @@ async def get_auctions():
 
 
 @router.get("/recent-signals")
-async def get_recent_signals(limit: int = 10):
+async def get_recent_signals(limit: int = 10, module_id: str | None = None):
     sb = get_supabase()
-    signals = sb.table("signals").select("*").order("created_at", desc=True).limit(limit).execute()
+    query = sb.table("signals").select("*")
+    if module_id:
+        query = query.eq("module_id", module_id)
+    signals = query.order("created_at", desc=True).limit(limit).execute()
     return signals.data

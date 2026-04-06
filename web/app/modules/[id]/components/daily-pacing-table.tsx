@@ -53,11 +53,21 @@ export function DailyPacingTable({ pacing }: { pacing: any }) {
 
   return (
     <div className="rounded-lg border border-border bg-card">
-      <div className="border-b border-border px-6 py-4">
+      <div className="flex items-center justify-between border-b border-border px-6 py-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Daily Pacing
+          Pacing
         </h2>
-        <p className="mt-1 text-xs text-muted-foreground">Day-by-day breakdown. Pacing column shows projected cumulative total using the selected strategy.</p>
+        <select
+          value={selectedStrategy}
+          onChange={(e) => setSelectedStrategy(e.target.value)}
+          className="rounded border border-border bg-background px-2 py-1 text-xs"
+        >
+          {strategyOptions.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label} ({Math.round(s.projection)})
+            </option>
+          ))}
+        </select>
       </div>
       {dailyTable.length > 0 ? (
         <div className="overflow-x-auto">
@@ -68,19 +78,7 @@ export function DailyPacingTable({ pacing }: { pacing: any }) {
                 <th className="px-4 py-2 text-left">Day</th>
                 <th className="px-4 py-2 text-right">Daily Posts</th>
                 <th className="px-4 py-2 text-right">Running Total</th>
-                <th className="px-4 py-2 text-right">
-                  <select
-                    value={selectedStrategy}
-                    onChange={(e) => setSelectedStrategy(e.target.value)}
-                    className="rounded border border-border bg-background px-1.5 py-0.5 text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground"
-                  >
-                    {strategyOptions.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        Pace: {s.label} ({Math.round(s.projection)})
-                      </option>
-                    ))}
-                  </select>
-                </th>
+                <th className="px-4 py-2 text-right">Projected</th>
                 <th className="px-4 py-2 text-right">DOW Avg</th>
                 <th className="px-4 py-2 text-right">Deviation</th>
                 <th className="px-4 py-2 text-center">Status</th>

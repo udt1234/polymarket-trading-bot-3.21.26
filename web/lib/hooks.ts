@@ -6,26 +6,37 @@ export function useApi<T>(path: string | null, deps: any[] = [], refreshInterval
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   const refetch = useCallback(async () => {
     if (!path || path.includes("undefined") || path.includes("null")) {
       setLoading(false)
       return
     }
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     try {
-      const res = await apiFetch<T>(path)
-      setData(res)
-      setError(null)
+      const res = await apiFetch<T>(path, { signal: controller.signal })
+      if (!controller.signal.aborted) {
+        setData(res)
+        setError(null)
+      }
     } catch (e: any) {
-      setError(e.message)
+      if (e.name !== "AbortError" && !controller.signal.aborted) {
+        setError(e.message)
+      }
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) {
+        setLoading(false)
+      }
     }
   }, [path])
 
   useEffect(() => {
     refetch()
+    return () => abortRef.current?.abort()
   }, [refetch, ...deps])
 
   useEffect(() => {

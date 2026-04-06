@@ -28,26 +28,27 @@ Full platform wired end-to-end. Dashboard heatmaps added (DOW, hourly clock, bid
 ## What's Next (Priority Order)
 ### Immediate
 1. **Set up Elon Musk module the same way as Trump** — needs:
-   - Backfill Elon historical post data (CNN archive or similar source)
+   - Backfill Elon historical post data (find X/Twitter archive source)
    - Backfill Elon bracket prices from CLOB API (find market slugs)
    - Dashboard heatmaps (DOW, hourly clock, price by day/hour, price by elapsed day)
    - Verify xTracker trackings exist for Elon and wire up hourly price collector
-2. **Test the full loop** — restart servers, verify engine cycle runs end-to-end
-3. **Run @verify-bot** — end-to-end verification after risk fixes
-4. **Deploy to Railway** — connect repo, set env vars, verify paper mode default
+2. **Deploy to Railway** — connect repo, set env vars, verify paper mode default
+3. **Remove Windows service after Railway deploy** — run `uninstall_service.bat` to delete the scheduled task
 
 ### Short-Term
+4. **Update Notes page** — add strategy descriptions for all 5 ensemble models + 4 helpers
 5. **shadcn/ui polish** — install via CLI, replace raw HTML inputs
-6. **Add auth to engine endpoints** — POST /api/engine/stop and /start lack Depends(require_auth)
 
 ### Pre-Live Checklist
-7. **Run @risk-auditor** again — verify all 15 checks pass after fixes
-8. **Staging environment** — Railway preview deploy with paper mode
+6. **Run @risk-auditor** — verify all 15 checks pass
+7. **Run @verify-bot** — end-to-end paper verification
 
-### Future Enhancements
-9. **Recurring health checks** — `/loop` for position monitoring when live
-10. **Kalman Filter** — adaptive noise filtering for count data
-11. **PWA icons** — create 192/512px icons
+## Windows Service (Local)
+- **Install**: Run `install_service.bat` as admin — creates Windows Task Scheduler task "PolyBot" that auto-starts on login
+- **Uninstall**: Run `uninstall_service.bat` — removes the scheduled task
+- **Manual start**: Run `start_services.bat`
+- **Logs**: `logs/api.log`, `logs/frontend.log`
+- **Remove after Railway deploy** — no longer needed once running in cloud
 
 ## Recently Completed (2026-04-03)
 - **Test suite**: 119 pytest tests covering risk manager, signals, pacing, executor, engine, projection

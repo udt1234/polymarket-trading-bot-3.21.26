@@ -1,7 +1,6 @@
 # Ensemble projection model: 4 sub-models → bracket probabilities
 # See: _InstructionalFiles/truth-social-module-spec.md
 
-import math
 from scipy import stats
 
 
@@ -15,30 +14,54 @@ BRACKET_LABELS = [
 ]
 
 
+STRATEGY_PRESETS = {
+    "full": ["pace", "bayesian", "dow", "historical", "hawkes"],
+    "conservative": ["pace", "bayesian"],
+    "momentum": ["pace", "hawkes", "dow"],
+}
+
+
 def ensemble_weights(
-    elapsed_days: float, total_days: float = 7.0, regime_label: str = "NORMAL"
+    elapsed_days: float, total_days: float = 7.0, regime_label: str = "NORMAL",
+    enabled_models: list[str] | None = None,
 ) -> dict[str, float]:
-    # Use percentages so this works for 7-day, 14-day, or 30-day auctions
     elapsed_pct = elapsed_days / total_days if total_days > 0 else 0
     remaining_pct = 1.0 - elapsed_pct
 
-    # Hawkes gets more weight during burst regimes
     hawkes_w = 0.15 if regime_label in ("SURGE", "HIGH") else 0.08
 
     if elapsed_pct < 0.25:
-        # Early period: trust history + prior, pace unreliable with little data
         base = {"pace": 0.10, "bayesian": 0.32, "dow": 0.18, "historical": 0.32}
     elif remaining_pct < 0.25:
-        # Late period: trust observed pace heavily, history is stale
         base = {"pace": 0.45, "bayesian": 0.27, "dow": 0.13, "historical": 0.05}
     else:
-        # Mid period: balanced blend
         base = {"pace": 0.27, "bayesian": 0.32, "dow": 0.18, "historical": 0.13}
+
+    # Regime adjustments: QUIET/LOW → trust pace more, distrust history
+    if regime_label in ("QUIET", "LOW"):
+        base["bayesian"] *= 0.70
+        base["historical"] *= 0.60
+        base["pace"] *= 1.40
+        base["dow"] *= 1.10
+    elif regime_label in ("SURGE", "HIGH"):
+        base["pace"] *= 0.80
+        base["historical"] *= 1.20
+        base["bayesian"] *= 1.10
 
     # Scale base weights to make room for Hawkes
     scale = (1.0 - hawkes_w) / sum(base.values())
     weights = {k: round(v * scale, 4) for k, v in base.items()}
     weights["hawkes"] = hawkes_w
+
+    # Filter to enabled models only
+    if enabled_models:
+        for model in list(weights.keys()):
+            if model not in enabled_models:
+                weights[model] = 0.0
+        total = sum(weights.values())
+        if total > 0:
+            weights = {k: v / total for k, v in weights.items()}
+
     return weights
 
 

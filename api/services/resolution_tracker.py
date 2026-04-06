@@ -1,69 +1,108 @@
 import math
+import json
 import logging
-import asyncio
+import httpx
 from datetime import datetime, timezone
+from collections import defaultdict
 from api.dependencies import get_supabase
-from api.modules.truth_social.data import fetch_market_prices
 
 log = logging.getLogger(__name__)
+
+GAMMA_BASE = "https://gamma-api.polymarket.com"
+
+
+def _fetch_prices_sync(slug: str) -> dict[str, float]:
+    try:
+        with httpx.Client(timeout=15) as client:
+            res = client.get(f"{GAMMA_BASE}/events", params={"slug": slug})
+            res.raise_for_status()
+            events = res.json()
+            if not isinstance(events, list) or not events:
+                return {}
+            prices = {}
+            for m in events[0].get("markets", []):
+                raw = m.get("groupItemTitle", m.get("question", ""))
+                op = m.get("outcomePrices", "[]")
+                if isinstance(op, str):
+                    op = json.loads(op)
+                if op and raw:
+                    p = float(op[0])
+                    if 0 <= p <= 1:
+                        prices[raw] = p
+            return prices
+    except Exception as e:
+        log.warning(f"Price fetch failed for {slug}: {e}")
+        return {}
+
+
+def _is_market_resolved(slug: str) -> tuple[bool, str | None]:
+    try:
+        with httpx.Client(timeout=15) as client:
+            res = client.get(f"{GAMMA_BASE}/events", params={"slug": slug})
+            events = res.json()
+            if not events:
+                return False, None
+            markets = events[0].get("markets", [])
+            if not markets:
+                return False, None
+            resolved = all(m.get("closed") or m.get("resolved") for m in markets)
+            if resolved:
+                winner = None
+                best_price = -1
+                for m in markets:
+                    raw = m.get("groupItemTitle", m.get("question", ""))
+                    op = m.get("outcomePrices", "[]")
+                    if isinstance(op, str):
+                        op = json.loads(op)
+                    if op:
+                        p = float(op[0])
+                        if p > best_price:
+                            best_price = p
+                            winner = raw
+                return True, winner
+            return False, None
+    except Exception:
+        return False, None
 
 
 def check_resolutions(risk_manager=None):
     sb = get_supabase()
-    now = datetime.now(timezone.utc).isoformat()
 
-    modules = (
-        sb.table("modules")
-        .select("id,name,market_slug,resolution_date")
-        .not_.is_("resolution_date", "null")
-        .in_("status", ["active", "paused", "paper"])
-        .execute()
-    )
-
-    if not modules.data:
+    open_positions = sb.table("positions").select("*").eq("status", "open").execute()
+    if not open_positions.data:
         return
 
-    for module in modules.data:
-        res_date = module["resolution_date"]
-        if res_date > now:
-            continue
+    by_market = defaultdict(list)
+    for pos in open_positions.data:
+        market_id = pos.get("market_id", "")
+        if market_id:
+            by_market[market_id].append(pos)
 
+    for market_id, positions in by_market.items():
         try:
-            _resolve_module(sb, module, risk_manager=risk_manager)
+            _resolve_market(sb, market_id, positions, risk_manager)
         except Exception as e:
-            log.error(f"Resolution failed for module {module['name']}: {e}")
-            sb.table("logs").insert({
-                "log_type": "system",
-                "severity": "error",
-                "module_id": module["id"],
-                "message": f"Resolution error: {e}",
-            }).execute()
+            log.error(f"Resolution check failed for {market_id}: {e}")
 
 
-def _resolve_module(sb, module, risk_manager=None):
-    module_id = module["id"]
-    slug = module.get("market_slug")
-    if not slug:
-        log.warning(f"Module {module['name']} has no market_slug, skipping resolution")
+def _resolve_market(sb, market_id: str, positions: list[dict], risk_manager=None):
+    resolved, winner = _is_market_resolved(market_id)
+    if not resolved:
         return
 
-    final_prices = asyncio.get_event_loop().run_until_complete(fetch_market_prices(slug))
+    final_prices = _fetch_prices_sync(market_id)
     if not final_prices:
-        log.warning(f"No final prices for {slug}, retrying next cycle")
-        return
+        final_prices = {}
+        if winner:
+            for pos in positions:
+                final_prices[pos["bracket"]] = 1.0 if pos["bracket"] == winner else 0.0
 
-    winning_bracket = max(final_prices, key=final_prices.get)
-    log.info(f"Resolving {module['name']}: winner={winning_bracket}, prices={final_prices}")
+    winning_bracket = winner or (max(final_prices, key=final_prices.get) if final_prices else None)
+    log.info(f"Resolving market {market_id}: winner={winning_bracket}")
 
-    positions = (
-        sb.table("positions")
-        .select("*")
-        .eq("module_id", module_id)
-        .eq("status", "open")
-        .execute()
-    )
+    module_id = positions[0].get("module_id") if positions else None
 
-    for pos in (positions.data or []):
+    for pos in positions:
         bracket = pos["bracket"]
         exit_price = final_prices.get(bracket, 0.0)
         pnl = (exit_price - pos["avg_price"]) * pos["size"]
@@ -77,25 +116,26 @@ def _resolve_module(sb, module, risk_manager=None):
             "closed_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", pos["id"]).execute()
 
+        log.info(f"  Closed {bracket}: pnl=${pnl:.2f} (exit={exit_price:.4f})")
+
         if risk_manager:
             if pnl >= 0:
                 risk_manager.record_win()
             else:
                 risk_manager.record_loss()
 
-    _record_calibration(sb, module_id, slug, final_prices, winning_bracket)
-
-    sb.table("modules").update({"status": "resolved"}).eq("id", module_id).execute()
+    if module_id:
+        _record_calibration(sb, module_id, market_id, final_prices, winning_bracket)
 
     sb.table("logs").insert({
         "log_type": "execution",
         "severity": "info",
         "module_id": module_id,
-        "message": f"Module resolved: winner={winning_bracket}",
-        "metadata": {"final_prices": final_prices, "winning_bracket": winning_bracket},
+        "message": f"Market resolved: {market_id}, winner={winning_bracket}",
+        "metadata": {"market_id": market_id, "final_prices": final_prices, "winning_bracket": winning_bracket},
     }).execute()
 
-    log.info(f"Module {module['name']} resolved successfully")
+    log.info(f"Market {market_id} resolved: {len(positions)} positions closed")
 
 
 def _record_calibration(sb, module_id, market_slug, final_prices, winning_bracket):

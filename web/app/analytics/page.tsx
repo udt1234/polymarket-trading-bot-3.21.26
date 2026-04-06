@@ -2,14 +2,11 @@
 
 import { useApi } from "@/lib/hooks"
 import { formatCurrency, cn } from "@/lib/utils"
+import { Card } from "@/components/shared/card"
 import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from "recharts"
-
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("rounded-lg border border-border bg-card p-4", className)}>{children}</div>
-}
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-3 text-lg font-semibold">{children}</h2>

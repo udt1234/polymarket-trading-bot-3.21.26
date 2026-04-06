@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import math
 from datetime import datetime, timezone, timedelta
 from api.modules.base import BaseModule
 from api.services.risk_manager import Signal
@@ -12,7 +11,7 @@ from api.modules.elon_tweets.data import (
 )
 from api.modules.truth_social.news import fetch_google_news
 from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
-from api.modules.truth_social.projection import ensemble_weights, ensemble_projection
+from api.modules.truth_social.projection import ensemble_weights
 from api.modules.truth_social.regime import detect_regime
 from api.modules.truth_social.signals import compute_signal_modifier, kelly_sizing
 from api.modules.truth_social.hawkes import hawkes_pace, fit_hawkes_params
