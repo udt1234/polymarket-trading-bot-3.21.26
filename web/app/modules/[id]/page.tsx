@@ -15,6 +15,7 @@ import { PriceByDowHourHeatmap, PriceByElapsedDayHeatmap } from "./components/pr
 import { PositionsTable } from "./components/positions-table"
 import { SignalsTable } from "./components/signals-table"
 import { TradeHistory } from "./components/trade-history"
+import { AuctionDeepDive } from "./components/auction-deep-dive"
 
 interface ModuleData {
   id: string
@@ -675,6 +676,8 @@ export default function ModuleDetailPage() {
       <SignalsTable signals={mySignals} />
 
       <TradeHistory trades={trades} />
+
+      {id && <AuctionDeepDive moduleId={id} />}
 
       {/* Data Sources */}
       <div className="rounded-lg border border-border bg-card">

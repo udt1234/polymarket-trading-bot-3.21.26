@@ -546,6 +546,128 @@ async def trigger_price_snapshot(module_id: str):
     return {"status": "ok", "message": "Price snapshot triggered"}
 
 
+@router.get("/{module_id}/deep-dive/posts")
+async def deep_dive_posts(
+    module_id: str,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=10, le=200),
+    date_from: str = Query(default=""),
+    date_to: str = Query(default=""),
+):
+    import json as _json
+
+    sb = get_supabase()
+    module = sb.table("modules").select("name").eq("id", module_id).single().execute()
+    if not module.data:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    name = module.data.get("name", "").lower()
+    handle = "realDonaldTrump" if "truth" in name or "trump" in name else "elonmusk"
+
+    hist_path = Path(__file__).resolve().parent.parent.parent / "_DataMetricPulls" / "historical" / handle / "hourly.json"
+    if not hist_path.exists():
+        return {"data": [], "total": 0, "page": page, "per_page": per_page}
+
+    with open(hist_path) as f:
+        all_posts = _json.load(f)
+
+    if date_from:
+        all_posts = [p for p in all_posts if p.get("date", "") >= date_from]
+    if date_to:
+        all_posts = [p for p in all_posts if p.get("date", "") <= date_to]
+
+    all_posts.sort(key=lambda x: (x.get("date", ""), x.get("hour", 0)), reverse=True)
+    total = len(all_posts)
+    start = (page - 1) * per_page
+    page_data = all_posts[start:start + per_page]
+
+    return {"data": page_data, "total": total, "page": page, "per_page": per_page}
+
+
+@router.get("/{module_id}/deep-dive/prices")
+async def deep_dive_prices(
+    module_id: str,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=10, le=200),
+    bracket: str = Query(default=""),
+    tracking_id: str = Query(default=""),
+):
+    sb = get_supabase()
+    query = sb.table("price_snapshots").select("*", count="exact").eq("module_id", module_id)
+    if bracket:
+        query = query.eq("bracket", bracket)
+    if tracking_id:
+        query = query.eq("tracking_id", tracking_id)
+    query = query.order("snapshot_hour", desc=True)
+    offset = (page - 1) * per_page
+    res = query.range(offset, offset + per_page - 1).execute()
+    return {"data": res.data, "total": res.count or 0, "page": page, "per_page": per_page}
+
+
+@router.get("/{module_id}/deep-dive/signals")
+async def deep_dive_signals(
+    module_id: str,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=30, ge=10, le=100),
+):
+    sb = get_supabase()
+    query = sb.table("signals").select("*", count="exact").eq("module_id", module_id)
+    query = query.order("created_at", desc=True)
+    offset = (page - 1) * per_page
+    res = query.range(offset, offset + per_page - 1).execute()
+    return {"data": res.data, "total": res.count or 0, "page": page, "per_page": per_page}
+
+
+@router.get("/{module_id}/deep-dive/decisions")
+async def deep_dive_decisions(
+    module_id: str,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=30, ge=10, le=100),
+    market_id: str = Query(default=""),
+):
+    sb = get_supabase()
+
+    # Get trades with context
+    trade_q = sb.table("trades").select("*", count="exact").eq("module_id", module_id)
+    if market_id:
+        trade_q = trade_q.eq("market_id", market_id)
+    trade_q = trade_q.order("executed_at", desc=True)
+    offset = (page - 1) * per_page
+    trades = trade_q.range(offset, offset + per_page - 1).execute()
+
+    # Enrich trades with signal context
+    enriched = []
+    for t in (trades.data or []):
+        signal = None
+        if t.get("market_id") and t.get("bracket"):
+            sig_res = sb.table("signals").select("edge,model_prob,market_price,kelly_pct,metadata").eq(
+                "module_id", module_id
+            ).eq("market_id", t["market_id"]).eq("bracket", t["bracket"]).eq(
+                "approved", True
+            ).order("created_at", desc=True).limit(1).execute()
+            if sig_res.data:
+                signal = sig_res.data[0]
+
+        enriched.append({
+            **t,
+            "signal_edge": signal.get("edge") if signal else None,
+            "signal_model_prob": signal.get("model_prob") if signal else None,
+            "signal_market_price": signal.get("market_price") if signal else None,
+            "signal_kelly_pct": signal.get("kelly_pct") if signal else None,
+            "signal_context": signal.get("metadata") if signal else None,
+        })
+
+    # Also get decision logs for this module
+    logs = sb.table("logs").select("message,metadata,created_at,severity").eq(
+        "module_id", module_id
+    ).in_("log_type", ["decision", "execution"]).order("created_at", desc=True).limit(50).execute()
+
+    return {
+        "trades": {"data": enriched, "total": trades.count or 0, "page": page, "per_page": per_page},
+        "logs": logs.data or [],
+    }
+
+
 @router.get("/{module_id}/data-sources")
 async def module_data_sources(module_id: str):
     """Return status of all data sources + historical data for this module."""
