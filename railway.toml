@@ -1,8 +1,9 @@
 [build]
 builder = "nixpacks"
+buildCommand = "pip install -r api/requirements.txt"
 
 [deploy]
-startCommand = "cd api && uvicorn api.main:app --host 0.0.0.0 --port $PORT"
-healthcheckPath = "/docs"
+startCommand = "uvicorn api.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/api/engine/status"
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
