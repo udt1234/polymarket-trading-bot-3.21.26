@@ -67,7 +67,7 @@ async def engine_status():
     return engine.status
 
 
-@app.post("/api/engine/stop")
+@app.post("/api/engine/stop", dependencies=[Depends(require_auth)])
 async def engine_stop():
     sb = get_supabase()
     engine.stop()
@@ -89,7 +89,7 @@ async def engine_stop():
     return {"ok": True, "engine_stopped": True, "positions_closed": closed_count}
 
 
-@app.post("/api/engine/start")
+@app.post("/api/engine/start", dependencies=[Depends(require_auth)])
 async def engine_start():
     settings = get_settings()
     engine.start(interval=settings.default_interval)

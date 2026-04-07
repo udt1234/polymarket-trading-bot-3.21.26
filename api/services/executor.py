@@ -95,8 +95,19 @@ class LiveExecutor:
         return self._client
 
     def execute(self, signal: Signal) -> dict:
+        from api.config import get_settings
+        settings = get_settings()
+        if settings.paper_mode:
+            raise RuntimeError("LiveExecutor called while PAPER_MODE is True")
+        if getattr(settings, "environment", "development") != "production":
+            raise RuntimeError("LiveExecutor called outside production environment")
+        if signal.market_price <= 0 or signal.market_price >= 1:
+            raise ValueError(f"Invalid price: {signal.market_price}")
+
         order_id = str(uuid.uuid4())
         size = 1000.0 * signal.kelly_pct
+        if size <= 0:
+            raise ValueError(f"Invalid order size: {size}")
         now = datetime.now(timezone.utc).isoformat()
         profile_name = self._profile["name"] if self._profile else "active"
 

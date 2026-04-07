@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     supabase_service_key: str = ""
 
     paper_mode: bool = True
+    environment: str = "development"
     default_interval: int = 300
 
     # Risk defaults

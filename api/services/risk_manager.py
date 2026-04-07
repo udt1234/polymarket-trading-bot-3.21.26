@@ -35,6 +35,35 @@ class RiskManager:
         self._weekly_pnl = 0.0
         self._peak_value = 0.0
         self._current_value = 0.0
+        self._risk_synced = False
+        self._load_persisted_state()
+
+    def _load_persisted_state(self):
+        try:
+            sb = get_supabase()
+            res = sb.table("settings").select("value").eq("key", "circuit_breaker_state").execute()
+            if res.data:
+                state = res.data[0].get("value", {})
+                self.consecutive_losses = state.get("consecutive_losses", 0)
+                self.circuit_breaker_tripped = state.get("tripped", False)
+                self._cooldown_until = state.get("cooldown_until", 0)
+                log.info(f"Loaded circuit breaker state: losses={self.consecutive_losses}, tripped={self.circuit_breaker_tripped}")
+        except Exception:
+            pass
+
+    def _persist_state(self):
+        try:
+            sb = get_supabase()
+            sb.table("settings").upsert({
+                "key": "circuit_breaker_state",
+                "value": {
+                    "consecutive_losses": self.consecutive_losses,
+                    "tripped": self.circuit_breaker_tripped,
+                    "cooldown_until": self._cooldown_until,
+                },
+            }).execute()
+        except Exception:
+            pass
 
     def check(self, signal: Signal) -> tuple[bool, str]:
         settings = get_settings()
@@ -88,16 +117,22 @@ class RiskManager:
         return True, ""
 
     def _check_daily_loss(self, signal: Signal, settings) -> tuple[bool, str]:
+        if not self._risk_synced:
+            return False, "risk state not synced — blocking until PnL data available"
         if self._daily_pnl < -(settings.bankroll * settings.daily_loss_limit):
             return False, "daily loss limit hit"
         return True, ""
 
     def _check_weekly_loss(self, signal: Signal, settings) -> tuple[bool, str]:
+        if not self._risk_synced:
+            return False, "risk state not synced — blocking until PnL data available"
         if self._weekly_pnl < -(settings.bankroll * settings.weekly_loss_limit):
             return False, "weekly loss limit hit"
         return True, ""
 
     def _check_drawdown(self, signal: Signal, settings) -> tuple[bool, str]:
+        if not self._risk_synced:
+            return False, "risk state not synced — blocking until PnL data available"
         if self._peak_value > 0:
             dd = (self._peak_value - self._current_value) / self._peak_value
             if dd > settings.max_drawdown:
@@ -247,14 +282,17 @@ class RiskManager:
             self.circuit_breaker_tripped = True
             self._cooldown_until = time.time() + settings.circuit_breaker_cooldown_minutes * 60
             log.warning(f"Circuit breaker TRIPPED after {self.consecutive_losses} consecutive losses")
+        self._persist_state()
 
     def record_win(self):
         self.consecutive_losses = 0
+        self._persist_state()
 
     def update_pnl(self, daily: float, weekly: float, peak: float, current: float):
         self._daily_pnl = daily
         self._weekly_pnl = weekly
         self._peak_value = peak
+        self._risk_synced = True
         self._current_value = current
 
     def _log_rejection(self, signal: Signal, reason: str):

@@ -31,9 +31,11 @@ class TradingEngine:
             return
         settings = get_settings()
 
-        if settings.paper_mode:
+        if settings.paper_mode or settings.environment != "production":
             self.executor = PaperExecutor()
             self._multi_mode = False
+            if not settings.paper_mode and settings.environment != "production":
+                log.warning("PAPER_MODE=false but ENV != production — forcing paper mode")
         else:
             from api.services.profiles import get_multi_exec_profiles
             multi_profiles = get_multi_exec_profiles()
