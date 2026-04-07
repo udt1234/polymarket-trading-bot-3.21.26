@@ -185,6 +185,7 @@ async def run_backtest(
     end_date: str = "",
     bankroll: float = 1000.0,
     kelly_fraction: float = 0.25,
+    price_series: list[dict] | None = None,
 ) -> BacktestResult:
     now = datetime.utcnow()
     if end_date:
@@ -196,26 +197,36 @@ async def run_backtest(
     else:
         start_dt = end_dt - timedelta(days=30)
 
-    start_ts = int(start_dt.timestamp())
-    end_ts = int(end_dt.timestamp())
+    if price_series:
+        prices = []
+        timestamps = []
+        for p in price_series:
+            t = p.get("t", p.get("timestamp", 0))
+            price = float(p.get("p", p.get("price", 0)))
+            if 0.01 <= price <= 0.99:
+                prices.append(price)
+                timestamps.append(int(t))
+    else:
+        start_ts = int(start_dt.timestamp())
+        end_ts = int(end_dt.timestamp())
 
-    fidelity = 60
-    span_hours = (end_ts - start_ts) / 3600
-    if span_hours > 720:
-        fidelity = 360
-    elif span_hours > 168:
         fidelity = 60
+        span_hours = (end_ts - start_ts) / 3600
+        if span_hours > 720:
+            fidelity = 360
+        elif span_hours > 168:
+            fidelity = 60
 
-    raw_prices = await fetch_price_history(clob_token_id, start_ts, end_ts, fidelity)
+        raw_prices = await fetch_price_history(clob_token_id, start_ts, end_ts, fidelity)
 
-    prices = []
-    timestamps = []
-    for p in raw_prices:
-        t = p.get("t", p.get("timestamp", 0))
-        price = float(p.get("p", p.get("price", 0)))
-        if 0.01 <= price <= 0.99:
-            prices.append(price)
-            timestamps.append(int(t))
+        prices = []
+        timestamps = []
+        for p in raw_prices:
+            t = p.get("t", p.get("timestamp", 0))
+            price = float(p.get("p", p.get("price", 0)))
+            if 0.01 <= price <= 0.99:
+                prices.append(price)
+                timestamps.append(int(t))
 
     if len(prices) < 10:
         return BacktestResult(
