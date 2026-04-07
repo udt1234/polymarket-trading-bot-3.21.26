@@ -11,7 +11,7 @@ Evolve existing Polymarket paper trading bot into a full-featured trading platfo
 | 3 | NYC Temperature ML Strategy | NOT STARTED |
 | 4 | Real-Time WebSocket Feeds | NOT STARTED |
 | 5 | Live Execution | NOT STARTED |
-| 6 | Additional Strategies | NOT STARTED |
+| 6 | Additional Strategies (Fed Rate, NYC Temp) | NOT STARTED |
 
 ## Tech Stack
 | Layer | Technology |

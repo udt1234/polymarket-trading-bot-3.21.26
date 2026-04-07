@@ -39,9 +39,12 @@ Full platform wired end-to-end. Dashboard heatmaps added (DOW, hourly clock, bid
 4. **Update Notes page** — add strategy descriptions for all 5 ensemble models + 4 helpers
 5. **shadcn/ui polish** — install via CLI, replace raw HTML inputs
 
+### Future Modules
+4. **Fed Rate Prediction Module** — Trade FOMC rate decision markets by arbitraging CME FedWatch vs Polymarket odds. Full spec in FEATURES.md → Planned Modules. Needs: CME FedWatch scraper, FRED API pipeline, Fed speaker NLP, divergence detector.
+
 ### Pre-Live Checklist
-6. **Run @risk-auditor** — verify all 15 checks pass
-7. **Run @verify-bot** — end-to-end paper verification
+5. **Run @risk-auditor** — verify all 15 checks pass
+6. **Run @verify-bot** — end-to-end paper verification
 
 ## Windows Service (Local)
 - **Install**: Run `install_service.bat` as admin — creates Windows Task Scheduler task "PolyBot" that auto-starts on login

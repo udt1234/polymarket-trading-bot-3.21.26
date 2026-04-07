@@ -108,3 +108,56 @@ correlated (30%), duplicate, cross-module, settlement decay, spread, liquidity
 - `/pre-commit` — Chain QA + strategy + risk + verify
 - `/check-status` — Project status overview
 - `/post-session` — End-of-session doc updates
+
+---
+
+## Planned Modules
+
+### Fed Rate Prediction Module
+**Goal**: Trade FOMC rate decision markets on Polymarket by arbitraging the lag between CME Fed Funds Futures and Polymarket odds.
+
+#### Why 90%+ Accuracy Is Achievable
+- Fed Funds Futures already price direction correctly ~90% of the time 2-4 weeks out
+- The Fed deliberately telegraphs decisions via forward guidance, speeches, and dot plots
+- Accuracy rises to ~95%+ within 1 week of the meeting
+- Alpha comes from Polymarket pricing lagging behind CME/futures consensus
+
+#### Data Sources (6 Required)
+| Source | Purpose | Update Frequency |
+|--------|---------|-----------------|
+| CME FedWatch | Implied rate probabilities from futures | Real-time |
+| Fed Governor speeches | Tone/sentiment shifts (hawkish vs dovish) | As scheduled |
+| CPI / Core PCE | Inflation trend (primary Fed mandate) | Monthly |
+| NFP / Jobless Claims | Employment health (dual mandate) | Monthly / Weekly |
+| FOMC Minutes | Language shift detection vs prior meeting | 3 weeks post-meeting |
+| Treasury yield curve | 2Y/10Y spread, inversion signals | Real-time |
+
+#### Signal Architecture
+- **Primary signal**: CME FedWatch implied probability (highest weight ~40%)
+- **Macro confirmation**: CPI trend + employment data alignment (~25%)
+- **Sentiment signal**: NLP on Fed speaker transcripts — hawkish/dovish scoring (~20%)
+- **Market signal**: Treasury curve shape + rate volatility (MOVE index) (~15%)
+
+#### Prediction Targets
+1. **Direction**: Hike / Cut / Hold (90%+ achievable)
+2. **Magnitude**: 25bp vs 50bp (harder — ~70-80% when consensus is split)
+3. **Surprise detection**: Identify the rare contrarian scenarios (emergency cuts, hawkish pivots)
+
+#### Trading Strategy
+- **Core edge**: When Polymarket odds diverge ≥5% from CME FedWatch implied probability, take position
+- **Entry timing**: 2-4 weeks before FOMC meeting (best risk/reward)
+- **Position sizing**: Kelly criterion based on FedWatch confidence vs Polymarket price
+- **Exit**: Hold to resolution (binary outcome, no need to trade out)
+- **Risk**: Cap at 15% single-market exposure per existing risk rules
+
+#### Key Implementation Steps
+1. Build CME FedWatch scraper or API integration (primary signal source)
+2. Build macro data pipeline (FRED API for CPI, NFP, PCE, Treasury yields)
+3. Build Fed speaker sentiment model (NLP on speech transcripts)
+4. Implement divergence detector (CME vs Polymarket price comparison)
+5. Wire into existing ensemble framework (reuse 5-model architecture)
+6. Add FOMC calendar awareness (only active around meeting windows)
+7. Dashboard: show FedWatch vs Polymarket odds, macro indicators, speaker timeline
+
+#### FOMC 2026 Meeting Dates
+Jan 28-29, Mar 18-19, May 6-7, Jun 17-18, Jul 29-30, Sep 16-17, Nov 4-5, Dec 16-17
