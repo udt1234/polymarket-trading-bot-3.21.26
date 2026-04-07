@@ -17,6 +17,7 @@ from api.modules.truth_social.signals import (
     compute_signal_modifier, kelly_sizing, rank_brackets,
     cross_bracket_arbitrage, depth_adjusted_size,
 )
+from api.modules.truth_social.data import fetch_order_books_for_brackets
 from api.modules.elon_tweets.module_config import get_module_config
 from api.modules.truth_social.hawkes import hawkes_pace, fit_hawkes_params
 from api.modules.truth_social.news_classifier import classify_news_regime
@@ -208,6 +209,10 @@ class ElonTweetsModule(BaseModule):
         # Backtest result: DOW/signal modifiers hurt Elon — use regime+hawkes only
         bracket_probs = _dynamic_bracket_probabilities(model_outputs, weights, hist_std, combined_mod, dynamic_brackets)
 
+        top_brackets = rank_brackets(bracket_probs, market_prices)
+        top_bracket_names = [b["bracket"] for b in top_brackets]
+        order_books = await fetch_order_books_for_brackets(slug, top_bracket_names)
+
         elapsed_pct = min(elapsed_days / total_days, 1.0)
         signals = []
         for bracket_label, model_prob in bracket_probs.items():
@@ -224,12 +229,18 @@ class ElonTweetsModule(BaseModule):
             )
 
             if sizing["action"] == "BUY" and sizing["kelly_pct"] > 0:
-                sizing["kelly_pct"] = depth_adjusted_size(sizing["kelly_pct"], {}, bankroll=module.get("budget", 100))
+                book = order_books.get(bracket_label, {})
+                if book:
+                    sizing["kelly_pct"] = depth_adjusted_size(sizing["kelly_pct"], book, bankroll=module_config.get("budget", 100))
                 signal = Signal(
                     module_id=module_id, market_id=slug, bracket=bracket_label,
                     side="BUY", edge=sizing["edge"], model_prob=model_prob,
                     market_price=market_price, kelly_pct=sizing["kelly_pct"],
                     confidence=1.0 - regime.get("volatility", 0.8) / 2,
+                    best_bid=book.get("best_bid", 0.0),
+                    best_ask=book.get("best_ask", 1.0),
+                    bid_depth_5=book.get("bid_depth_5", 0.0),
+                    ask_depth_5=book.get("ask_depth_5", 0.0),
                     metadata={
                         "regime": regime_label,
                         "regime_override": news_override.get("override"),

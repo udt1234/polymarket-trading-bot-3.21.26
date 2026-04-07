@@ -455,12 +455,13 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
 
     next_auction = None
     try:
-        all_trackings = await _fetch_trackings_raw("realDonaldTrump")
-        trump_future = [t for t in all_trackings
-                        if "trump" in t.get("title", "").lower() and "truth social" in t.get("title", "").lower()
+        name_filter = _detect_name_filter(handle)
+        all_trackings = await _fetch_trackings_raw(handle)
+        future_trackings = [t for t in all_trackings
+                        if name_filter in t.get("title", "").lower()
                         and t.get("startDate", "") > (tracking or {}).get("startDate", "")]
-        if trump_future:
-            nxt = trump_future[0]
+        if future_trackings:
+            nxt = future_trackings[0]
             next_auction = {
                 "period": f"{nxt['startDate'][:10]} to {nxt['endDate'][:10]}",
                 "title": nxt.get("title"),

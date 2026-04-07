@@ -228,7 +228,7 @@ class TruthSocialModule(BaseModule):
         )
 
         model_outputs = {"pace": pace, "bayesian": bayes, "dow": dow, "historical": hist_mean, "hawkes": hawkes_proj}
-        enabled_models = cfg.get("enabled_models", ["pace", "bayesian", "dow", "historical", "hawkes"])
+        enabled_models = mod_cfg.get("enabled_models", ["pace", "bayesian", "dow", "historical", "hawkes"])
         weights = ensemble_weights(elapsed_days, total_days, regime_label=regime_label, enabled_models=enabled_models)
 
         accel = pace_acceleration(hourly_counts)
@@ -352,7 +352,7 @@ class TruthSocialModule(BaseModule):
             if sizing["action"] == "BUY" and sizing["kelly_pct"] > 0:
                 book = order_books.get(bracket_label, {})
                 if book:
-                    sizing["kelly_pct"] = depth_adjusted_size(sizing["kelly_pct"], book, bankroll=module.get("budget", 100))
+                    sizing["kelly_pct"] = depth_adjusted_size(sizing["kelly_pct"], book, bankroll=module_config.get("budget", 100))
                 signal = Signal(
                     module_id=module_id,
                     market_id=slug,

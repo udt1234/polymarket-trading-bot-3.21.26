@@ -143,6 +143,7 @@ def _record_calibration(sb, module_id, market_slug, final_prices, winning_bracke
         sb.table("signals")
         .select("bracket,model_prob,market_id")
         .eq("module_id", module_id)
+        .eq("market_id", market_slug)
         .execute()
     )
 
@@ -169,4 +170,5 @@ def _record_calibration(sb, module_id, market_slug, final_prices, winning_bracke
             "actual_outcome": actual,
             "brier_score": round(brier, 6),
             "log_loss": round(log_loss_val, 6),
+            "resolved_at": datetime.now(timezone.utc).isoformat(),
         }).execute()

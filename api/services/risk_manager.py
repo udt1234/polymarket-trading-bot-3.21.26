@@ -258,9 +258,11 @@ class RiskManager:
         return True, ""
 
     def _check_spread(self, signal: Signal, settings) -> tuple[bool, str]:
-        spread = signal.best_ask - signal.best_bid
-        if spread <= 0 and signal.best_bid == 0 and signal.best_ask == 1:
+        if signal.best_bid == 0.0 and signal.best_ask == 1.0:
             return False, "no order book data available — cannot verify spread"
+        spread = signal.best_ask - signal.best_bid
+        if spread <= 0:
+            return False, f"crossed/locked book (bid={signal.best_bid:.4f}, ask={signal.best_ask:.4f})"
         if settings.slippage_tolerance > 0 and spread > settings.slippage_tolerance:
             return False, f"bid-ask spread {spread:.4f} exceeds tolerance {settings.slippage_tolerance}"
         return True, ""

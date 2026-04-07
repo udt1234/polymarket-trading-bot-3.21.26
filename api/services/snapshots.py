@@ -43,7 +43,8 @@ def _take_price_snapshot_sync():
         active_tracking = None
 
         try:
-            res = client.get(f"{XTRACKER}/users/{handle}/trackings", params={"platform": "truthsocial"})
+            platform = "x" if handle == "elonmusk" else "truthsocial"
+            res = client.get(f"{XTRACKER}/users/{handle}/trackings", params={"platform": platform})
             data = res.json()
             trackings = data.get("data", data) if isinstance(data, dict) else data
             if isinstance(trackings, dict):
