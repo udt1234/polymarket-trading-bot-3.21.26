@@ -12,6 +12,9 @@ DEFAULT_CONFIG = {
     "dow_weights_source": "recency",
     "enabled_models": ["pace", "bayesian", "dow", "historical", "hawkes"],
     "strategy_preset": "full",
+    "entry_gate_pct": 0.75,
+    "use_signal_modifier": False,
+    "stop_loss_pct": 0,
 }
 
 

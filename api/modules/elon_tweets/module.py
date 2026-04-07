@@ -113,6 +113,14 @@ class ElonTweetsModule(BaseModule):
         remaining_days = max(total_days - elapsed_days, 0.01)
 
         mod_cfg = get_module_config(module_id)
+
+        entry_gate = mod_cfg.get("entry_gate_pct", 0.65)
+        elapsed_pct_early = elapsed_days / total_days if total_days > 0 else 0
+        if elapsed_pct_early < entry_gate:
+            self._log(sb, module_id, "decision", "info",
+                      f"Entry gate: {elapsed_pct_early:.1%} < {entry_gate:.0%} — waiting")
+            return []
+
         rw = recency_weighted_averages(weekly_history, half_life=mod_cfg.get("recency_half_life", 4.0))
         hist_mean = rw["mean"] if rw["mean"] > 0 else (sum(weekly_history) / len(weekly_history) if weekly_history else 100.0)
         hist_std = rw["std"] if rw["std"] > 0 else 30.0
@@ -170,18 +178,35 @@ class ElonTweetsModule(BaseModule):
         enabled_models = mod_cfg.get("enabled_models", ["pace", "bayesian", "dow", "historical", "hawkes"])
         weights = ensemble_weights(elapsed_days, total_days, regime_label=regime_label, enabled_models=enabled_models)
 
-        # Signal modifier stack: news 60%, LunarCrush 40% (no presidential schedule for Elon)
-        news_mod = compute_signal_modifier(
-            news.get("headline_count", 0),
-            news.get("conflict_score", 0),
-            news.get("schedule_events", []),
-        )
-        lunar_mod = compute_lunarcrush_modifier(lunar_sentiment, lunar_creator)
-        signal_mod = 0.6 * news_mod + 0.4 * lunar_mod
+        # Regime modifier (backtest: +3.2% ROI for Elon)
+        regime_mod_map = {"HIGH": 1.20, "SURGE": 1.10, "NORMAL": 1.0, "QUIET": 0.90, "LOW": 0.80}
+        regime_mod = regime_mod_map.get(regime_label, 1.0) if mod_cfg.get("use_regime_modifier", True) else 1.0
+
+        # Hawkes burst modifier (backtest: +10% ROI for Elon)
+        hawkes_mod = 1.0
+        if mod_cfg.get("use_hawkes_modifier", True) and len(hourly_counts) >= 12:
+            recent_6h = sum(h["count"] for h in hourly_counts[-6:])
+            prior_6h = sum(h["count"] for h in hourly_counts[-12:-6])
+            burst_ratio = (recent_6h / 6) / (prior_6h / 6) if prior_6h > 0 else 1.0
+            consecutive_nonzero = 0
+            for h in reversed(hourly_counts[-6:]):
+                if h["count"] > 0:
+                    consecutive_nonzero += 1
+                else:
+                    break
+            if burst_ratio > 2.5 and consecutive_nonzero >= 4:
+                hawkes_mod = 1.15
+            elif burst_ratio > 1.8 and consecutive_nonzero >= 3:
+                hawkes_mod = 1.08
+            elif burst_ratio < 0.3:
+                hawkes_mod = 0.92
+
+        combined_mod = regime_mod * hawkes_mod
 
         accel = pace_acceleration(hourly_counts)
 
-        bracket_probs = _dynamic_bracket_probabilities(model_outputs, weights, hist_std, signal_mod, dynamic_brackets)
+        # Backtest result: DOW/signal modifiers hurt Elon — use regime+hawkes only
+        bracket_probs = _dynamic_bracket_probabilities(model_outputs, weights, hist_std, combined_mod, dynamic_brackets)
 
         elapsed_pct = min(elapsed_days / total_days, 1.0)
         signals = []
@@ -213,9 +238,9 @@ class ElonTweetsModule(BaseModule):
                         "total_days": round(total_days, 2),
                         "model_outputs": {k: round(v, 1) for k, v in model_outputs.items()},
                         "weights": {k: round(v, 4) for k, v in weights.items()},
-                        "signal_mod": round(signal_mod, 3),
-                        "news_mod": round(news_mod, 3),
-                        "lunar_mod": round(lunar_mod, 3),
+                        "regime_mod": round(regime_mod, 3),
+                        "hawkes_mod": round(hawkes_mod, 3),
+                        "combined_mod": round(combined_mod, 3),
                         "hawkes_params": hawkes_params,
                         "momentum": accel.get("momentum", "steady"),
                         "news": {
@@ -233,10 +258,28 @@ class ElonTweetsModule(BaseModule):
                 )
                 signals.append(signal)
 
+        # Stop-loss check (backtest: required for Elon, 30% threshold)
+        stop_loss_pct = mod_cfg.get("stop_loss_pct", 0.30)
+        if stop_loss_pct > 0:
+            open_positions = sb.table("positions").select("*").eq("module_id", module_id).eq("status", "open").execute()
+            for pos in (open_positions.data or []):
+                bracket = pos.get("bracket", "")
+                entry_price = pos.get("avg_price", 0)
+                current_price = market_prices.get(bracket, 0)
+                if entry_price > 0 and current_price > 0 and current_price <= entry_price * (1 - stop_loss_pct):
+                    self._log(sb, module_id, "decision", "warning",
+                              f"Stop-loss triggered: {bracket} dropped {((entry_price - current_price) / entry_price * 100):.1f}% "
+                              f"(entry={entry_price:.4f}, now={current_price:.4f})")
+                    signals.append(Signal(
+                        module_id=module_id, market_id=slug, bracket=bracket,
+                        side="SELL", edge=0, model_prob=0, market_price=current_price,
+                        kelly_pct=1.0, confidence=1.0,
+                        metadata={"reason": "stop_loss", "entry_price": entry_price, "current_price": current_price},
+                    ))
+
         self._log(sb, module_id, "decision", "info",
                   f"Cycle: slug={slug}, total={running_total}, elapsed={elapsed_days:.1f}/{total_days:.1f}d, "
-                  f"regime={regime_label}, news={news.get('headline_count', 0)}, "
-                  f"lunar_vel={lunar_creator.get('velocity', 0)}, signals={len(signals)}")
+                  f"regime={regime_label}, regime_mod={regime_mod:.2f}, hawkes_mod={hawkes_mod:.2f}, signals={len(signals)}")
 
         return signals
 

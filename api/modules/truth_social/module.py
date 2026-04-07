@@ -150,6 +150,13 @@ class TruthSocialModule(BaseModule):
 
         elapsed_days = compute_elapsed_days(week_start_str, now)
         remaining_days = max(total_days - elapsed_days, 0.01)
+        elapsed_pct_early = elapsed_days / total_days if total_days > 0 else 0
+
+        entry_gate = mod_cfg.get("entry_gate_pct", 0.75)
+        if elapsed_pct_early < entry_gate:
+            self._log(sb, module_id, "decision", "info",
+                      f"Entry gate: {elapsed_pct_early:.1%} < {entry_gate:.0%} — waiting for better data")
+            return []
 
         half_life = mod_cfg.get("recency_half_life", 4.0)
 
@@ -287,7 +294,9 @@ class TruthSocialModule(BaseModule):
         except Exception:
             pass
 
-        bracket_probs = ensemble_projection(model_outputs, weights, hist_std, signal_mod, calibration_scores)
+        # Backtest result: signal modifiers hurt Trump performance — use raw ensemble
+        use_signal_mod = mod_cfg.get("use_signal_modifier", False)
+        bracket_probs = ensemble_projection(model_outputs, weights, hist_std, signal_mod if use_signal_mod else 1.0, calibration_scores)
 
         # Cross-bracket arbitrage: detect probability mass misallocations
         arb_opps = cross_bracket_arbitrage(bracket_probs, market_prices)
