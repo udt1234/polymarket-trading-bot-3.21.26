@@ -131,7 +131,7 @@ export default function SettingsPage() {
   }
 
   const handleActivateProfile = async (name: string) => {
-    await apiFetch(`/api/settings/profiles/${encodeURIComponent(name)}/activate`, { method: "POST" })
+    await apiFetch(`/api/settings/profiles/${encodeURIComponent(name)}/activate`, { method: "PUT" })
     refetchProfiles()
   }
 
