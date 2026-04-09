@@ -85,13 +85,16 @@ class TradingEngine:
             sb = get_supabase()
             result = sb.table("signals").select("created_at").order("created_at", desc=True).limit(1).execute()
             if not result.data:
-                self._stale_data = True
-                return False
+                self._stale_data = False
+                log.info("No signals yet — allowing cycle to bootstrap")
+                return True
             last_ts = result.data[0]["created_at"]
             last_dt = datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
             age_hours = (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600
             self._stale_data = age_hours > STALE_DATA_THRESHOLD_HOURS
-            return not self._stale_data
+            if self._stale_data:
+                log.info(f"Last signal {age_hours:.1f}h old — allowing cycle (stale flag set for dashboard)")
+            return True
         except Exception:
             self._stale_data = True
             return False

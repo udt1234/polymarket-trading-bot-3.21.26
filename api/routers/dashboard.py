@@ -23,11 +23,10 @@ def _get_active_wallet() -> str | None:
 
 
 @router.get("/metrics")
-async def get_metrics():
+async def get_metrics(module_id: str | None = None, days: int | None = None):
     sb = get_supabase()
     settings = get_settings()
 
-    # Try to get real wallet data first
     wallet = _get_active_wallet()
     if wallet:
         summary = await fetch_wallet_summary(wallet)
@@ -46,21 +45,33 @@ async def get_metrics():
             "source": "live",
         }
 
-    # Fallback to paper trading data
-    positions = sb.table("positions").select("*").eq("status", "open").execute()
-    all_positions = sb.table("positions").select("realized_pnl,status").execute()
+    # Paper trading data — scoped by module and time
+    open_q = sb.table("positions").select("*").eq("status", "open")
+    closed_q = sb.table("positions").select("realized_pnl,status,opened_at").eq("status", "closed")
+
+    if module_id:
+        open_q = open_q.eq("module_id", module_id)
+        closed_q = closed_q.eq("module_id", module_id)
+
+    if days:
+        from datetime import datetime, timezone, timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        open_q = open_q.gte("opened_at", cutoff)
+        closed_q = closed_q.gte("opened_at", cutoff)
+
+    positions = open_q.execute()
+    closed_positions = closed_q.execute()
     daily_pnl = sb.table("daily_pnl").select("*").order("date", desc=True).limit(1).execute()
 
     total_pnl = 0.0
     wins = 0
     total_closed = 0
-    for p in all_positions.data:
+    for p in closed_positions.data:
         rpnl = p.get("realized_pnl", 0) or 0
-        if p.get("status") == "closed":
-            total_pnl += rpnl
-            total_closed += 1
-            if rpnl > 0:
-                wins += 1
+        total_pnl += rpnl
+        total_closed += 1
+        if rpnl > 0:
+            wins += 1
     for p in positions.data:
         total_pnl += p.get("unrealized_pnl", 0) or 0
 
@@ -70,8 +81,11 @@ async def get_metrics():
         "portfolio_value": portfolio_value,
         "total_pnl": total_pnl,
         "win_rate": (wins / total_closed * 100) if total_closed > 0 else 0,
+        "wins": wins,
+        "losses": total_closed - wins,
         "active_modules": sb.table("modules").select("id", count="exact").eq("status", "active").execute().count,
         "open_positions": len(positions.data),
+        "closed_positions": total_closed,
         "source": "paper",
     }
 

@@ -112,7 +112,7 @@ export default function ModuleDetailPage() {
     `/api/dashboard/auctions`
   )
   const { data: paperPositions } = useApi<Position[]>(
-    id ? `/api/portfolio/positions?status=all` : null
+    id ? `/api/portfolio/positions?status=all&module_id=${id}` : null
   )
   const [activeTrackingId, setActiveTrackingId] = useState<string | null>(null)
 

@@ -77,6 +77,8 @@ export default function SettingsPage() {
 
   const [slackUrl, setSlackUrl] = useState("")
   const [slackSaving, setSlackSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [resetConfirm, setResetConfirm] = useState(false)
 
   const [showProfileForm, setShowProfileForm] = useState(false)
   const [newProfile, setNewProfile] = useState({ name: "", wallet_address: "", api_key: "", private_key: "", multi_exec: false })
@@ -105,6 +107,17 @@ export default function SettingsPage() {
     await saveRisk({ ...risk, [key]: val })
     refetchRisk()
   }, [risk])
+
+  const handleResetPaperTrades = async () => {
+    setResetting(true)
+    try {
+      await apiFetch("/api/settings/reset-paper-trades", { method: "POST" })
+      setResetConfirm(false)
+    } catch (e) {
+      alert("Reset failed — are you in paper mode?")
+    }
+    setResetting(false)
+  }
 
   const handleSaveSlack = async () => {
     setSlackSaving(true)
@@ -183,6 +196,35 @@ export default function SettingsPage() {
               <span className="text-sm">Circuit Breaker</span>
               <Toggle checked={risk?.circuit_breaker_enabled !== false} onChange={(v) => handleToggleMode("circuit_breaker_enabled", v)} />
             </div>
+          </div>
+
+          <div className="mt-6 border-t border-border pt-4">
+            <h3 className="mb-2 text-sm font-semibold text-destructive">Danger Zone</h3>
+            {!resetConfirm ? (
+              <button
+                onClick={() => setResetConfirm(true)}
+                className="rounded-md border border-destructive/50 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10"
+              >
+                Reset Paper Trades
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Delete all paper data?</span>
+                <button
+                  onClick={handleResetPaperTrades}
+                  disabled={resetting}
+                  className="rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+                >
+                  {resetting ? "Resetting..." : "Yes, Delete All"}
+                </button>
+                <button
+                  onClick={() => setResetConfirm(false)}
+                  className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

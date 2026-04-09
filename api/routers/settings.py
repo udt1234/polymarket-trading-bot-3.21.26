@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from api.dependencies import get_supabase
+from api.config import get_settings
 from api.services.profiles import (
     get_active_profile, list_profiles, save_profile,
     switch_profile, delete_profile, set_multi_exec, get_multi_exec_profiles,
@@ -127,6 +128,23 @@ async def toggle_multi_exec(name: str, body: MultiExecToggle):
         return {"ok": True, "profile": profile["name"], "multi_exec": profile["multi_exec"]}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/reset-paper-trades")
+async def reset_paper_trades():
+    sb = get_supabase()
+    settings = get_settings()
+    if not settings.paper_mode:
+        raise HTTPException(status_code=400, detail="Can only reset in paper mode")
+
+    sb.table("positions").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+    sb.table("trades").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+    sb.table("orders").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+    sb.table("signals").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+    sb.table("daily_pnl").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+    sb.table("calibration_log").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+
+    return {"ok": True, "message": "All paper trading data cleared"}
 
 
 @router.get("/profiles/multi-status")
