@@ -57,9 +57,9 @@ def kelly_sizing(
     confidence = 0.5 + 0.5 * (1 - min(volatility, 2) / 2)
     sized_kelly = full_kelly * frac * confidence
 
-    # Time-weighted Kelly: reduce sizing late in the auction period
+    # Time-weighted Kelly: reduce sizing late in the auction period (floor at 30%)
     if elapsed_pct > 0.7:
-        time_decay = 1.0 - elapsed_pct
+        time_decay = max(1.0 - elapsed_pct, 0.30)
         sized_kelly *= time_decay
 
     sized_kelly = min(sized_kelly, 0.15)  # position cap
