@@ -156,8 +156,27 @@ export default function SettingsPage() {
     refetchProfiles()
   }
 
+  const { data: moduleConfigs, refetch: refetchModuleConfigs } = useApi<any[]>("/api/settings/module-configs")
+
+  const handleModuleConfigSave = useCallback(async (moduleId: string, key: string, val: any) => {
+    const existing = moduleConfigs?.find((m: any) => m.module_id === moduleId)?.config || {}
+    await apiFetch(`/api/settings/module-configs/${moduleId}`, {
+      method: "PUT",
+      body: JSON.stringify({ ...existing, [key]: val }),
+    })
+    refetchModuleConfigs()
+  }, [moduleConfigs])
+
   const activeProfile = profileData?.active
   const profiles = profileData?.profiles || []
+
+  const moduleConfigFields = [
+    { label: "Entry Gate", key: "entry_gate_pct", type: "percent" as const, help: "Wait until this % of auction elapsed before trading" },
+    { label: "Kelly Fraction", key: "kelly_fraction_override", type: "multiplier" as const, help: "Fractional Kelly multiplier (0.25 = quarter Kelly)" },
+    { label: "Stop Loss", key: "stop_loss_pct", type: "percent" as const, help: "Auto-exit positions losing more than this %" },
+    { label: "Recency Half-Life", key: "recency_half_life", type: "multiplier" as const, help: "Weeks for historical data weighting" },
+    { label: "Top Brackets", key: "confidence_band_top_n", type: "multiplier" as const, help: "Number of best brackets to trade" },
+  ]
 
   return (
     <div className="space-y-6">
@@ -327,6 +346,48 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
+
+        {/* Module Configs */}
+        {(moduleConfigs || []).map((mod: any) => (
+          <div key={mod.module_id} className="rounded-lg border border-border bg-card p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">{mod.name}</h2>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${mod.status === "active" ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"}`}>
+                {mod.status}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {moduleConfigFields.map((f) => (
+                <RiskField
+                  key={f.key}
+                  label={f.label}
+                  fieldKey={f.key}
+                  value={mod.config?.[f.key]}
+                  type={f.type}
+                  risk={mod.config}
+                  onSave={(key, val) => handleModuleConfigSave(mod.module_id, key, val)}
+                />
+              ))}
+              <div className="flex items-center justify-between border-b border-border pb-2">
+                <span className="text-sm text-muted-foreground">Signal Modifier</span>
+                <Toggle checked={!!mod.config?.use_signal_modifier} onChange={(v) => handleModuleConfigSave(mod.module_id, "use_signal_modifier", v)} />
+              </div>
+              <div className="flex items-center justify-between border-b border-border pb-2">
+                <span className="text-sm text-muted-foreground">Parquet Model</span>
+                <Toggle checked={mod.config?.use_parquet_model !== false} onChange={(v) => handleModuleConfigSave(mod.module_id, "use_parquet_model", v)} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Regime-Conditional DOW</span>
+                <Toggle checked={mod.config?.use_regime_conditional !== false} onChange={(v) => handleModuleConfigSave(mod.module_id, "use_regime_conditional", v)} />
+              </div>
+              <div className="mt-2 pt-2 border-t border-border">
+                <span className="text-xs text-muted-foreground">
+                  Models: {(mod.config?.enabled_models || []).join(", ")} · Preset: {mod.config?.strategy_preset || "full"}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
 
         <div className="rounded-lg border border-border bg-card p-6">
           <h2 className="mb-4 text-lg font-semibold">Notifications</h2>

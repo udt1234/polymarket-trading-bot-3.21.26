@@ -64,6 +64,22 @@ interface Signal {
   created_at?: string
 }
 
+interface LogEntry {
+  id: string
+  log_type: string
+  severity: string
+  module_id: string
+  message: string
+  metadata?: any
+  created_at: string
+}
+
+interface ModuleInfo {
+  id: string
+  name: string
+  status: string
+}
+
 const STATUS_STYLES = {
   open: "bg-primary/20 text-primary",
   won: "bg-success/20 text-success",
@@ -128,6 +144,12 @@ export default function DashboardPage() {
   const { data: engine } = useApi<EngineStatus>("/api/engine/status", [], 15000)
   const { data: auctions } = useApi<Auction[]>("/api/dashboard/auctions", [], 60000)
   const { data: signals } = useApi<Signal[]>("/api/dashboard/recent-signals?limit=10", [], 30000)
+  const { data: modules } = useApi<ModuleInfo[]>("/api/modules/", [], 60000)
+  const [logModuleFilter, setLogModuleFilter] = useState<string>("all")
+  const logUrl = logModuleFilter === "all"
+    ? "/api/dashboard/decision-log?limit=25"
+    : `/api/dashboard/decision-log?limit=25&module_id=${logModuleFilter}`
+  const { data: decisionLog } = useApi<LogEntry[]>(logUrl, [logModuleFilter], 15000)
   const [filter, setFilter] = useState<"all" | "open" | "won" | "lost">("all")
   const [search, setSearch] = useState("")
 
@@ -279,6 +301,45 @@ export default function DashboardPage() {
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">No signals yet</p>
+        )}
+      </div>
+
+      {/* Decision Log */}
+      <div className="rounded-lg border border-border bg-card p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Decision Log</h2>
+          <select
+            value={logModuleFilter}
+            onChange={(e) => setLogModuleFilter(e.target.value)}
+            className="rounded-md border border-input bg-background px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="all">All Modules</option>
+            {(modules || []).map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+        </div>
+        {decisionLog && decisionLog.length > 0 ? (
+          <div className="max-h-[400px] overflow-y-auto space-y-1">
+            {decisionLog.map((log) => {
+              const time = log.created_at ? new Date(log.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""
+              const mod = modules?.find((m) => m.id === log.module_id)
+              const typeColor = log.log_type === "execution" ? "text-success" : log.log_type === "risk" ? "text-amber-400" : "text-muted-foreground"
+              const sevIcon = log.severity === "error" ? "🔴" : log.severity === "warning" ? "🟡" : ""
+              return (
+                <div key={log.id} className="flex items-start gap-2 border-b border-border/50 pb-1.5 last:border-0">
+                  <span className="shrink-0 text-xs text-muted-foreground w-28">{time}</span>
+                  <span className={`shrink-0 text-xs font-medium w-16 ${typeColor}`}>{log.log_type}</span>
+                  {mod && logModuleFilter === "all" && (
+                    <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-xs">{mod.name.slice(0, 12)}</span>
+                  )}
+                  <span className="text-sm text-foreground/90 break-all">{sevIcon}{log.message}</span>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No decision logs yet</p>
         )}
       </div>
     </div>

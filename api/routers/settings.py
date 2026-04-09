@@ -147,6 +147,33 @@ async def reset_paper_trades():
     return {"ok": True, "message": "All paper trading data cleared"}
 
 
+# --- Module Config ---
+
+@router.get("/module-configs")
+async def get_all_module_configs():
+    sb = get_supabase()
+    modules = sb.table("modules").select("id,name,status").in_("status", ["active", "paused", "paper"]).execute()
+    from api.modules.truth_social.module_config import get_module_config
+    result = []
+    for m in modules.data or []:
+        cfg = get_module_config(m["id"])
+        result.append({"module_id": m["id"], "name": m["name"], "status": m["status"], "config": cfg})
+    return result
+
+
+@router.get("/module-configs/{module_id}")
+async def get_module_config_endpoint(module_id: str):
+    from api.modules.truth_social.module_config import get_module_config
+    return get_module_config(module_id)
+
+
+@router.put("/module-configs/{module_id}")
+async def update_module_config(module_id: str, config: dict):
+    from api.modules.truth_social.module_config import save_module_config
+    save_module_config(module_id, config)
+    return {"ok": True}
+
+
 @router.get("/profiles/multi-status")
 async def get_multi_status():
     profiles = get_multi_exec_profiles()

@@ -155,3 +155,13 @@ async def get_recent_signals(limit: int = 10, module_id: str | None = None):
         query = query.eq("module_id", module_id)
     signals = query.order("created_at", desc=True).limit(limit).execute()
     return signals.data
+
+
+@router.get("/decision-log")
+async def get_decision_log(module_id: str | None = None, limit: int = 30):
+    sb = get_supabase()
+    query = sb.table("logs").select("*").in_("log_type", ["decision", "risk", "execution"])
+    if module_id:
+        query = query.eq("module_id", module_id)
+    rows = query.order("created_at", desc=True).limit(limit).execute()
+    return rows.data
