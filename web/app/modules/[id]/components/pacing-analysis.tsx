@@ -267,8 +267,9 @@ export function ConfidenceBands({ bands, allProbs }: { bands: any[] | undefined;
   )
 }
 
-export function EnsembleBreakdown({ ensemble, ensembleAvg }: { ensemble: any[] | undefined; ensembleAvg: number }) {
+export function EnsembleBreakdown({ ensemble, ensembleAvg, weightOverrides, onSaveWeights }: { ensemble: any[] | undefined; ensembleAvg: number; weightOverrides?: Record<string, number>; onSaveWeights?: (overrides: Record<string, number>) => void }) {
   const [disabledModels, setDisabledModels] = useState<Set<string>>(new Set())
+  const [editWeights, setEditWeights] = useState<Record<string, string>>({})
 
   const toggleModel = (model: string) => {
     setDisabledModels((prev) => {
@@ -300,6 +301,7 @@ export function EnsembleBreakdown({ ensemble, ensembleAvg }: { ensemble: any[] |
                 <th className="py-2 text-left">Model</th>
                 <th className="py-2 text-right">Projection</th>
                 <th className="py-2 text-right">Weight</th>
+                {onSaveWeights && <th className="py-2 text-right">Override</th>}
                 <th className="py-2 text-right">Contribution</th>
               </tr>
             </thead>
@@ -327,6 +329,18 @@ export function EnsembleBreakdown({ ensemble, ensembleAvg }: { ensemble: any[] |
                     <td className="py-2 font-medium">{m.model}</td>
                     <td className="py-2 text-right font-mono">{fmt(m.projection || 0)}</td>
                     <td className="py-2 text-right font-mono">{fmt(isOff ? 0 : adjWeight)}%</td>
+                    {onSaveWeights && (
+                      <td className="py-2 text-right">
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder={fmt(adjWeight)}
+                          value={editWeights[m.model] ?? ""}
+                          onChange={(e) => setEditWeights({ ...editWeights, [m.model]: e.target.value })}
+                          className="w-16 rounded border border-border bg-background px-1 py-0.5 text-right text-xs font-mono focus:border-primary focus:outline-none"
+                        />
+                      </td>
+                    )}
                     <td className="py-2 text-right font-mono">{fmt(isOff ? 0 : adjContrib)}</td>
                   </tr>
                 )
@@ -338,6 +352,24 @@ export function EnsembleBreakdown({ ensemble, ensembleAvg }: { ensemble: any[] |
                 </td>
                 <td className="py-2 text-right font-mono">{fmt(disabledModels.size > 0 ? previewAvg : ensembleAvg)}</td>
                 <td className="py-2 text-right font-mono">100%</td>
+                {onSaveWeights && (
+                  <td className="py-2 text-right">
+                    <button
+                      onClick={() => {
+                        const overrides: Record<string, number> = {}
+                        for (const [model, val] of Object.entries(editWeights)) {
+                          const n = parseFloat(val)
+                          if (!isNaN(n) && n > 0) overrides[model] = n / 100
+                        }
+                        if (Object.keys(overrides).length > 0) onSaveWeights(overrides)
+                      }}
+                      disabled={Object.values(editWeights).every(v => !v)}
+                      className="rounded bg-primary px-2 py-0.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-30"
+                    >
+                      Save
+                    </button>
+                  </td>
+                )}
                 <td className="py-2 text-right font-mono">{fmt(disabledModels.size > 0 ? previewAvg : ensembleAvg)}</td>
               </tr>
             </tbody>

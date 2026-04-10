@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation"
 import { useState, useEffect, useCallback } from "react"
 import { useApi, useMutation } from "@/lib/hooks"
+import { apiFetch } from "@/lib/api"
 import { formatCurrency, formatDate, formatDateShort, cn } from "@/lib/utils"
 import { StatusBadge } from "@/components/shared/status-badge"
 import {
@@ -73,6 +74,7 @@ interface ModuleConfig {
   auto_optimize_periods: boolean
   enabled_models: string[]
   strategy_preset: string
+  weight_overrides?: Record<string, number>
 }
 
 interface AuctionTab {
@@ -487,7 +489,20 @@ export default function ModuleDetailPage() {
             </div>
             <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Budget</p>
-              <p className="mt-1 text-2xl font-bold">{fmtDollars(module.budget)}</p>
+              <div className="mt-1 flex items-center gap-1">
+                <span className="text-lg text-muted-foreground">$</span>
+                <input
+                  type="number"
+                  defaultValue={module.budget}
+                  onBlur={(e) => {
+                    const val = parseFloat(e.target.value)
+                    if (val > 0 && val !== module.budget) {
+                      apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ budget: val }) })
+                    }
+                  }}
+                  className="w-20 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
+                />
+              </div>
               <p className="text-xs text-muted-foreground">Max: {(module.max_position_pct * 100).toFixed(0)}% per bracket</p>
             </div>
           </div>
@@ -607,7 +622,19 @@ export default function ModuleDetailPage() {
 
       {/* Row 2: Ensemble Breakdown + Pacing */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <EnsembleBreakdown ensemble={pacing?.ensemble_breakdown} ensembleAvg={pacing?.ensemble_avg || 0} />
+        <EnsembleBreakdown
+          ensemble={pacing?.ensemble_breakdown}
+          ensembleAvg={pacing?.ensemble_avg || 0}
+          weightOverrides={config?.weight_overrides}
+          onSaveWeights={async (overrides) => {
+            if (!id) return
+            await apiFetch(`/api/settings/module-configs/${id}`, {
+              method: "PUT",
+              body: JSON.stringify({ weight_overrides: overrides }),
+            })
+            refetchConfig()
+          }}
+        />
         <DailyPacingTable pacing={pacing} />
       </div>
 
