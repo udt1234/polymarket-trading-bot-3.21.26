@@ -514,7 +514,7 @@ export default function ModuleDetailPage() {
       })()}
 
       {/* Row 1: Current Auction + Confidence Bands */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="flex flex-wrap gap-6 [&>*]:min-w-[340px] [&>*]:max-w-[540px] [&>*]:flex-1">
         {(() => {
           const data = pacing?.current_auction
           const selectedAuc = auctions?.find((a) => a.tracking_id === (activeTrackingId || (pacing as any)?.tracking_id))
@@ -692,7 +692,7 @@ export default function ModuleDetailPage() {
       </div>
 
       {/* Row 2: Ensemble Breakdown + Pacing */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="flex flex-wrap gap-6 [&>*]:min-w-[340px] [&>*]:max-w-[540px] [&>*]:flex-1">
         <EnsembleBreakdown
           ensemble={pacing?.ensemble_breakdown}
           ensembleAvg={pacing?.ensemble_avg || 0}
@@ -710,7 +710,7 @@ export default function ModuleDetailPage() {
       </div>
 
       {/* Row 3: DOW Heatmap + Pace Acceleration */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="flex flex-wrap gap-6 [&>*]:min-w-[340px] [&>*]:max-w-[540px] [&>*]:flex-1">
         <DowHeatmap dowAvg={pacing?.dow_heatmap} />
         <PaceAcceleration accel={pacing?.pace_acceleration} />
       </div>
