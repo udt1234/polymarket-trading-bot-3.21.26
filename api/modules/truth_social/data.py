@@ -233,18 +233,42 @@ async def fetch_bracket_token_ids(slug: str) -> dict[str, str]:
 
 
 async def fetch_order_books_for_brackets(slug: str, brackets: list[str]) -> dict[str, dict]:
-    token_map = await fetch_bracket_token_ids(slug)
-    if not token_map:
-        return {}
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            res = await client.get(f"{GAMMA_BASE}/events", params={"slug": slug})
+            res.raise_for_status()
+            events = res.json()
+            if not isinstance(events, list) or not events:
+                return {}
+        except Exception as e:
+            log.warning(f"Gamma fetch failed for order books: {e}")
+            return {}
 
+    markets = events[0].get("markets", [])
     books = {}
-    for bracket in brackets:
-        token_id = token_map.get(bracket)
-        if not token_id:
+    for m in markets:
+        raw_bracket = m.get("groupItemTitle", m.get("question", ""))
+        bracket = normalize_bracket(raw_bracket)
+        if bracket not in brackets:
             continue
-        book = await fetch_order_book(token_id)
-        books[bracket] = book
-        await asyncio.sleep(RATE_LIMITS["clob"])
+
+        best_bid = float(m.get("bestBid") or 0)
+        best_ask = float(m.get("bestAsk") or 1)
+        spread = float(m.get("spread") or (best_ask - best_bid))
+
+        outcome_prices = m.get("outcomePrices", "[]")
+        if isinstance(outcome_prices, str):
+            outcome_prices = json.loads(outcome_prices)
+        volume = float(m.get("volume", m.get("volumeNum", 0)) or 0)
+
+        books[bracket] = {
+            "best_bid": best_bid,
+            "best_ask": best_ask,
+            "spread": spread,
+            "bid_depth_5": volume * 0.1,
+            "ask_depth_5": volume * 0.1,
+            "midpoint": (best_bid + best_ask) / 2 if best_bid and best_ask else float(outcome_prices[0]) if outcome_prices else 0,
+        }
     return books
 
 
