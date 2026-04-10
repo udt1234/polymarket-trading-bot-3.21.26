@@ -659,9 +659,9 @@ export default function ModuleDetailPage() {
                       })
                       const pnl = walletAuc?.total_pnl ?? 0
                       const won = walletAuc?.status === "won"
-                      // Find winning bracket (highest value bid in resolved auction)
                       const winBid = walletAuc?.bids?.find((b: any) => (b.pnl || 0) > 0)
                       const winBracket = winBid?.outcome || winBid?.title?.match(/\d+-\d+|\d+\+/)?.[0] || ""
+                      const hadTrades = walletAuc && walletAuc.bid_count > 0
                       return (
                         <button
                           key={a.tracking_id}
@@ -669,7 +669,7 @@ export default function ModuleDetailPage() {
                           className={cn(
                             "rounded border p-1.5 text-center text-[9px] transition-colors",
                             won ? "border-success/40 bg-success/10" :
-                            pnl !== 0 ? "border-destructive/40 bg-destructive/10" :
+                            hadTrades && pnl < 0 ? "border-destructive/40 bg-destructive/10" :
                             "border-border bg-muted/30",
                             "hover:opacity-80"
                           )}
@@ -677,7 +677,7 @@ export default function ModuleDetailPage() {
                           <p className="font-semibold text-foreground">{formatDateShort(a.start_date).replace(/, \d{4}$/, "")}</p>
                           {winBracket && <p className="text-[8px] text-muted-foreground">{winBracket}</p>}
                           <p className={cn("font-bold", pnl > 0 ? "text-success" : pnl < 0 ? "text-destructive" : "text-muted-foreground")}>
-                            {pnl > 0 ? "+" : ""}{pnl !== 0 ? formatCurrency(pnl) : "--"}
+                            {hadTrades ? (pnl > 0 ? "+" : "") + formatCurrency(pnl) : "No bets"}
                           </p>
                         </button>
                       )
