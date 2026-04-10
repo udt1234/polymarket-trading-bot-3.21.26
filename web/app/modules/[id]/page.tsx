@@ -513,7 +513,7 @@ export default function ModuleDetailPage() {
         )
       })()}
 
-      {/* Row 1: Current Auction + Confidence Bands */}
+      {/* Analysis Cards — flex wrap, fixed-width */}
       <div className="flex flex-wrap gap-6 [&>*]:min-w-[340px] [&>*]:max-w-[540px] [&>*]:flex-1">
         {(() => {
           const data = pacing?.current_auction
@@ -689,10 +689,6 @@ export default function ModuleDetailPage() {
           )
         })()}
         <ConfidenceBands bands={pacing?.confidence_bands} allProbs={pacing?.all_bracket_probs} />
-      </div>
-
-      {/* Row 2: Ensemble Breakdown + Pacing */}
-      <div className="flex flex-wrap gap-6 [&>*]:min-w-[340px] [&>*]:max-w-[540px] [&>*]:flex-1">
         <EnsembleBreakdown
           ensemble={pacing?.ensemble_breakdown}
           ensembleAvg={pacing?.ensemble_avg || 0}
@@ -707,10 +703,6 @@ export default function ModuleDetailPage() {
           }}
         />
         <DailyPacingTable pacing={pacing} />
-      </div>
-
-      {/* Row 3: DOW Heatmap + Pace Acceleration */}
-      <div className="flex flex-wrap gap-6 [&>*]:min-w-[340px] [&>*]:max-w-[540px] [&>*]:flex-1">
         <DowHeatmap dowAvg={pacing?.dow_heatmap} />
         <PaceAcceleration accel={pacing?.pace_acceleration} />
       </div>
