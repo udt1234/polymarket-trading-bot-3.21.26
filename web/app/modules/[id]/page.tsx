@@ -136,6 +136,10 @@ export default function ModuleDetailPage() {
   const { data: priceHeatmaps } = useApi<any>(
     id ? `/api/modules/${id}/price-heatmaps` : null
   )
+  const { data: decisionLog } = useApi<any[]>(
+    id ? `/api/dashboard/decision-log?module_id=${id}&limit=30` : null,
+    [id], 30000
+  )
 
   const [lastRefresh, setLastRefresh] = useState(new Date())
   const [configOpen, setConfigOpen] = useState(false)
@@ -572,6 +576,73 @@ export default function ModuleDetailPage() {
               ) : (
                 <p className="py-4 text-center text-sm text-muted-foreground">No data yet</p>
               )}
+              {/* Bot Reasoning */}
+              {data && (() => {
+                const signals = moduleSignals || []
+                const approved = signals.filter((s: any) => s.approved)
+                const rejected = signals.filter((s: any) => !s.approved)
+                const topRejection = rejected[0]?.rejection_reason || ""
+                const hasPositions = (paperPositions || []).some((p: any) => p.status === "open")
+                const elapsedPct = data.days_elapsed && data.total_days ? (data.days_elapsed / data.total_days * 100).toFixed(0) : "?"
+
+                let reasoning = ""
+                if (approved.length > 0 && hasPositions) {
+                  reasoning = `The bot is actively trading this auction. It found ${approved.length} opportunities with positive edge and placed bets. Ensemble model predicts ~${data.ensemble_avg?.toFixed(0) || "?"} posts, putting the likely winner at ${data.projected_winner || "?"}.`
+                } else if (signals.length > 0 && approved.length === 0) {
+                  if (topRejection.includes("spread")) {
+                    reasoning = `The bot found ${signals.length} potential trades but skipped them all — the bid-ask spreads are too wide (market is illiquid). It's seeing edge on bracket ${rejected[0]?.bracket || "?"} but no one is actively trading that bracket, so it can't get a fair price.`
+                  } else if (topRejection.includes("exposure")) {
+                    reasoning = `The bot found signals but risk limits prevent new positions — portfolio exposure is at its cap.`
+                  } else {
+                    reasoning = `The bot generated ${signals.length} signals but the risk manager rejected them all (${topRejection || "various reasons"}). The models see edge but conditions aren't safe enough to trade.`
+                  }
+                } else if (signals.length === 0 && data.days_elapsed > 0) {
+                  reasoning = `No signals generated yet. The 5 models agree the market is roughly fairly priced — no bracket has enough edge to justify a bet. The bot checks every 5 minutes and will trade if odds shift.`
+                } else {
+                  reasoning = `Auction just started. The bot is collecting data and will begin evaluating opportunities shortly.`
+                }
+
+                return (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-1.5">Bot Reasoning</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{reasoning}</p>
+                  </div>
+                )
+              })()}
+
+              {/* Action Timeline */}
+              {decisionLog && decisionLog.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-border">
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-1.5">Action History</p>
+                  <div className="max-h-[180px] overflow-y-auto space-y-1">
+                    {decisionLog.slice(0, 15).map((log: any, i: number) => {
+                      const time = log.created_at ? new Date(log.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""
+                      const isExec = log.log_type === "execution"
+                      const isRisk = log.log_type === "risk"
+                      const icon = isExec ? "✅" : isRisk ? "🛡️" : "🔍"
+                      // Simplify message for display
+                      let msg = log.message || ""
+                      if (msg.startsWith("Cycle:")) {
+                        const sigMatch = msg.match(/signals=(\d+)/)
+                        const regMatch = msg.match(/regime=(\w+)/)
+                        msg = `Scanned market — ${sigMatch?.[1] || 0} signals, regime ${regMatch?.[1] || "?"}`
+                      } else if (msg.startsWith("Rejected")) {
+                        msg = msg.replace(/^Rejected /, "Skipped ")
+                      } else if (msg.startsWith("Executed")) {
+                        msg = msg.replace(/^Executed /, "Bought ")
+                      }
+                      return (
+                        <div key={i} className="flex items-start gap-1.5 text-[11px]">
+                          <span className="shrink-0 text-muted-foreground w-24">{time}</span>
+                          <span>{icon}</span>
+                          <span className="text-muted-foreground">{msg}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Past Auction Results */}
               {pastAucs.length > 0 && (
                 <div className="mt-4 pt-3 border-t border-border">
