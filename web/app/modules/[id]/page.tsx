@@ -136,6 +136,7 @@ export default function ModuleDetailPage() {
   const { data: priceHeatmaps } = useApi<any>(
     id ? `/api/modules/${id}/price-heatmaps` : null
   )
+  const { data: riskSettings } = useApi<any>("/api/settings/risk")
   const { data: decisionLog } = useApi<any[]>(
     id ? `/api/dashboard/decision-log?module_id=${id}&limit=30` : null,
     [id], 30000
@@ -452,49 +453,61 @@ export default function ModuleDetailPage() {
       {(() => {
         const marketValue = openPositions.reduce((s, p) => s + p.size * (pacing?.market_prices?.[p.bracket] ?? p.avg_price), 0)
         const unrealizedPnl = marketValue - totalInvested
+        const realizedPnl = closedPositions.reduce((s, p) => s + (p.realized_pnl || 0), 0)
         const fmtDollars = (n: number) => `$${Math.round(Math.abs(n)).toLocaleString()}`
         const fmtDollarsSigned = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.round(Math.abs(n)).toLocaleString()}`
+        const totalTrades = openPositions.length + closedPositions.length
+        const accountBankroll = riskSettings?.bankroll || 1000
+        const budgetPct = ((module.budget / accountBankroll) * 100).toFixed(0)
+
+        const recentSignals = (moduleSignals || []).slice(0, 10)
+        const bestEdgeSignal = recentSignals.reduce((best: any, s: any) => (!best || (s.edge || 0) > (best.edge || 0)) ? s : best, null)
+        const bestEdge = bestEdgeSignal?.edge ? `+${(bestEdgeSignal.edge * 100).toFixed(1)}%` : "—"
+        const bestEdgeBracket = bestEdgeSignal?.bracket || ""
+
+        const approvedCount = recentSignals.filter((s: any) => s.approved).length
+        const spreadRejected = recentSignals.filter((s: any) => !s.approved && (s.rejection_reason || "").includes("spread")).length
+        const spreadHealth = recentSignals.length === 0 ? "—" : spreadRejected === 0 ? "Good" : spreadRejected < recentSignals.length ? "Mixed" : "Dry"
+        const spreadColor = spreadHealth === "Good" ? "text-success" : spreadHealth === "Mixed" ? "text-amber-400" : spreadHealth === "Dry" ? "text-destructive" : "text-muted-foreground"
+
         return (
-          <div className="flex flex-wrap gap-4" style={{ "--card-w": "180px" } as any}>
-            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Cost Basis</p>
               <p className="mt-1 text-2xl font-bold">{fmtDollars(totalInvested)}</p>
               <p className="text-xs text-muted-foreground">{openPositions.length} open position{openPositions.length !== 1 ? "s" : ""}</p>
             </div>
-            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Current Value</p>
               <p className="mt-1 text-2xl font-bold">{fmtDollars(marketValue)}</p>
               <p className={cn("text-xs", unrealizedPnl >= 0 ? "text-success" : "text-destructive")}>
                 {fmtDollarsSigned(unrealizedPnl)} unrealized
               </p>
             </div>
-            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Best Outcome</p>
-              <p className={cn("mt-1 text-2xl font-bold", potentialWin >= 0 ? "text-success" : "text-destructive")}>
-                {fmtDollarsSigned(potentialWin)}
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Unrealized P&L</p>
+              <p className={cn("mt-1 text-2xl font-bold", unrealizedPnl >= 0 ? "text-success" : "text-destructive")}>
+                {fmtDollarsSigned(unrealizedPnl)}
               </p>
               <p className="text-xs text-muted-foreground">
-                {bestBracket ? `If ${bestBracket} wins` : "No positions"}
+                {totalInvested > 0 ? `${((unrealizedPnl / totalInvested) * 100).toFixed(1)}% return` : "No positions"}
               </p>
             </div>
-            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Total P&L</p>
-              <p className={cn("mt-1 text-2xl font-bold", totalPnl >= 0 ? "text-success" : "text-destructive")}>
-                {fmtDollarsSigned(totalPnl)}
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Realized P&L</p>
+              <p className={cn("mt-1 text-2xl font-bold", realizedPnl >= 0 ? "text-success" : "text-destructive")}>
+                {fmtDollarsSigned(realizedPnl)}
               </p>
-              <p className="text-xs text-muted-foreground">
-                {isLive ? `${relevantAuctions.length} auctions` : "Paper trades"}
-              </p>
+              <p className="text-xs text-muted-foreground">{closedPositions.length} closed trade{closedPositions.length !== 1 ? "s" : ""}</p>
             </div>
-            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Win Rate</p>
               <p className="mt-1 text-2xl font-bold">{fmt(winRate)}%</p>
-              <p className="text-xs text-muted-foreground">{wins}W / {closedPositions.length - wins}L</p>
+              <p className="text-xs text-muted-foreground">{wins}W / {closedPositions.length - wins}L · {totalTrades} total</p>
             </div>
-            <div className="flex-1 min-w-[170px] max-w-[220px] rounded-lg border border-border bg-card p-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Budget</p>
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Bankroll</p>
               <div className="mt-1 flex items-center gap-1">
-                <span className="text-lg text-muted-foreground">$</span>
                 <input
                   type="number"
                   defaultValue={module.budget}
@@ -504,10 +517,24 @@ export default function ModuleDetailPage() {
                       apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ budget: val }) })
                     }
                   }}
-                  className="w-20 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
+                  className="w-16 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">Max: {(module.max_position_pct * 100).toFixed(0)}% per bracket</p>
+              <p className="text-xs text-muted-foreground">{budgetPct}% of ${accountBankroll} account</p>
+            </div>
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Edge Found</p>
+              <p className={cn("mt-1 text-2xl font-bold", bestEdgeSignal?.edge > 0.05 ? "text-success" : "text-foreground")}>
+                {bestEdge}
+              </p>
+              <p className="text-xs text-muted-foreground">{bestEdgeBracket || "No signals"}</p>
+            </div>
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Spread Health</p>
+              <p className={cn("mt-1 text-2xl font-bold", spreadColor)}>{spreadHealth}</p>
+              <p className="text-xs text-muted-foreground">
+                {recentSignals.length > 0 ? `${approvedCount}/${recentSignals.length} passed` : "No data"}
+              </p>
             </div>
           </div>
         )
