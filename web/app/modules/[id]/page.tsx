@@ -524,7 +524,21 @@ export default function ModuleDetailPage() {
             </div>
             <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Bracket Cap</p>
-              <p className="mt-1 text-2xl font-bold">${Math.round(module.budget * (module.max_position_pct || 0.15))}</p>
+              <div className="mt-1 flex items-center gap-0">
+                <span className="text-2xl font-bold">$</span>
+                <input
+                  type="number"
+                  defaultValue={Math.round(module.budget * (module.max_position_pct || 0.15))}
+                  onBlur={(e) => {
+                    const cap = parseFloat(e.target.value)
+                    if (cap > 0 && module.budget > 0) {
+                      const newPct = cap / module.budget
+                      apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ max_position_pct: newPct }) })
+                    }
+                  }}
+                  className="w-12 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
+                />
+              </div>
               <p className="text-xs text-muted-foreground">{((module.max_position_pct || 0.15) * 100).toFixed(0)}% of ${module.budget} budget</p>
             </div>
             <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
