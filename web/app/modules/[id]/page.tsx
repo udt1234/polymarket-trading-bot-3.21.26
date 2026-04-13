@@ -513,8 +513,8 @@ export default function ModuleDetailPage() {
         )
       })()}
 
-      {/* Analysis Cards — flex wrap, fixed-width. Wide cards use data-wide to span 2 columns */}
-      <div className="flex flex-wrap gap-6 [&>*]:min-w-[340px] [&>*]:max-w-[540px] [&>*]:flex-1 [&>[data-wide]]:max-w-[1104px] [&>[data-wide]]:min-w-[700px] [&>[data-wide]]:flex-auto [&>[data-wide]]:w-full">
+      {/* Analysis Cards — flex wrap, fixed-width */}
+      <div className="flex flex-wrap gap-6 [&>*]:min-w-[340px] [&>*]:max-w-[540px] [&>*]:flex-1">
         {(() => {
           const data = pacing?.current_auction
           const selectedAuc = auctions?.find((a) => a.tracking_id === (activeTrackingId || (pacing as any)?.tracking_id))
@@ -702,7 +702,7 @@ export default function ModuleDetailPage() {
             refetchConfig()
           }}
         />
-        <div data-wide><DailyPacingTable pacing={pacing} /></div>
+        <div style={{ minWidth: 700, maxWidth: 1104, flex: "1 1 100%" }}><DailyPacingTable pacing={pacing} /></div>
         <DowHeatmap dowAvg={pacing?.dow_heatmap} />
         <PaceAcceleration accel={pacing?.pace_acceleration} />
       </div>
