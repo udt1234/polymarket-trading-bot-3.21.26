@@ -14,6 +14,22 @@ BRACKET_LABELS = [
 ]
 
 
+def parse_bracket_labels(labels: list[str]) -> list[tuple[int, int]]:
+    ranges = []
+    for label in labels:
+        label = label.strip()
+        if label.startswith("<"):
+            ranges.append((0, int(label[1:])))
+        elif label.endswith("+"):
+            ranges.append((int(label[:-1]), 9999))
+        elif "-" in label:
+            lo, hi = label.split("-", 1)
+            ranges.append((int(lo), int(hi)))
+        else:
+            ranges.append((int(label), int(label)))
+    return ranges
+
+
 STRATEGY_PRESETS = {
     "full": ["pace", "bayesian", "dow", "historical", "hawkes"],
     "conservative": ["pace", "bayesian"],
@@ -65,20 +81,23 @@ def ensemble_weights(
     return weights
 
 
-def bracket_probabilities(mean: float, std: float) -> dict[str, float]:
+def bracket_probabilities(mean: float, std: float, bracket_labels: list[str] | None = None) -> dict[str, float]:
     std = max(std, 10.0)
     norm = stats.norm(loc=mean, scale=std)
-    # Negative binomial params from mean/std
     p_nb = mean / (std ** 2) if std ** 2 > mean else 0.99
     p_nb = max(min(p_nb, 0.99), 0.01)
     r_nb = mean * p_nb / (1 - p_nb)
     r_nb = max(r_nb, 1.0)
     nb = stats.nbinom(r_nb, p_nb)
 
+    labels = bracket_labels or BRACKET_LABELS
+    ranges = parse_bracket_labels(labels) if bracket_labels else BRACKETS
+
     probs = {}
-    for (lo, hi), label in zip(BRACKETS, BRACKET_LABELS):
-        p_norm = norm.cdf(hi + 0.5) - norm.cdf(lo - 0.5)
-        p_nb_val = nb.cdf(hi) - nb.cdf(lo - 1) if lo > 0 else nb.cdf(hi)
+    for (lo, hi), label in zip(ranges, labels):
+        hi_cdf = min(hi, 9998)
+        p_norm = norm.cdf(hi_cdf + 0.5) - norm.cdf(lo - 0.5)
+        p_nb_val = nb.cdf(hi_cdf) - nb.cdf(lo - 1) if lo > 0 else nb.cdf(hi_cdf)
         probs[label] = 0.4 * max(p_norm, 0) + 0.6 * max(p_nb_val, 0)
 
     total = sum(probs.values())
@@ -122,20 +141,20 @@ def ensemble_projection(
     weekly_std: float,
     signal_modifier: float = 1.0,
     calibration_scores: dict[str, float] | None = None,
+    bracket_labels: list[str] | None = None,
 ) -> dict[str, float]:
-    # Apply calibration-driven weight adjustment if available
     final_weights = calibration_adjusted_weights(weights, calibration_scores)
+    labels = bracket_labels or BRACKET_LABELS
 
-    combined_probs = {label: 0.0 for label in BRACKET_LABELS}
+    combined_probs = {label: 0.0 for label in labels}
 
     for model_name, projected_mean in model_outputs.items():
         w = final_weights.get(model_name, 0)
         adjusted_mean = projected_mean * signal_modifier
-        probs = bracket_probabilities(adjusted_mean, weekly_std)
-        for label in BRACKET_LABELS:
+        probs = bracket_probabilities(adjusted_mean, weekly_std, bracket_labels=bracket_labels)
+        for label in labels:
             combined_probs[label] += w * probs.get(label, 0)
 
-    # Cross-bracket normalization: force sum to 1.0
     total = sum(combined_probs.values())
     if total > 0:
         combined_probs = {k: v / total for k, v in combined_probs.items()}

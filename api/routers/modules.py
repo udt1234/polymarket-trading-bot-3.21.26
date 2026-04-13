@@ -220,7 +220,7 @@ async def get_auctions(module_id: str, include_past: bool = True):
     return results
 
 
-def _compute_pacing_models(running_total, elapsed_days, remaining_days, total_days, hist_mean, hist_std, hourly_counts, var, now, cfg):
+def _compute_pacing_models(running_total, elapsed_days, remaining_days, total_days, hist_mean, hist_std, hourly_counts, var, now, cfg, dynamic_brackets=None):
     from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
     from api.modules.truth_social.projection import ensemble_weights as ew, ensemble_projection
 
@@ -247,7 +247,7 @@ def _compute_pacing_models(running_total, elapsed_days, remaining_days, total_da
     model_outputs = {"pace": pace_val, "bayesian": bayes_val, "dow": dow_val, "historical": hist_mean}
     enabled_models = cfg.get("enabled_models", ["pace", "bayesian", "dow", "historical", "hawkes"])
     weights = ew(elapsed_days, total_days, enabled_models=enabled_models)
-    bracket_probs = ensemble_projection(model_outputs, weights, hist_std)
+    bracket_probs = ensemble_projection(model_outputs, weights, hist_std, bracket_labels=dynamic_brackets)
     conf_bands = ensemble_confidence_bands(bracket_probs, top_n=cfg.get("confidence_band_top_n", 3))
     ensemble_avg = sum(model_outputs[k] * weights.get(k, 0) for k in model_outputs)
 
@@ -406,9 +406,17 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
 
     accel = pace_acceleration(hourly_counts)
 
+    # Fetch dynamic brackets from Gamma API for non-Trump modules
+    dynamic_brackets = None
+    slug_for_brackets = extract_slug_from_tracking(tracking) if tracking else None
+    if slug_for_brackets:
+        market_prices_early = await fetch_market_prices(slug_for_brackets)
+        if market_prices_early and len(market_prices_early) > 11:
+            dynamic_brackets = sorted(market_prices_early.keys(), key=lambda b: int(b.split("-")[0].replace("<", "0").replace("+", "")) if any(c.isdigit() for c in b) else 0)
+
     model_outputs, weights, conf_bands, ensemble_avg, hourly_avgs, dow_weights_map, bracket_probs = _compute_pacing_models(
         running_total, elapsed_days, remaining_days, total_days,
-        hist_mean, hist_std, hourly_counts, var, now, cfg,
+        hist_mean, hist_std, hourly_counts, var, now, cfg, dynamic_brackets,
     )
 
     dow_avg_today = var.get(now.weekday(), {}).get("mean", hist_mean / 7.0)
