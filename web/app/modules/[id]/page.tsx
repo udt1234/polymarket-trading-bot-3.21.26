@@ -523,11 +523,9 @@ export default function ModuleDetailPage() {
               <p className="text-xs text-muted-foreground">{budgetPct}% of ${accountBankroll} account</p>
             </div>
             <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Edge Found</p>
-              <p className={cn("mt-1 text-2xl font-bold", bestEdgeSignal?.edge > 0.05 ? "text-success" : "text-foreground")}>
-                {bestEdge}
-              </p>
-              <p className="text-xs text-muted-foreground">{bestEdgeBracket || "No signals"}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Bracket Cap</p>
+              <p className="mt-1 text-2xl font-bold">${Math.round(module.budget * (module.max_position_pct || 0.15))}</p>
+              <p className="text-xs text-muted-foreground">{((module.max_position_pct || 0.15) * 100).toFixed(0)}% of ${module.budget} budget</p>
             </div>
             <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Spread Health</p>
