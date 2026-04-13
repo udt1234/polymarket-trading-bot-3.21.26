@@ -507,39 +507,40 @@ export default function ModuleDetailPage() {
             </div>
             <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Bankroll</p>
-              <div className="mt-1 flex items-center gap-1">
+              <div className="mt-1 flex items-center gap-0">
                 <input
                   type="number"
-                  defaultValue={module.budget}
+                  defaultValue={Math.round((module.budget / accountBankroll) * 100)}
                   onBlur={(e) => {
-                    const val = parseFloat(e.target.value)
-                    if (val > 0 && val !== module.budget) {
-                      apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ budget: val }) })
+                    const pct = parseFloat(e.target.value)
+                    if (pct > 0 && pct <= 100) {
+                      const newBudget = Math.round(accountBankroll * pct / 100)
+                      apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ budget: newBudget }) })
                     }
                   }}
-                  className="w-16 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
+                  className="w-10 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
                 />
+                <span className="text-2xl font-bold">%</span>
               </div>
-              <p className="text-xs text-muted-foreground">{budgetPct}% of ${accountBankroll} account</p>
+              <p className="text-xs text-muted-foreground">${Math.round(module.budget)} of ${accountBankroll} account</p>
             </div>
             <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Bracket Cap</p>
               <div className="mt-1 flex items-center gap-0">
-                <span className="text-2xl font-bold">$</span>
                 <input
                   type="number"
-                  defaultValue={Math.round(module.budget * (module.max_position_pct || 0.15))}
+                  defaultValue={Math.round((module.max_position_pct || 0.15) * 100)}
                   onBlur={(e) => {
-                    const cap = parseFloat(e.target.value)
-                    if (cap > 0 && module.budget > 0) {
-                      const newPct = cap / module.budget
-                      apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ max_position_pct: newPct }) })
+                    const pct = parseFloat(e.target.value)
+                    if (pct > 0 && pct <= 100) {
+                      apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ max_position_pct: pct / 100 }) })
                     }
                   }}
-                  className="w-12 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
+                  className="w-10 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
                 />
+                <span className="text-2xl font-bold">%</span>
               </div>
-              <p className="text-xs text-muted-foreground">{((module.max_position_pct || 0.15) * 100).toFixed(0)}% of ${module.budget} budget</p>
+              <p className="text-xs text-muted-foreground">${Math.round(module.budget * (module.max_position_pct || 0.15))} of ${Math.round(module.budget)} bankroll</p>
             </div>
             <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Spread Health</p>
