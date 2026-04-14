@@ -1,5 +1,6 @@
 import logging
 import uuid
+import asyncio
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from api.services.risk_manager import Signal
@@ -8,15 +9,45 @@ from api.services.position_manager import open_position
 
 log = logging.getLogger(__name__)
 
+MIN_PRICE_FLOOR = 0.01
+
+
+def _run_async(coro):
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(asyncio.run, coro).result(timeout=15)
+    return asyncio.run(coro)
+
 
 class PaperExecutor:
     def __init__(self):
         self.balance = 1000.0
 
     def execute(self, signal: Signal) -> dict:
+        if signal.market_price < MIN_PRICE_FLOOR:
+            log.info(f"PAPER REJECT {signal.bracket}: price {signal.market_price:.4f} below floor {MIN_PRICE_FLOOR}")
+            self._log_rejection(signal, "price_below_floor")
+            return {"status": "rejected", "reason": "price_below_floor"}
+
+        fill_price, max_depth = self._check_liquidity(signal)
+        if fill_price is None:
+            log.info(f"PAPER REJECT {signal.bracket}: no liquidity")
+            self._log_rejection(signal, "no_liquidity")
+            return {"status": "rejected", "reason": "no_liquidity"}
+
         order_id = str(uuid.uuid4())
-        size = self.balance * signal.kelly_pct
-        cost = size * signal.market_price
+        raw_size = self.balance * signal.kelly_pct
+        size = min(raw_size, max_depth) if max_depth > 0 else raw_size
+        if size <= 0:
+            self._log_rejection(signal, "zero_size")
+            return {"status": "rejected", "reason": "zero_size"}
+
+        cost = size * fill_price
 
         if signal.side == "BUY":
             self.balance -= cost
@@ -24,6 +55,7 @@ class PaperExecutor:
             self.balance += cost
 
         now = datetime.now(timezone.utc).isoformat()
+        partial = size < raw_size
         order = {
             "id": order_id,
             "module_id": signal.module_id,
@@ -31,7 +63,7 @@ class PaperExecutor:
             "bracket": signal.bracket,
             "side": signal.side,
             "size": size,
-            "price": signal.market_price,
+            "price": fill_price,
             "status": "filled",
             "executor": "paper",
             "created_at": now,
@@ -47,17 +79,51 @@ class PaperExecutor:
             "bracket": signal.bracket,
             "side": signal.side,
             "size": size,
-            "price": signal.market_price,
+            "price": fill_price,
             "executor": "paper",
             "executed_at": now,
         }).execute()
 
-        open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, signal.market_price)
+        open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, fill_price)
 
         sb.table("signals").update({"approved": True}).eq("module_id", signal.module_id).eq("bracket", signal.bracket).eq("approved", False).execute()
 
-        log.info(f"PAPER {signal.side} {signal.bracket} size={size:.2f} @ {signal.market_price:.4f}")
+        fill_note = f" (partial: {size:.2f}/{raw_size:.2f})" if partial else ""
+        log.info(f"PAPER {signal.side} {signal.bracket} size={size:.2f} @ {fill_price:.4f}{fill_note}")
         return order
+
+    def _check_liquidity(self, signal: Signal) -> tuple:
+        try:
+            from api.modules.truth_social.data import fetch_order_books_for_brackets
+            books = _run_async(fetch_order_books_for_brackets(signal.market_id, [signal.bracket]))
+            book = books.get(signal.bracket)
+            if not book:
+                return (signal.market_price, 0)
+
+            if signal.side == "BUY":
+                fill_price = book.get("best_ask", signal.market_price)
+                depth = book.get("ask_depth_5", 0)
+            else:
+                fill_price = book.get("best_bid", signal.market_price)
+                depth = book.get("bid_depth_5", 0)
+
+            if fill_price <= 0 or fill_price >= 1:
+                return (signal.market_price, depth)
+
+            return (fill_price, depth)
+        except Exception as e:
+            log.warning(f"Liquidity check failed for {signal.bracket}, using signal price: {e}")
+            return (signal.market_price, 0)
+
+    def _log_rejection(self, signal: Signal, reason: str):
+        try:
+            sb = get_supabase()
+            sb.table("signals").update({
+                "approved": False,
+                "rejection_reason": reason,
+            }).eq("module_id", signal.module_id).eq("bracket", signal.bracket).eq("approved", False).execute()
+        except Exception:
+            pass
 
 
 class LiveExecutor:

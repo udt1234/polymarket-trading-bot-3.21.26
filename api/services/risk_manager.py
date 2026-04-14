@@ -277,18 +277,35 @@ class RiskManager:
             return False, f"order size ${target_size:.2f} exceeds 30% of depth ${depth:.2f}"
         return True, ""
 
-    def record_loss(self):
+    def record_loss(self, module_id: str | None = None):
         settings = get_settings()
         self.consecutive_losses += 1
         if self.consecutive_losses >= settings.circuit_breaker_max_consecutive_losses:
             self.circuit_breaker_tripped = True
             self._cooldown_until = time.time() + settings.circuit_breaker_cooldown_minutes * 60
             log.warning(f"Circuit breaker TRIPPED after {self.consecutive_losses} consecutive losses")
+        auto_kill_threshold = getattr(settings, "auto_kill_consecutive_losses", 0)
+        if auto_kill_threshold > 0 and self.consecutive_losses >= auto_kill_threshold and module_id:
+            self._auto_pause_module(module_id)
         self._persist_state()
 
     def record_win(self):
         self.consecutive_losses = 0
         self._persist_state()
+
+    def _auto_pause_module(self, module_id: str):
+        try:
+            sb = get_supabase()
+            sb.table("modules").update({"status": "paused"}).eq("id", module_id).execute()
+            sb.table("logs").insert({
+                "level": "warning",
+                "message": f"Auto-kill: module paused after {self.consecutive_losses} consecutive losses",
+                "module_id": module_id,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }).execute()
+            log.warning(f"AUTO-KILL: Module {module_id} paused after {self.consecutive_losses} consecutive losses")
+        except Exception as e:
+            log.error(f"Failed to auto-pause module {module_id}: {e}")
 
     def update_pnl(self, daily: float, weekly: float, peak: float, current: float):
         self._daily_pnl = daily

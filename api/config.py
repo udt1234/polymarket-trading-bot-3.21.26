@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     circuit_breaker_max_consecutive_losses: int = 5
     circuit_breaker_cooldown_minutes: int = 30
 
+    # Auto-kill: pause module after N consecutive losses (0 = disabled)
+    auto_kill_consecutive_losses: int = 5
+
     # CORS
     cors_origins: str = "http://localhost:3010"
 

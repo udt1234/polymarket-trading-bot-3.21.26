@@ -215,6 +215,29 @@ export default function SettingsPage() {
               <span className="text-sm">Circuit Breaker</span>
               <Toggle checked={risk?.circuit_breaker_enabled !== false} onChange={(v) => handleToggleMode("circuit_breaker_enabled", v)} />
             </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-sm">Auto-Kill (Pause on Losses)</span>
+                <p className="text-xs text-muted-foreground">Pause module after N consecutive losses</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  value={risk?.auto_kill_consecutive_losses ?? 5}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0
+                    handleRiskSave("auto_kill_consecutive_losses", val)
+                  }}
+                  className="w-14 rounded border border-border bg-background px-2 py-1 text-sm text-center"
+                />
+                <Toggle
+                  checked={(risk?.auto_kill_consecutive_losses ?? 5) > 0}
+                  onChange={(v) => handleRiskSave("auto_kill_consecutive_losses", v ? 5 : 0)}
+                />
+              </div>
+            </div>
           </div>
 
           <div className="mt-6 border-t border-border pt-4">
