@@ -8,8 +8,9 @@ import { formatCurrency, formatDate, formatDateShort, cn } from "@/lib/utils"
 import { StatusBadge } from "@/components/shared/status-badge"
 import {
   ChevronDown, ChevronUp, RefreshCw, Pause, Play, Power,
-  Save, Settings,
+  Save, Settings, TrendingUp, TrendingDown,
 } from "lucide-react"
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
 import { DailyPacingTable } from "./components/daily-pacing-table"
 import { DowHeatmap, HourlyHeatmap, PaceAcceleration, ConfidenceBands, EnsembleBreakdown } from "./components/pacing-analysis"
 import { PriceByDowHourHeatmap, PriceByElapsedDayHeatmap } from "./components/price-heatmaps"
@@ -143,6 +144,8 @@ export default function ModuleDetailPage() {
   )
 
   const [lastRefresh, setLastRefresh] = useState(new Date())
+  const [bankrollPct, setBankrollPct] = useState<number | null>(null)
+  const [bracketCapPct, setBracketCapPct] = useState<number | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
   const ALL_MODELS = ["pace", "bayesian", "dow", "historical", "hawkes"]
   const PRESETS: Record<string, string[]> = {
@@ -449,6 +452,88 @@ export default function ModuleDetailPage() {
         )}
       </div>
 
+      {/* Module P&L Chart */}
+      {(() => {
+        const allTrades = trades?.data || []
+        if (allTrades.length === 0 && closedPositions.length === 0) return null
+
+        const sortedTrades = [...allTrades].sort((a, b) => a.executed_at.localeCompare(b.executed_at))
+        let cumPnl = 0
+        let cumInvested = 0
+        let peak = 0
+        let maxDrawdown = 0
+        const chartData = sortedTrades.map((t) => {
+          cumInvested += t.size * t.price
+          const currentValue = openPositions
+            .filter((p) => p.bracket === t.bracket)
+            .reduce((s, p) => s + p.size * (pacing?.market_prices?.[p.bracket] ?? p.avg_price), 0)
+          const closedPnl = closedPositions
+            .filter((p) => p.bracket === t.bracket)
+            .reduce((s, p) => s + (p.realized_pnl || 0), 0)
+          cumPnl = closedPnl + (currentValue - cumInvested)
+          peak = Math.max(peak, cumPnl)
+          const dd = peak > 0 ? ((peak - cumPnl) / peak) * 100 : 0
+          maxDrawdown = Math.max(maxDrawdown, dd)
+          return {
+            date: new Date(t.executed_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            pnl: parseFloat(cumPnl.toFixed(2)),
+            invested: parseFloat(cumInvested.toFixed(2)),
+          }
+        })
+
+        const totalReturn = cumInvested > 0 ? ((cumPnl / cumInvested) * 100).toFixed(1) : "0"
+        const isPositive = cumPnl >= 0
+
+        return (
+          <div className="rounded-lg border border-border bg-card p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold">Module P&L</h2>
+                <div className={cn("flex items-center gap-1 text-sm font-medium", isPositive ? "text-success" : "text-destructive")}>
+                  {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                  {isPositive ? "+" : ""}{totalReturn}%
+                </div>
+              </div>
+              <div className="flex gap-4 text-xs text-muted-foreground">
+                <span>Max Drawdown: <span className="font-medium text-amber-400">{maxDrawdown.toFixed(1)}%</span></span>
+                <span>Trades: <span className="font-medium text-foreground">{sortedTrades.length}</span></span>
+                <span>Invested: <span className="font-medium text-foreground">${Math.round(cumInvested)}</span></span>
+              </div>
+            </div>
+            {chartData.length > 1 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="modulePnlGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={isPositive ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"} stopOpacity={0.3} />
+                      <stop offset="95%" stopColor={isPositive ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(215, 20%, 65%)" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => `$${v}`} />
+                  <ReferenceLine y={0} stroke="hsl(215, 20%, 35%)" strokeDasharray="3 3" />
+                  <Tooltip
+                    contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }}
+                    formatter={(value: number) => [`$${value.toFixed(2)}`, "P&L"]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="pnl"
+                    stroke={isPositive ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"}
+                    fill="url(#modulePnlGradient)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
+                More trades needed for chart
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
       {/* Summary Cards */}
       {(() => {
         const marketValue = openPositions.reduce((s, p) => s + p.size * (pacing?.market_prices?.[p.bracket] ?? p.avg_price), 0)
@@ -505,43 +590,55 @@ export default function ModuleDetailPage() {
               <p className="mt-1 text-2xl font-bold">{fmt(winRate)}%</p>
               <p className="text-xs text-muted-foreground">{wins}W / {closedPositions.length - wins}L · {totalTrades} total</p>
             </div>
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Bankroll</p>
-              <div className="mt-1 flex items-center gap-0">
-                <input
-                  type="number"
-                  defaultValue={Math.round((module.budget / accountBankroll) * 100)}
-                  onBlur={(e) => {
-                    const pct = parseFloat(e.target.value)
-                    if (pct > 0 && pct <= 100) {
-                      const newBudget = Math.round(accountBankroll * pct / 100)
-                      apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ budget: newBudget }) })
-                    }
-                  }}
-                  className="w-10 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
-                />
-                <span className="text-2xl font-bold">%</span>
-              </div>
-              <p className="text-xs text-muted-foreground">${Math.round(module.budget)} of ${accountBankroll} account</p>
-            </div>
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Bracket Cap</p>
-              <div className="mt-1 flex items-center gap-0">
-                <input
-                  type="number"
-                  defaultValue={Math.round((module.max_position_pct || 0.15) * 100)}
-                  onBlur={(e) => {
-                    const pct = parseFloat(e.target.value)
-                    if (pct > 0 && pct <= 100) {
-                      apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ max_position_pct: pct / 100 }) })
-                    }
-                  }}
-                  className="w-10 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
-                />
-                <span className="text-2xl font-bold">%</span>
-              </div>
-              <p className="text-xs text-muted-foreground">${Math.round(module.budget * (module.max_position_pct || 0.15))} of ${Math.round(module.budget)} bankroll</p>
-            </div>
+            {(() => {
+              const curBankrollPct = bankrollPct ?? Math.round((module.budget / accountBankroll) * 100)
+              const curBudget = Math.round(accountBankroll * curBankrollPct / 100)
+              const curBracketPct = bracketCapPct ?? Math.round((module.max_position_pct || 0.15) * 100)
+              const curBracketDollars = Math.round(curBudget * curBracketPct / 100)
+              return (
+                <>
+                  <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Bankroll</p>
+                    <div className="mt-1 flex items-center gap-0">
+                      <input
+                        type="number"
+                        value={curBankrollPct}
+                        onChange={(e) => setBankrollPct(parseFloat(e.target.value) || 0)}
+                        onBlur={(e) => {
+                          const pct = parseFloat(e.target.value)
+                          if (pct > 0 && pct <= 100) {
+                            const newBudget = Math.round(accountBankroll * pct / 100)
+                            apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ budget: newBudget }) })
+                          }
+                        }}
+                        className="w-10 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
+                      />
+                      <span className="text-2xl font-bold">%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">${curBudget} of ${accountBankroll} account</p>
+                  </div>
+                  <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Bracket Cap</p>
+                    <div className="mt-1 flex items-center gap-0">
+                      <input
+                        type="number"
+                        value={curBracketPct}
+                        onChange={(e) => setBracketCapPct(parseFloat(e.target.value) || 0)}
+                        onBlur={(e) => {
+                          const pct = parseFloat(e.target.value)
+                          if (pct > 0 && pct <= 100) {
+                            apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ max_position_pct: pct / 100 }) })
+                          }
+                        }}
+                        className="w-10 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
+                      />
+                      <span className="text-2xl font-bold">%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">${curBracketDollars} of ${curBudget} bankroll</p>
+                  </div>
+                </>
+              )
+            })()}
             <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Spread Health</p>
               <p className={cn("mt-1 text-2xl font-bold", spreadColor)}>{spreadHealth}</p>
