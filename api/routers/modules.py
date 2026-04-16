@@ -771,3 +771,122 @@ async def parquet_preview(module_id: str):
     if not module.data or not module.data.get("market_slug"):
         raise HTTPException(status_code=404, detail="Module or market_slug not found")
     return preview_parquet_data(module.data["market_slug"])
+
+
+@router.get("/{module_id}/price-history")
+async def price_history(module_id: str, bracket: str | None = None, limit: int = 200):
+    sb = get_supabase()
+    q = sb.table("price_snapshots").select("bracket,price,volume,snapshot_hour").eq("module_id", module_id)
+    if bracket:
+        q = q.eq("bracket", bracket)
+    result = q.order("snapshot_hour", desc=False).limit(limit).execute()
+    series = result.data or []
+
+    trades_result = sb.table("trades").select("bracket,side,price,size,executed_at").eq("module_id", module_id).order("executed_at", desc=False).limit(100).execute()
+    trades = trades_result.data or []
+    if bracket:
+        trades = [t for t in trades if t.get("bracket") == bracket]
+
+    return {"series": series, "trades": trades}
+
+
+@router.get("/{module_id}/kelly-tracker")
+async def kelly_tracker(module_id: str, limit: int = 20):
+    sb = get_supabase()
+    module = sb.table("modules").select("budget").eq("id", module_id).single().execute()
+    bankroll = (module.data or {}).get("budget", 100)
+
+    signals = sb.table("signals").select("bracket,kelly_pct,market_price,created_at").eq("module_id", module_id).eq("approved", True).order("created_at", desc=True).limit(limit).execute()
+    trades = sb.table("trades").select("bracket,size,price,executed_at").eq("module_id", module_id).order("executed_at", desc=True).limit(limit * 3).execute()
+
+    trades_by_bracket = defaultdict(list)
+    for t in (trades.data or []):
+        trades_by_bracket[t["bracket"]].append(t)
+
+    rows = []
+    for s in (signals.data or []):
+        recommended = float(s.get("kelly_pct", 0) or 0) * float(bankroll)
+        trade_candidates = trades_by_bracket.get(s["bracket"], [])
+        actual = 0.0
+        if trade_candidates:
+            sig_dt = s.get("created_at", "")
+            best = None
+            for t in trade_candidates:
+                if t.get("executed_at", "") >= sig_dt:
+                    if best is None or t["executed_at"] < best["executed_at"]:
+                        best = t
+            if best:
+                actual = float(best.get("size", 0) or 0) * float(best.get("price", 0) or 0)
+        rows.append({
+            "bracket": s["bracket"],
+            "recommended": round(recommended, 2),
+            "actual": round(actual, 2),
+            "created_at": s.get("created_at"),
+        })
+    return {"rows": list(reversed(rows))}
+
+
+@router.get("/{module_id}/latency-histogram")
+async def latency_histogram(module_id: str):
+    sb = get_supabase()
+    signals = sb.table("signals").select("bracket,post_detected_at,created_at").eq("module_id", module_id).eq("approved", True).not_.is_("post_detected_at", "null").order("created_at", desc=True).limit(200).execute()
+    trades = sb.table("trades").select("bracket,executed_at").eq("module_id", module_id).order("executed_at", desc=True).limit(500).execute()
+
+    trades_by_bracket = defaultdict(list)
+    for t in (trades.data or []):
+        trades_by_bracket[t["bracket"]].append(t)
+
+    buckets = {"<1s": 0, "1-5s": 0, "5-30s": 0, "30-60s": 0, ">60s": 0}
+    samples = []
+    for s in (signals.data or []):
+        detected = s.get("post_detected_at")
+        if not detected:
+            continue
+        candidates = trades_by_bracket.get(s["bracket"], [])
+        matching = [t for t in candidates if t.get("executed_at", "") >= s.get("created_at", "")]
+        if not matching:
+            continue
+        matching.sort(key=lambda t: t.get("executed_at", ""))
+        executed_at = matching[0]["executed_at"]
+        try:
+            d1 = datetime.fromisoformat(detected.replace("Z", "+00:00"))
+            d2 = datetime.fromisoformat(executed_at.replace("Z", "+00:00"))
+            latency_s = (d2 - d1).total_seconds()
+        except Exception:
+            continue
+        samples.append(latency_s)
+        if latency_s < 1:
+            buckets["<1s"] += 1
+        elif latency_s < 5:
+            buckets["1-5s"] += 1
+        elif latency_s < 30:
+            buckets["5-30s"] += 1
+        elif latency_s < 60:
+            buckets["30-60s"] += 1
+        else:
+            buckets[">60s"] += 1
+
+    avg = round(sum(samples) / len(samples), 2) if samples else 0
+    median = round(sorted(samples)[len(samples)//2], 2) if samples else 0
+    return {
+        "buckets": [{"bucket": k, "count": v} for k, v in buckets.items()],
+        "sample_count": len(samples),
+        "avg_latency_s": avg,
+        "median_latency_s": median,
+    }
+
+
+@router.get("/{module_id}/order-book-depth")
+async def order_book_depth(module_id: str, bracket: str | None = None):
+    sb = get_supabase()
+    q = sb.table("order_book_snapshots").select("bracket,best_bid,best_ask,bid_depth_5,ask_depth_5,spread,midpoint,snapshot_at").eq("module_id", module_id)
+    if bracket:
+        q = q.eq("bracket", bracket)
+    result = q.order("snapshot_at", desc=True).limit(50).execute()
+    rows = result.data or []
+    latest_by_bracket: dict[str, dict] = {}
+    for r in rows:
+        b = r["bracket"]
+        if b not in latest_by_bracket:
+            latest_by_bracket[b] = r
+    return {"snapshots": list(latest_by_bracket.values())}

@@ -86,7 +86,22 @@ class PaperExecutor:
 
         open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, fill_price)
 
-        sb.table("signals").update({"approved": True}).eq("module_id", signal.module_id).eq("bracket", signal.bracket).eq("approved", False).execute()
+        try:
+            sb.table("signals").insert({
+                "module_id": signal.module_id,
+                "market_id": signal.market_id,
+                "bracket": signal.bracket,
+                "side": signal.side,
+                "edge": signal.edge,
+                "model_prob": signal.model_prob,
+                "market_price": signal.market_price,
+                "kelly_pct": signal.kelly_pct,
+                "approved": True,
+                "metadata": signal.metadata if signal.metadata else {},
+                "post_detected_at": signal.post_detected_at or now,
+            }).execute()
+        except Exception:
+            pass
 
         fill_note = f" (partial: {size:.2f}/{raw_size:.2f})" if partial else ""
         log.info(f"PAPER {signal.side} {signal.bracket} size={size:.2f} @ {fill_price:.4f}{fill_note}")

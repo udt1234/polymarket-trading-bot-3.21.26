@@ -6,6 +6,9 @@
 - **Paper/Live Mode**: Toggle simulated vs real USDC trading
 - **Shadow Mode**: Paper trades alongside live for comparison
 - **Circuit Breaker**: Auto-halt after N consecutive losses, cooldown
+- **Auto-Kill Switch**: Pause module after N consecutive losses (default 5, togglable)
+- **Price Floor**: Reject paper trades with market_price < 0.01 (1¢)
+- **Liquidity Check**: Paper fills at actual best ask/bid, capped at available depth
 
 ## Trump Module (Full Feature Set)
 - **5-Model Ensemble**: Linear Pace, Bayesian, DOW-Hourly, Historical, Hawkes
@@ -53,6 +56,11 @@
 - **Positions Table**: AVG->NOW prices, current market value, unrealized P&L
 - **Auction Selector**: Dropdown with Active/Past groups (replaced horizontal tabs)
 - **Current Value Card**: Shows market value (not cost basis) with unrealized P&L
+- **Module P&L Chart**: Cumulative P&L area chart with return %, max drawdown, trade count
+- **Bankroll Card**: Editable % of account, derived dollar amount
+- **Bracket Cap Card**: Editable % of bankroll, derived dollar amount
+- **Pacing Chart**: Actual vs expected vs projected lines (inside pacing table card)
+- **Layout System**: 3 standard widths (full/half/third) via CSS grid
 
 ## Historical Data Pipeline
 - **Post data**: CNN archive (32K+ posts, 2022-02 to present, hourly granularity)

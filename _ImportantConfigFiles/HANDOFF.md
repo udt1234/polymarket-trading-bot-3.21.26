@@ -1,30 +1,31 @@
 # PolyMarket Bot — Handoff
 
-## Current State (2026-04-13)
-Bot is LIVE and trading (paper mode). 6 open positions on Trump module, $286 invested. Elon module now has dynamic 30-bracket support. Dashboard significantly upgraded with decision logs, bot reasoning, module config UI, and redesigned metric cards.
+## Current State (2026-04-16)
+Bot is LIVE (paper mode). 6 open positions on Trump, $289 invested. Major session: dashboard layout overhaul, paper executor realism, auto-kill switch, Slack notifications wired up, order TTL sweep added.
 
-## What's Done This Session
-- **Signal generation unblocked**: Entry gate 0%, time decay floor 30%, Gamma bid/ask (not broken CLOB)
-- **Bot is trading**: 6 open positions, 50+ signals generated, spread check now uses real Gamma data
-- **Dynamic brackets**: Elon module shows all 30 brackets (was using Trump's 11)
-- **Dashboard**: Decision log section with module filter, auto-refresh 15s
-- **Module page**: Bot Reasoning blurb, Action History timeline, editable budget, ensemble weight overrides
-- **Metric cards redesigned**: Cost Basis, Current Value, Unrealized P&L, Realized P&L, Win Rate, Bankroll %, Edge Found, Spread Health
-- **Settings**: Per-module config (entry gate, kelly, stop loss, models, toggles), reset paper trades
-- **Layout**: Flex-wrap cards (max 540px), pacing table 2x wide (1104px)
-- **Past auctions**: Show "No bets" instead of "--"
+## What's Done This Session (9 commits)
+- **Bracket Cap card**: Editable % of bankroll with derived dollar amount
+- **Bankroll → %**: Editable % of account, dollar amount updates live
+- **Module P&L chart**: Cumulative P&L area chart with return %, max drawdown
+- **Layout standardization**: 3 width tiers (full/half/third) via CSS grid
+- **Pacing table**: Full-width, 60/40 split with pacing chart (actual/expected/projected)
+- **Paper executor realism**: Price floor (<1¢ rejected), liquidity check, fills at best ask/bid, partial fills
+- **Auto-kill switch**: Pauses module after 5 consecutive losses (togglable in Settings)
+- **Slippage tolerance**: Bumped 0.02 → 0.05
+- **Slack trade notifications**: Wired into engine cycle
+- **Order TTL sweep**: Cancels stale submitted/live orders after 5min
 
 ## What's Next
-1. **Monitor first trades** — bot has 6 open positions, watch P&L
-2. **Slippage tolerance** — consider bumping from 0.02 to 0.05 for more trades
-3. **Slack notifications** — webhook may be stale
-4. **Design polish** — continue layout improvements per user feedback
+1. **Set up Slack webhook** — add SLACK_WEBHOOK_URL env var on Railway (user will do manually)
+2. **Monitor fill quality** — check liquidity check rejection rate
+3. **Elon module test** — verify pacing chart renders with Elon data
+4. **Edge Found** — resurface in analysis section if wanted
 
 ## Key Config
 - Trump: e858d9ed-da0d-4e9a-8bef-2c2830686a5a (entry_gate=0)
 - Elon: cac300cb-5af2-4c25-a7df-3069478aefdb (entry_gate=0)
-- Spread tolerance: 0.02 (Risk settings)
-- Configs: `settings` table, key=`module_config:{id}`
+- Slippage: 0.05 | Auto-kill: 5 losses | Order TTL: 5min
+- Dashboard widths: full / 1/2 / 1/3 (CSS grid)
 
 ## URLs
 - Dashboard: polybot-dashboard.up.railway.app

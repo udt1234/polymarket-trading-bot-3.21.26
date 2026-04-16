@@ -54,6 +54,7 @@ class TradingEngine:
         self.scheduler.add_job(self._run_resolutions, "interval", minutes=30, max_instances=1)
         self.scheduler.add_job(self._run_auction_monitor, "interval", hours=1, max_instances=1)
         self.scheduler.add_job(self._run_order_ttl_sweep, "interval", minutes=5, max_instances=1)
+        self.scheduler.add_job(self._run_order_book_snapshot, "interval", minutes=5, max_instances=1)
         self.scheduler.start()
         self._running = True
         log.info(f"Engine started: interval={interval}s, paper={settings.paper_mode}, shadow={settings.shadow_mode}, multi={self._multi_mode}")
@@ -156,6 +157,51 @@ class TradingEngine:
             except Exception as e:
                 log.error(f"Module {module.name} error: {e}")
                 self._log_error(module.name, str(e))
+
+    def _run_order_book_snapshot(self):
+        try:
+            import asyncio as _asyncio
+            from api.modules.truth_social.data import fetch_order_books_for_brackets
+            sb = get_supabase()
+            modules = sb.table("modules").select("id,market_slug").in_("status", ["active", "paused"]).execute()
+            now = datetime.now(timezone.utc).isoformat()
+            total = 0
+            for m in modules.data or []:
+                slug = m.get("market_slug")
+                if not slug:
+                    continue
+                recent_signals = sb.table("signals").select("bracket").eq("module_id", m["id"]).order("created_at", desc=True).limit(50).execute()
+                brackets = list({s["bracket"] for s in (recent_signals.data or []) if s.get("bracket")})
+                if not brackets:
+                    continue
+                try:
+                    books = _asyncio.get_event_loop().run_until_complete(
+                        fetch_order_books_for_brackets(slug, brackets)
+                    )
+                except Exception as e:
+                    log.warning(f"Order book snapshot fetch failed for {slug}: {e}")
+                    continue
+                rows = []
+                for bracket, book in (books or {}).items():
+                    rows.append({
+                        "module_id": m["id"],
+                        "market_id": slug,
+                        "bracket": bracket,
+                        "best_bid": book.get("best_bid"),
+                        "best_ask": book.get("best_ask"),
+                        "spread": book.get("spread"),
+                        "bid_depth_5": book.get("bid_depth_5"),
+                        "ask_depth_5": book.get("ask_depth_5"),
+                        "midpoint": book.get("midpoint"),
+                        "snapshot_at": now,
+                    })
+                if rows:
+                    sb.table("order_book_snapshots").insert(rows).execute()
+                    total += len(rows)
+            if total:
+                log.info(f"Order book snapshot: captured {total} rows")
+        except Exception as e:
+            log.error(f"Order book snapshot error: {e}")
 
     def _run_order_ttl_sweep(self):
         ORDER_TTL_MINUTES = 5

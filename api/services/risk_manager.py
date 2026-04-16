@@ -24,6 +24,7 @@ class Signal:
     bid_depth_5: float = 0.0
     ask_depth_5: float = 0.0
     metadata: dict = field(default_factory=dict)
+    post_detected_at: str | None = None
 
 
 class RiskManager:
@@ -317,6 +318,7 @@ class RiskManager:
     def _log_rejection(self, signal: Signal, reason: str):
         try:
             sb = get_supabase()
+            now = datetime.now(timezone.utc).isoformat()
             sb.table("signals").insert({
                 "module_id": signal.module_id,
                 "market_id": signal.market_id,
@@ -329,6 +331,7 @@ class RiskManager:
                 "approved": False,
                 "rejection_reason": reason,
                 "metadata": signal.metadata if signal.metadata else {},
+                "post_detected_at": signal.post_detected_at or now,
             }).execute()
         except Exception:
             pass

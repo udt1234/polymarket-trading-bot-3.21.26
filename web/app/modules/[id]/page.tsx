@@ -8,9 +8,8 @@ import { formatCurrency, formatDate, formatDateShort, cn } from "@/lib/utils"
 import { StatusBadge } from "@/components/shared/status-badge"
 import {
   ChevronDown, ChevronUp, RefreshCw, Pause, Play, Power,
-  Save, Settings, TrendingUp, TrendingDown,
+  Save, Settings,
 } from "lucide-react"
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
 import { DailyPacingTable } from "./components/daily-pacing-table"
 import { DowHeatmap, HourlyHeatmap, PaceAcceleration, ConfidenceBands, EnsembleBreakdown } from "./components/pacing-analysis"
 import { PriceByDowHourHeatmap, PriceByElapsedDayHeatmap } from "./components/price-heatmaps"
@@ -18,6 +17,15 @@ import { PositionsTable } from "./components/positions-table"
 import { SignalsTable } from "./components/signals-table"
 import { TradeHistory } from "./components/trade-history"
 import { AuctionDeepDive } from "./components/auction-deep-dive"
+import { PnlCurve } from "./components/pnl-curve"
+import { PostTimingGrid } from "./components/post-timing-grid"
+import { PositionBreakdownChart } from "./components/position-breakdown-chart"
+import { KellyTrackerChart } from "./components/kelly-tracker-chart"
+import { PostFrequencyChart } from "./components/post-frequency-chart"
+import { PriceOverTimeChart } from "./components/price-over-time-chart"
+import { VolumePriceChart } from "./components/volume-price-chart"
+import { OrderBookDepthChart } from "./components/order-book-depth-chart"
+import { LatencyHistogramChart } from "./components/latency-histogram-chart"
 
 interface ModuleData {
   id: string
@@ -452,87 +460,13 @@ export default function ModuleDetailPage() {
         )}
       </div>
 
-      {/* Module P&L Chart */}
-      {(() => {
-        const allTrades = trades?.data || []
-        if (allTrades.length === 0 && closedPositions.length === 0) return null
-
-        const sortedTrades = [...allTrades].sort((a, b) => a.executed_at.localeCompare(b.executed_at))
-        let cumPnl = 0
-        let cumInvested = 0
-        let peak = 0
-        let maxDrawdown = 0
-        const chartData = sortedTrades.map((t) => {
-          cumInvested += t.size * t.price
-          const currentValue = openPositions
-            .filter((p) => p.bracket === t.bracket)
-            .reduce((s, p) => s + p.size * (pacing?.market_prices?.[p.bracket] ?? p.avg_price), 0)
-          const closedPnl = closedPositions
-            .filter((p) => p.bracket === t.bracket)
-            .reduce((s, p) => s + (p.realized_pnl || 0), 0)
-          cumPnl = closedPnl + (currentValue - cumInvested)
-          peak = Math.max(peak, cumPnl)
-          const dd = peak > 0 ? ((peak - cumPnl) / peak) * 100 : 0
-          maxDrawdown = Math.max(maxDrawdown, dd)
-          return {
-            date: new Date(t.executed_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-            pnl: parseFloat(cumPnl.toFixed(2)),
-            invested: parseFloat(cumInvested.toFixed(2)),
-          }
-        })
-
-        const totalReturn = cumInvested > 0 ? ((cumPnl / cumInvested) * 100).toFixed(1) : "0"
-        const isPositive = cumPnl >= 0
-
-        return (
-          <div className="rounded-lg border border-border bg-card p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold">Module P&L</h2>
-                <div className={cn("flex items-center gap-1 text-sm font-medium", isPositive ? "text-success" : "text-destructive")}>
-                  {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                  {isPositive ? "+" : ""}{totalReturn}%
-                </div>
-              </div>
-              <div className="flex gap-4 text-xs text-muted-foreground">
-                <span>Max Drawdown: <span className="font-medium text-amber-400">{maxDrawdown.toFixed(1)}%</span></span>
-                <span>Trades: <span className="font-medium text-foreground">{sortedTrades.length}</span></span>
-                <span>Invested: <span className="font-medium text-foreground">${Math.round(cumInvested)}</span></span>
-              </div>
-            </div>
-            {chartData.length > 1 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="modulePnlGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={isPositive ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={isPositive ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(215, 20%, 65%)" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => `$${v}`} />
-                  <ReferenceLine y={0} stroke="hsl(215, 20%, 35%)" strokeDasharray="3 3" />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }}
-                    formatter={(value: number) => [`$${value.toFixed(2)}`, "P&L"]}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="pnl"
-                    stroke={isPositive ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"}
-                    fill="url(#modulePnlGradient)"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-                More trades needed for chart
-              </div>
-            )}
-          </div>
-        )
-      })()}
+      {/* Module P&L Curve */}
+      <PnlCurve
+        trades={trades?.data || []}
+        openPositions={openPositions}
+        closedPositions={closedPositions}
+        marketPrices={pacing?.market_prices}
+      />
 
       {/* Summary Cards */}
       {(() => {
@@ -646,6 +580,44 @@ export default function ModuleDetailPage() {
                 {recentSignals.length > 0 ? `${approvedCount}/${recentSignals.length} passed` : "No data"}
               </p>
             </div>
+          </div>
+        )
+      })()}
+
+      {/* New Module Analytics Charts */}
+      {(() => {
+        const allSignals = (moduleSignals || []).map((s: any) => s.bracket).filter(Boolean)
+        const uniqueBrackets = [...new Set(allSignals)] as string[]
+        const hourlyData = (pacing?.hourly_counts || []).map((h: any) => ({
+          hour_label: h.hour_label || h.label || "",
+          count: h.count || 0,
+          price: pacing?.market_prices ? Object.values(pacing.market_prices)[0] as number : undefined,
+        }))
+        const timingData = (pacing?.dow_heatmap || []).flatMap((d: any, dow: number) =>
+          (pacing?.hourly_heatmap || []).map((h: any, hour: number) => ({
+            dow,
+            hour,
+            count: (d?.avg || 0) * (h?.avg || 0) / Math.max(1, (pacing?.dow_heatmap?.[0]?.avg || 1)),
+          }))
+        )
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <PositionBreakdownChart positions={[...openPositions, ...closedPositions]} />
+              <KellyTrackerChart moduleId={module.id} />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <VolumePriceChart moduleId={module.id} />
+              <OrderBookDepthChart moduleId={module.id} />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <LatencyHistogramChart moduleId={module.id} />
+              <PostTimingGrid data={timingData} />
+            </div>
+            <PostFrequencyChart hourlyData={hourlyData} />
+            {uniqueBrackets.length > 0 && (
+              <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} />
+            )}
           </div>
         )
       })()}
