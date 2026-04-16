@@ -25,7 +25,7 @@ Automated Polymarket trading bot deployed on Railway.
 
 ## Data Storage
 - Historical data pulls: `_DataMetricPulls/historical/{handle}/`
-- Scripts: `scripts/import_cnn_archive.py`, `scripts/fetch_historical_auctions.py`
+- Scripts: `scripts/fetch_historical_auctions.py`
 - Never commit large data files — add to .gitignore
 
 ## Non-Negotiable Rules

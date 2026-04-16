@@ -18,6 +18,7 @@ import { SignalsTable } from "./components/signals-table"
 import { TradeHistory } from "./components/trade-history"
 import { AuctionDeepDive } from "./components/auction-deep-dive"
 import { PnlCurve } from "./components/pnl-curve"
+import { LastAuctionsPnl } from "./components/last-auctions-pnl"
 import { PostTimingGrid } from "./components/post-timing-grid"
 import { PositionBreakdownChart } from "./components/position-breakdown-chart"
 import { KellyTrackerChart } from "./components/kelly-tracker-chart"
@@ -146,6 +147,7 @@ export default function ModuleDetailPage() {
     id ? `/api/modules/${id}/price-heatmaps` : null
   )
   const { data: riskSettings } = useApi<any>("/api/settings/risk")
+  const { data: cbState, refetch: refetchCbState } = useApi<{ tripped: boolean; consecutive_losses: number; cooldown_remaining_s: number }>("/api/settings/circuit-breaker", [], 15000)
   const { data: decisionLog } = useApi<any[]>(
     id ? `/api/dashboard/decision-log?module_id=${id}&limit=30` : null,
     [id], 30000
@@ -338,6 +340,34 @@ export default function ModuleDetailPage() {
         </div>
       </div>
 
+      {/* Circuit Breaker Banner */}
+      {cbState?.tripped && (
+        <div className="flex items-center justify-between rounded-lg border border-destructive bg-destructive/10 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-lg">🚨</span>
+            <div>
+              <p className="text-sm font-semibold text-destructive">Circuit Breaker Tripped</p>
+              <p className="text-xs text-muted-foreground">
+                {cbState.consecutive_losses} consecutive losses · Cooldown: {Math.ceil(cbState.cooldown_remaining_s / 60)}m remaining · All new trades blocked
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                await apiFetch("/api/settings/circuit-breaker/reset", { method: "POST" })
+                refetchCbState()
+              } catch (e) {
+                alert("Reset failed")
+              }
+            }}
+            className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90"
+          >
+            Reset Now
+          </button>
+        </div>
+      )}
+
       {/* Config Panel */}
       <div className="rounded-lg border border-border bg-card">
         <button
@@ -459,6 +489,9 @@ export default function ModuleDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Last 3 Auctions P&L */}
+      <LastAuctionsPnl auctions={auctions || []} walletAuctions={relevantAuctions} />
 
       {/* Module P&L Curve */}
       <PnlCurve
@@ -991,11 +1024,6 @@ export default function ModuleDetailPage() {
                 </div>
               )}
 
-              {dataSources.recent_signal_context.count_divergence?.has_edge && (
-                <div className="mt-1 text-xs text-yellow-400">
-                  Count divergence: xTracker={dataSources.recent_signal_context.count_divergence.xtracker} vs CNN={dataSources.recent_signal_context.count_divergence.cnn} (diff: {dataSources.recent_signal_context.count_divergence.diff > 0 ? "+" : ""}{dataSources.recent_signal_context.count_divergence.diff})
-                </div>
-              )}
 
               {dataSources.recent_signal_context.model_outputs && (
                 <div className="mt-2">

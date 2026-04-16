@@ -149,7 +149,6 @@ function TrumpModule() {
         <div className="space-y-2 text-xs">
           {[
             { src: "xTracker", desc: "Primary post counter. Resolution source for Polymarket. ~5-15 min lag.", badge: "Active" },
-            { src: "CNN Archive", desc: "ix.cnn.io — backup counter updated every 5 min. Cross-referenced for count divergence. Also used for historical hourly data import.", badge: "Active" },
             { src: "Factbase Schedule", desc: "media-cdn.factba.se — structured presidential schedule from WH Press Office + pool reports. Updates daily. Primary schedule source.", badge: "Active" },
             { src: "Google News RSS", desc: "4 queries: 'Trump', 'Trump Truth Social', 'Trump rally speech', 'Trump court trial'", badge: "Active" },
             { src: "LunarCrush", desc: "Engagement velocity + social dominance for @realDonaldTrump. Leading indicator of posting momentum.", badge: "Active" },
@@ -180,34 +179,7 @@ function TrumpModule() {
         </Callout>
       </Card>
 
-      <Card>
-        <h3 className="mb-3 text-base font-semibold">Count Verification</h3>
-        <Callout type="tip">
-          xTracker and CNN both count posts, but use slightly different rules. When they disagree by 2+ posts,
-          the bot logs it. If CNN sees more posts, it likely means xTracker hasn't caught up yet — you may
-          have an information edge on other traders who only watch xTracker.
-        </Callout>
-      </Card>
-
-      <Card>
-        <h3 className="mb-3 text-base font-semibold">Historical Data (CNN Archive Import)</h3>
-        <p className="mb-2 text-xs text-muted-foreground">
-          The CNN archive has millisecond-precision timestamps for every Trump Truth Social post.
-          Running the import script creates hourly posting patterns that the bot uses as its baseline.
-        </p>
-        <Callout type="important">
-          <strong>Run this to seed historical data:</strong><br/>
-          <code>python scripts/import_cnn_archive.py</code><br/><br/>
-          This creates hourly/daily/weekly aggregations + DOW and hour-of-day averages.
-          The bot automatically loads these cross-week hourly patterns instead of relying only on
-          current-week data from xTracker.
-        </Callout>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Available formats: JSON, CSV, and Parquet (script tries Parquet first — 10x faster download).
-        </p>
-      </Card>
-
-      <Card>
+<Card>
         <h3 className="mb-3 text-base font-semibold">Schedule Source Details</h3>
         <Callout type="info">
           <strong>Primary:</strong> Factbase (media-cdn.factba.se) — structured JSON from WH Press Office + pool reports. Updates daily at midnight ET.<br/><br/>
@@ -238,9 +210,6 @@ function ElonModule() {
           </div>
           <div className="rounded-md bg-accent/30 p-2">
             <strong className="text-foreground">Variable auction length.</strong> Some Elon markets are monthly (30 days), not weekly. Ensemble weights use percentages so they adapt automatically.
-          </div>
-          <div className="rounded-md bg-accent/30 p-2">
-            <strong className="text-foreground">No CNN archive.</strong> No free equivalent for X/Twitter. Count verification only via xTracker.
           </div>
         </div>
       </Card>
@@ -305,7 +274,6 @@ function DataSources() {
             <tbody>
               {[
                 { src: "xTracker API", purpose: "Post counts + tracking periods", lat: "~5-15 min", modules: "Both" },
-                { src: "CNN Archive", purpose: "Truth Social count verification", lat: "~5 min", modules: "Trump" },
                 { src: "Gamma API", purpose: "Prices, brackets, volume", lat: "~1 sec", modules: "Both" },
                 { src: "CLOB API", purpose: "Order book + execution", lat: "~1 sec", modules: "Both" },
                 { src: "Google News RSS", purpose: "4 queries: headlines + conflict + events", lat: "~2 sec", modules: "Both" },
@@ -373,12 +341,10 @@ function ChangelogTab() {
         {[
           { date: "2026-04-01 (Session 3)", items: [
             "Added WhiteHouse.gov + FEC schedule sources (planned)",
-            "Added CNN archive hourly data import into Trump module",
             "Added module-specific notes tabs (Trump + Elon)",
             "Added setup notes with env var requirements + weight references",
             "Added Polymarket volume data fetcher per bracket",
             "Added Google Trends momentum signal (15% weight)",
-            "Added CNN Truth Social archive for count verification",
             "Added cross-bracket arbitrage detection",
             "Added contrarian bracket signals",
             "Added order book depth sizing",

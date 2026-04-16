@@ -57,6 +57,19 @@ async def update_risk_settings(update: RiskSettingsUpdate):
     return data
 
 
+@router.get("/circuit-breaker")
+async def get_circuit_breaker_state():
+    from api.services.engine import engine
+    return engine.risk_manager.get_circuit_breaker_state()
+
+
+@router.post("/circuit-breaker/reset")
+async def reset_circuit_breaker():
+    from api.services.engine import engine
+    engine.risk_manager.reset_circuit_breaker()
+    return {"ok": True, "state": engine.risk_manager.get_circuit_breaker_state()}
+
+
 @router.get("/statistical-tests")
 async def get_statistical_tests():
     sb = get_supabase()

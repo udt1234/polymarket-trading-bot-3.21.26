@@ -19,6 +19,50 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   )
 }
 
+function CircuitBreakerStatus() {
+  const { data: cbState, refetch } = useApi<{ tripped: boolean; consecutive_losses: number; cooldown_remaining_s: number }>("/api/settings/circuit-breaker", [], 15000)
+  const [resetting, setResetting] = useState(false)
+
+  const handleReset = async () => {
+    setResetting(true)
+    try {
+      await apiFetch("/api/settings/circuit-breaker/reset", { method: "POST" })
+      refetch()
+    } catch (e) {
+      alert("Reset failed")
+    }
+    setResetting(false)
+  }
+
+  if (!cbState) return null
+  const mins = Math.ceil(cbState.cooldown_remaining_s / 60)
+
+  return (
+    <div className={`flex items-center justify-between rounded border px-3 py-2 ${cbState.tripped ? "border-destructive bg-destructive/10" : "border-border bg-muted/30"}`}>
+      <div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{cbState.tripped ? "🚨 Tripped" : "✅ OK"}</span>
+          <span className="text-xs text-muted-foreground">
+            {cbState.consecutive_losses} consecutive loss{cbState.consecutive_losses === 1 ? "" : "es"}
+          </span>
+        </div>
+        {cbState.tripped && cbState.cooldown_remaining_s > 0 && (
+          <p className="text-xs text-muted-foreground">Cooldown: {mins}m remaining</p>
+        )}
+      </div>
+      {cbState.tripped && (
+        <button
+          onClick={handleReset}
+          disabled={resetting}
+          className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+        >
+          {resetting ? "Resetting..." : "Reset Now"}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function RiskField({ label, fieldKey, value, type, risk, onSave }: {
   label: string; fieldKey: string; value: any; type: "dollar" | "percent" | "multiplier"; risk: any; onSave: (key: string, val: number) => void
 }) {
@@ -215,6 +259,7 @@ export default function SettingsPage() {
               <span className="text-sm">Circuit Breaker</span>
               <Toggle checked={risk?.circuit_breaker_enabled !== false} onChange={(v) => handleToggleMode("circuit_breaker_enabled", v)} />
             </div>
+            <CircuitBreakerStatus />
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-sm">Auto-Kill (Pause on Losses)</span>

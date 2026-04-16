@@ -27,7 +27,6 @@ from api.modules.truth_social.hawkes import hawkes_pace, fit_hawkes_params
 from api.modules.truth_social.news_classifier import classify_news_regime
 from api.modules.truth_social.schedule import fetch_presidential_schedule, compute_schedule_modifier
 from api.modules.truth_social.trends import fetch_google_trends, compute_trends_modifier
-from api.modules.truth_social.cnn_archive import fetch_cnn_truth_archive, compute_count_divergence
 from api.modules.truth_social.parquet_history import (
     PARQUET_CACHE_DIR, historical_price_pattern,
 )
@@ -105,7 +104,6 @@ class TruthSocialModule(BaseModule):
         lunar_creator = await fetch_creator_metrics("realDonaldTrump", network="x")
         schedule_events = await fetch_presidential_schedule()
         trends_data = await fetch_google_trends("Trump Truth Social")
-        cnn_data = await fetch_cnn_truth_archive()
 
         # Determine the auction window from the tracking (preserve full timestamp)
         week_start_str = tracking.get("startDate", "")
@@ -138,15 +136,6 @@ class TruthSocialModule(BaseModule):
                 running_total = 0
             self._log(sb, module_id, "decision", "info",
                       f"No hourly data; using aggregate total={running_total}")
-
-        # Cross-reference with CNN archive for count verification
-        count_divergence = None
-        if cnn_data.get("available") and cnn_data.get("count_week", 0) > 0:
-            count_divergence = compute_count_divergence(running_total, cnn_data["count_week"])
-            if count_divergence.get("has_edge"):
-                self._log(sb, module_id, "decision", "info",
-                          f"Count divergence: xTracker={running_total}, CNN={cnn_data['count_week']} "
-                          f"(diff={count_divergence['diff']:+d})")
 
         elapsed_days = compute_elapsed_days(week_start_str, now)
         remaining_days = max(total_days - elapsed_days, 0.01)
@@ -400,11 +389,6 @@ class TruthSocialModule(BaseModule):
                             "interactions": lunar_creator.get("interactions", 0),
                         },
                         "schedule": [e.get("event_type") for e in schedule_events[:3]] if schedule_events else [],
-                        "cnn_archive": {
-                            "count_week": cnn_data.get("count_week", 0),
-                            "available": cnn_data.get("available", False),
-                        },
-                        "count_divergence": count_divergence,
                     },
                 )
                 signals.append(signal)

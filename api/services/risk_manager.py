@@ -278,6 +278,22 @@ class RiskManager:
             return False, f"order size ${target_size:.2f} exceeds 30% of depth ${depth:.2f}"
         return True, ""
 
+    def reset_circuit_breaker(self):
+        self.circuit_breaker_tripped = False
+        self.consecutive_losses = 0
+        self._cooldown_until = 0
+        self._persist_state()
+        log.info("Circuit breaker MANUALLY RESET")
+
+    def get_circuit_breaker_state(self) -> dict:
+        remaining = max(0, int(self._cooldown_until - time.time())) if self.circuit_breaker_tripped else 0
+        return {
+            "tripped": self.circuit_breaker_tripped,
+            "consecutive_losses": self.consecutive_losses,
+            "cooldown_until": self._cooldown_until,
+            "cooldown_remaining_s": remaining,
+        }
+
     def record_loss(self, module_id: str | None = None):
         settings = get_settings()
         self.consecutive_losses += 1
@@ -285,6 +301,14 @@ class RiskManager:
             self.circuit_breaker_tripped = True
             self._cooldown_until = time.time() + settings.circuit_breaker_cooldown_minutes * 60
             log.warning(f"Circuit breaker TRIPPED after {self.consecutive_losses} consecutive losses")
+            try:
+                import asyncio as _asyncio
+                from api.services.notifications import notify_circuit_breaker
+                _asyncio.get_event_loop().run_until_complete(
+                    notify_circuit_breaker(self.consecutive_losses, settings.circuit_breaker_cooldown_minutes)
+                )
+            except Exception:
+                pass
         auto_kill_threshold = getattr(settings, "auto_kill_consecutive_losses", 0)
         if auto_kill_threshold > 0 and self.consecutive_losses >= auto_kill_threshold and module_id:
             self._auto_pause_module(module_id)
