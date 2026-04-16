@@ -587,7 +587,7 @@ export default function ModuleDetailPage() {
       {/* New Module Analytics Charts */}
       {(() => {
         const allSignals = (moduleSignals || []).map((s: any) => s.bracket).filter(Boolean)
-        const uniqueBrackets = [...new Set(allSignals)] as string[]
+        const uniqueBrackets = Array.from(new Set(allSignals)) as string[]
         const hourlyData = (pacing?.hourly_counts || []).map((h: any) => ({
           hour_label: h.hour_label || h.label || "",
           count: h.count || 0,
