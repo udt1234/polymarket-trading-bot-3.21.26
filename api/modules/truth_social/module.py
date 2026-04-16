@@ -294,7 +294,8 @@ class TruthSocialModule(BaseModule):
                       f"Arbitrage: {[f'{o['bracket']}({o['side']},{o['misallocation']:+.1%})' for o in arb_opps[:3]]}")
 
         # Fetch order books for top brackets (needed for spread + liquidity risk checks)
-        top_brackets_for_books = rank_brackets(bracket_probs, market_prices)
+        max_brackets = module_config.get("max_brackets_per_cycle", 5)
+        top_brackets_for_books = rank_brackets(bracket_probs, market_prices, top_n=max_brackets)
         top_bracket_names_for_books = [b["bracket"] for b in top_brackets_for_books]
         order_books = await fetch_order_books_for_brackets(slug, top_bracket_names_for_books)
 
@@ -316,8 +317,8 @@ class TruthSocialModule(BaseModule):
             log.info(f"Top bracket: {top_bracket['bracket']} ({top_bracket['probability']:.1%}), "
                      f"confidence={top_bracket.get('confidence', 0):.1%}")
 
-        # Smart bracket targeting: only trade top 3 brackets by score
-        top_brackets = rank_brackets(bracket_probs, market_prices)
+        # Smart bracket targeting: only trade top N brackets by score
+        top_brackets = rank_brackets(bracket_probs, market_prices, top_n=max_brackets)
         top_bracket_names = {b["bracket"] for b in top_brackets}
 
         elapsed_pct = min(elapsed_days / total_days, 1.0)
@@ -389,6 +390,7 @@ class TruthSocialModule(BaseModule):
                             "interactions": lunar_creator.get("interactions", 0),
                         },
                         "schedule": [e.get("event_type") for e in schedule_events[:3]] if schedule_events else [],
+                        "bracket_probs": {k: round(v, 4) for k, v in bracket_probs.items()},
                     },
                 )
                 signals.append(signal)

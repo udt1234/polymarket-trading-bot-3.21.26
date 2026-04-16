@@ -79,6 +79,7 @@ class RiskManager:
             self._check_portfolio_exposure,
             self._check_single_market_exposure,
             self._check_correlated_exposure,
+            self._check_negative_ev_aggregate,
             self._check_duplicate,
             self._check_cross_module_correlation,
             self._check_settlement_decay,
@@ -177,6 +178,52 @@ class RiskManager:
         except Exception as e:
             log.error(f"Correlated exposure check failed (fail-closed): {e}")
             return False, "correlated exposure check unavailable — DB error"
+        return True, ""
+
+    def _check_negative_ev_aggregate(self, signal: Signal, settings) -> tuple[bool, str]:
+        """
+        For mutually-exclusive bracket markets (Polymarket style), only one bracket wins and pays $1/share.
+        If we're already holding positions in other brackets in this market, the total EV of adding
+        this new signal must be positive.
+
+        EV = sum over brackets of [ P(bracket wins) × shares_in_bracket × $1 ] - total_cost
+        """
+        try:
+            sb = get_supabase()
+            existing = sb.table("positions").select("bracket,size,avg_price").eq("status", "open").eq("market_id", signal.market_id).eq("side", "BUY").execute()
+            positions = existing.data or []
+
+            by_bracket: dict = {}
+            for p in positions:
+                b = p["bracket"]
+                cost = (p.get("size") or 0) * (p.get("avg_price") or 0)
+                shares = p.get("size") or 0
+                prev = by_bracket.get(b, {"shares": 0, "cost": 0})
+                by_bracket[b] = {"shares": prev["shares"] + shares, "cost": prev["cost"] + cost}
+
+            new_shares = (signal.kelly_pct * settings.bankroll) / max(signal.market_price, 0.001)
+            new_cost = new_shares * signal.market_price
+
+            b = signal.bracket
+            prev = by_bracket.get(b, {"shares": 0, "cost": 0})
+            by_bracket[b] = {"shares": prev["shares"] + new_shares, "cost": prev["cost"] + new_cost}
+
+            total_cost = sum(x["cost"] for x in by_bracket.values())
+
+            probs = (signal.metadata or {}).get("bracket_probs", {}) if signal.metadata else {}
+            if not probs:
+                probs = {signal.bracket: signal.model_prob}
+
+            expected_payout = 0.0
+            for b, info in by_bracket.items():
+                p_win = float(probs.get(b, 0))
+                expected_payout += p_win * info["shares"]
+
+            ev = expected_payout - total_cost
+            if ev < 0:
+                return False, f"aggregate EV negative: payout ${expected_payout:.2f} < cost ${total_cost:.2f}"
+        except Exception as e:
+            log.error(f"Aggregate EV check failed (fail-open): {e}")
         return True, ""
 
     def _check_duplicate(self, signal: Signal, settings) -> tuple[bool, str]:

@@ -78,6 +78,7 @@ def rank_brackets(
     bracket_probs: dict[str, float],
     market_prices: dict[str, float],
     order_books: dict[str, float] | None = None,
+    top_n: int = 5,
 ) -> list[dict]:
     scored = []
     for bracket, model_prob in bracket_probs.items():
@@ -105,7 +106,7 @@ def rank_brackets(
         })
 
     scored.sort(key=lambda x: x["score"], reverse=True)
-    return scored[:3]
+    return scored[:top_n]
 
 
 def depth_adjusted_size(kelly_pct: float, order_book: dict, bankroll: float = 1000.0) -> float:

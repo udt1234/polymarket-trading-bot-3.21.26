@@ -209,7 +209,8 @@ class ElonTweetsModule(BaseModule):
         # Backtest result: DOW/signal modifiers hurt Elon — use regime+hawkes only
         bracket_probs = _dynamic_bracket_probabilities(model_outputs, weights, hist_std, combined_mod, dynamic_brackets)
 
-        top_brackets = rank_brackets(bracket_probs, market_prices)
+        max_brackets = mod_cfg.get("max_brackets_per_cycle", 5)
+        top_brackets = rank_brackets(bracket_probs, market_prices, top_n=max_brackets)
         top_bracket_names = [b["bracket"] for b in top_brackets]
         order_books = await fetch_order_books_for_brackets(slug, top_bracket_names)
 
@@ -265,6 +266,7 @@ class ElonTweetsModule(BaseModule):
                             "dominance": lunar_creator.get("social_dominance", 0),
                             "interactions": lunar_creator.get("interactions", 0),
                         },
+                        "bracket_probs": {k: round(v, 4) for k, v in bracket_probs.items()},
                     },
                 )
                 signals.append(signal)

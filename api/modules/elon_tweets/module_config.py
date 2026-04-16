@@ -17,6 +17,7 @@ DEFAULT_CONFIG = {
     "use_regime_modifier": True,
     "use_hawkes_modifier": True,
     "stop_loss_pct": 0.30,
+    "max_brackets_per_cycle": 5,
 }
 
 

@@ -15,6 +15,7 @@ DEFAULT_CONFIG = {
     "entry_gate_pct": 0.75,
     "use_signal_modifier": False,
     "stop_loss_pct": 0,
+    "max_brackets_per_cycle": 5,
 }
 
 
