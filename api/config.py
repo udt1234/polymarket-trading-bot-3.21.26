@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     weekly_loss_limit: float = 0.10
     max_drawdown: float = 0.15
     min_edge_threshold: float = 0.02
-    slippage_tolerance: float = 0.02
+    slippage_tolerance: float = 0.05
     kelly_fraction: float = 0.25
 
     # Circuit breaker

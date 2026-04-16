@@ -122,7 +122,7 @@ def _resolve_market(sb, market_id: str, positions: list[dict], risk_manager=None
             if pnl >= 0:
                 risk_manager.record_win()
             else:
-                risk_manager.record_loss()
+                risk_manager.record_loss(module_id=pos.get("module_id"))
 
     if module_id:
         _record_calibration(sb, module_id, market_id, final_prices, winning_bracket)

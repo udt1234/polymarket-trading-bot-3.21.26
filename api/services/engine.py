@@ -53,6 +53,7 @@ class TradingEngine:
         self.scheduler.add_job(self._run_walk_forward, "interval", hours=6, max_instances=1)
         self.scheduler.add_job(self._run_resolutions, "interval", minutes=30, max_instances=1)
         self.scheduler.add_job(self._run_auction_monitor, "interval", hours=1, max_instances=1)
+        self.scheduler.add_job(self._run_order_ttl_sweep, "interval", minutes=5, max_instances=1)
         self.scheduler.start()
         self._running = True
         log.info(f"Engine started: interval={interval}s, paper={settings.paper_mode}, shadow={settings.shadow_mode}, multi={self._multi_mode}")
@@ -134,16 +135,43 @@ class TradingEngine:
                     approved, reason = self.risk_manager.check(signal)
                     if approved:
                         result = self.executor.execute(signal)
+                        if result.get("status") == "rejected":
+                            log.info(f"Executor rejected: {result.get('reason')}")
+                            self._log_rejection(signal, result.get("reason", "executor_rejected"))
+                            continue
                         if self.shadow_executor:
                             self.shadow_executor.execute(signal)
 
                         self._log_execution(signal, result)
+                        try:
+                            from api.services.notifications import notify_trade_executed
+                            asyncio.get_event_loop().run_until_complete(
+                                notify_trade_executed(signal.side, signal.bracket, result.get("size", 0), result.get("price", 0), result.get("executor", "paper"))
+                            )
+                        except Exception:
+                            pass
                     else:
                         log.info(f"Signal rejected: {reason}")
                         self._log_rejection(signal, reason)
             except Exception as e:
                 log.error(f"Module {module.name} error: {e}")
                 self._log_error(module.name, str(e))
+
+    def _run_order_ttl_sweep(self):
+        ORDER_TTL_MINUTES = 5
+        try:
+            sb = get_supabase()
+            cutoff = datetime.now(timezone.utc).replace(microsecond=0)
+            from datetime import timedelta
+            cutoff = (cutoff - timedelta(minutes=ORDER_TTL_MINUTES)).isoformat()
+            stale = sb.table("orders").select("id").in_("status", ["submitted", "live"]).lt("created_at", cutoff).execute()
+            if stale.data:
+                ids = [o["id"] for o in stale.data]
+                for oid in ids:
+                    sb.table("orders").update({"status": "cancelled"}).eq("id", oid).execute()
+                log.info(f"Order TTL sweep: cancelled {len(ids)} stale orders older than {ORDER_TTL_MINUTES}min")
+        except Exception as e:
+            log.error(f"Order TTL sweep error: {e}")
 
     def _run_resolutions(self):
         try:
