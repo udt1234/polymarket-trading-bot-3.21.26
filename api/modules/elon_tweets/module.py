@@ -115,9 +115,9 @@ class ElonTweetsModule(BaseModule):
 
         mod_cfg = get_module_config(module_id)
 
-        entry_gate = mod_cfg.get("entry_gate_pct", 0.65)
+        entry_gate = mod_cfg.get("entry_gate_pct", 0.0)
         elapsed_pct_early = elapsed_days / total_days if total_days > 0 else 0
-        if elapsed_pct_early < entry_gate:
+        if entry_gate > 0 and elapsed_pct_early < entry_gate:
             self._log(sb, module_id, "decision", "info",
                       f"Entry gate: {elapsed_pct_early:.1%} < {entry_gate:.0%} — waiting")
             return []

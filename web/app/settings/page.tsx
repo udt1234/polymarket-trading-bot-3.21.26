@@ -215,11 +215,14 @@ export default function SettingsPage() {
   const profiles = profileData?.profiles || []
 
   const moduleConfigFields = [
-    { label: "Entry Gate", key: "entry_gate_pct", type: "percent" as const, help: "Wait until this % of auction elapsed before trading" },
+    { label: "Entry Gate", key: "entry_gate_pct", type: "percent" as const, help: "Wait until this % of auction elapsed (0% = trade immediately)" },
     { label: "Kelly Fraction", key: "kelly_fraction_override", type: "multiplier" as const, help: "Fractional Kelly multiplier (0.25 = quarter Kelly)" },
     { label: "Stop Loss", key: "stop_loss_pct", type: "percent" as const, help: "Auto-exit positions losing more than this %" },
     { label: "Recency Half-Life", key: "recency_half_life", type: "multiplier" as const, help: "Weeks for historical data weighting" },
     { label: "Top Brackets", key: "confidence_band_top_n", type: "multiplier" as const, help: "Number of best brackets to trade" },
+    { label: "Max Brackets/Cycle", key: "max_brackets_per_cycle", type: "multiplier" as const, help: "Max brackets bot can buy per cycle (1-10)" },
+    { label: "Wait Min Drop %", key: "wait_min_drop_threshold", type: "percent" as const, help: "Min historical drop to trigger wait (5% = conservative)" },
+    { label: "Wait Max Days", key: "wait_max_days", type: "multiplier" as const, help: "Max days to wait for a dip before buying" },
   ]
 
   return (
@@ -447,6 +450,10 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Regime-Conditional DOW</span>
                 <Toggle checked={mod.config?.use_regime_conditional !== false} onChange={(v) => handleModuleConfigSave(mod.module_id, "use_regime_conditional", v)} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Wait for Price Dip</span>
+                <Toggle checked={mod.config?.wait_for_dip_enabled !== false} onChange={(v) => handleModuleConfigSave(mod.module_id, "wait_for_dip_enabled", v)} />
               </div>
               <div className="mt-2 pt-2 border-t border-border">
                 <span className="text-xs text-muted-foreground">

@@ -12,12 +12,15 @@ DEFAULT_CONFIG = {
     "dow_weights_source": "recency",
     "enabled_models": ["pace", "bayesian", "dow", "historical", "hawkes"],
     "strategy_preset": "full",
-    "entry_gate_pct": 0.65,
+    "entry_gate_pct": 0.0,
     "use_signal_modifier": False,
     "use_regime_modifier": True,
     "use_hawkes_modifier": True,
     "stop_loss_pct": 0.30,
     "max_brackets_per_cycle": 5,
+    "wait_for_dip_enabled": True,
+    "wait_min_drop_threshold": 0.05,
+    "wait_max_days": 3.0,
 }
 
 

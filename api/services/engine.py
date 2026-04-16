@@ -128,11 +128,14 @@ class TradingEngine:
 
         self._sync_risk_state()
         self._run_exits()
+        self._process_pending_signals()
 
         for module in self.registry.active_modules():
             try:
                 signals = module.evaluate()
                 for signal in signals:
+                    if self._maybe_defer_signal(module, signal):
+                        continue
                     approved, reason = self.risk_manager.check(signal)
                     if approved:
                         result = self.executor.execute(signal)
@@ -157,6 +160,164 @@ class TradingEngine:
             except Exception as e:
                 log.error(f"Module {module.name} error: {e}")
                 self._log_error(module.name, str(e))
+
+    def _maybe_defer_signal(self, module, signal) -> bool:
+        """Check if signal should be deferred based on historical price patterns."""
+        try:
+            from api.modules.shared.price_timing import should_defer_signal
+            mod_cfg = self._get_module_cfg(module, signal.module_id)
+            if not mod_cfg.get("wait_for_dip_enabled", False):
+                return False
+            meta = signal.metadata or {}
+            elapsed_days = float(meta.get("elapsed_days", 0) or 0)
+            total_days = float(meta.get("total_days", 7) or 7)
+            if total_days <= 0:
+                return False
+            elapsed_hours = elapsed_days * 24.0
+            total_hours = total_days * 24.0
+            now = datetime.now(timezone.utc)
+            defer = should_defer_signal(
+                module_id=signal.module_id,
+                bracket=signal.bracket,
+                current_price=signal.market_price,
+                elapsed_hours=elapsed_hours,
+                total_hours=total_hours,
+                dow=now.weekday(),
+                hour_of_day=now.hour,
+                slug=signal.market_id,
+                min_drop_threshold=float(mod_cfg.get("wait_min_drop_threshold", 0.05)),
+                max_wait_days=float(mod_cfg.get("wait_max_days", 3.0)),
+            )
+            if not defer:
+                return False
+            self._insert_pending_signal(signal, defer)
+            log.info(f"Deferred {signal.side} {signal.bracket}: expected {defer['expected_drop_pct']*100:.1f}% drop in {defer['wait_hours']}h, target={defer['target_price']}")
+            return True
+        except Exception as e:
+            log.error(f"Defer check failed for {signal.bracket}: {e}")
+            return False
+
+    def _get_module_cfg(self, module, module_id: str) -> dict:
+        try:
+            name = getattr(module, "name", "").lower()
+            if "trump" in name or "truth" in name:
+                from api.modules.truth_social.module_config import get_module_config
+                return get_module_config(module_id)
+            if "elon" in name:
+                from api.modules.elon_tweets.module_config import get_module_config as get_elon_cfg
+                return get_elon_cfg(module_id)
+        except Exception:
+            pass
+        return {}
+
+    def _insert_pending_signal(self, signal, defer: dict):
+        try:
+            sb = get_supabase()
+            sb.table("pending_signals").insert({
+                "module_id": signal.module_id,
+                "market_id": signal.market_id,
+                "bracket": signal.bracket,
+                "side": signal.side,
+                "original_price": signal.market_price,
+                "target_price": defer["target_price"],
+                "wait_until": defer["wait_until"],
+                "abandon_if_price_above": defer["abandon_price"],
+                "model_prob": signal.model_prob,
+                "original_kelly_pct": signal.kelly_pct,
+                "expected_drop_pct": defer["expected_drop_pct"],
+                "analog_count": defer["analog_count"],
+                "signal_metadata": signal.metadata or {},
+                "status": "waiting",
+            }).execute()
+        except Exception as e:
+            log.error(f"Failed to insert pending signal: {e}")
+
+    def _process_pending_signals(self):
+        """Check all waiting pending signals; execute, abandon, or keep waiting."""
+        try:
+            sb = get_supabase()
+            res = sb.table("pending_signals").select("*").eq("status", "waiting").execute()
+            pending = res.data or []
+            if not pending:
+                return
+
+            from api.modules.truth_social.data import fetch_market_prices
+            from api.services.risk_manager import Signal
+
+            now = datetime.now(timezone.utc)
+            prices_cache: dict = {}
+
+            for p in pending:
+                slug = p.get("market_id")
+                bracket = p.get("bracket")
+                target = float(p.get("target_price") or 0)
+                abandon = float(p.get("abandon_if_price_above") or 1)
+                wait_until_str = p.get("wait_until") or ""
+                try:
+                    wait_until = datetime.fromisoformat(wait_until_str.replace("Z", "+00:00"))
+                except Exception:
+                    wait_until = now
+
+                if slug not in prices_cache:
+                    try:
+                        prices_cache[slug] = asyncio.get_event_loop().run_until_complete(
+                            fetch_market_prices(slug)
+                        )
+                    except Exception as e:
+                        log.warning(f"Failed to fetch prices for pending signal on {slug}: {e}")
+                        continue
+                prices = prices_cache.get(slug) or {}
+                current_price = float(prices.get(bracket, 0) or 0)
+                if current_price <= 0 or current_price >= 1:
+                    continue
+
+                if current_price >= abandon:
+                    sb.table("pending_signals").update({
+                        "status": "abandoned",
+                        "resolved_at": now.isoformat(),
+                    }).eq("id", p["id"]).execute()
+                    log.info(f"Pending signal abandoned: {bracket} surged to {current_price:.4f} >= {abandon:.4f}")
+                    continue
+
+                price_hit_target = current_price <= target
+                wait_expired = now >= wait_until
+
+                if not price_hit_target and not wait_expired:
+                    continue
+
+                sig = Signal(
+                    module_id=p["module_id"],
+                    market_id=slug,
+                    bracket=bracket,
+                    side=p.get("side", "BUY"),
+                    edge=float(p.get("model_prob") or 0) - current_price,
+                    model_prob=float(p.get("model_prob") or 0),
+                    market_price=current_price,
+                    kelly_pct=float(p.get("original_kelly_pct") or 0),
+                    metadata=p.get("signal_metadata") or {},
+                )
+                approved, reason = self.risk_manager.check(sig)
+                new_status = "executed" if approved else "rejected_on_unlock"
+                if approved:
+                    try:
+                        result = self.executor.execute(sig)
+                        if result.get("status") == "rejected":
+                            new_status = "rejected_on_unlock"
+                        else:
+                            self._log_execution(sig, result)
+                            log.info(f"Pending signal executed: {bracket} @ {current_price:.4f} (reason: {'target_hit' if price_hit_target else 'expired'})")
+                    except Exception as e:
+                        log.error(f"Pending execution failed: {e}")
+                        new_status = "rejected_on_unlock"
+                else:
+                    log.info(f"Pending signal rejected on unlock: {reason}")
+
+                sb.table("pending_signals").update({
+                    "status": new_status,
+                    "resolved_at": now.isoformat(),
+                }).eq("id", p["id"]).execute()
+        except Exception as e:
+            log.error(f"Pending signals processor error: {e}")
 
     def _run_order_book_snapshot(self):
         try:

@@ -19,6 +19,7 @@ import { TradeHistory } from "./components/trade-history"
 import { AuctionDeepDive } from "./components/auction-deep-dive"
 import { PnlCurve } from "./components/pnl-curve"
 import { LastAuctionsPnl } from "./components/last-auctions-pnl"
+import { PendingSignalsCard } from "./components/pending-signals-card"
 import { PostTimingGrid } from "./components/post-timing-grid"
 import { PositionBreakdownChart } from "./components/position-breakdown-chart"
 import { KellyTrackerChart } from "./components/kelly-tracker-chart"
@@ -489,6 +490,9 @@ export default function ModuleDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Pending Signals */}
+      <PendingSignalsCard moduleId={module.id} />
 
       {/* Last 3 Auctions P&L */}
       <LastAuctionsPnl auctions={auctions || []} walletAuctions={relevantAuctions} />

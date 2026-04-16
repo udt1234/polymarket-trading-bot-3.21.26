@@ -876,6 +876,21 @@ async def latency_histogram(module_id: str):
     }
 
 
+@router.get("/{module_id}/pending-signals")
+async def get_pending_signals(module_id: str, status: str = "waiting"):
+    sb = get_supabase()
+    res = sb.table("pending_signals").select("*").eq("module_id", module_id).eq("status", status).order("created_at", desc=True).limit(50).execute()
+    return {"rows": res.data or []}
+
+
+@router.delete("/{module_id}/pending-signals/{pending_id}")
+async def cancel_pending_signal(module_id: str, pending_id: str):
+    sb = get_supabase()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    sb.table("pending_signals").update({"status": "cancelled", "resolved_at": now_iso}).eq("id", pending_id).eq("module_id", module_id).execute()
+    return {"ok": True}
+
+
 @router.get("/{module_id}/order-book-depth")
 async def order_book_depth(module_id: str, bracket: str | None = None):
     sb = get_supabase()
