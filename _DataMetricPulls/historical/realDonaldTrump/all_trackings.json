@@ -1,17 +1,17 @@
 [
   {
-    "id": "5bbf11f3-3970-4fd1-8704-1be33e781109",
+    "id": "9656a672-3ca0-4bc2-8dd2-6cec79d52dfd",
     "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
-    "title": "Donald Trump # Truth Social posts April 3 - April 10, 2026?",
-    "startDate": "2026-04-03T16:00:00.000Z",
-    "endDate": "2026-04-10T15:59:59.000Z",
+    "title": "Donald Trump # Truth Social posts April 24 - May 1, 2026?",
+    "startDate": "2026-04-24T16:00:00.000Z",
+    "endDate": "2026-05-01T15:59:59.000Z",
     "target": null,
-    "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-3-april-10",
+    "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-24-may-1",
     "isActive": true,
     "metrics": {},
     "config": {},
-    "createdAt": "2026-03-31T04:00:03.069Z",
-    "updatedAt": "2026-03-31T04:00:03.069Z",
+    "createdAt": "2026-04-21T04:00:04.214Z",
+    "updatedAt": "2026-04-21T04:00:04.214Z",
     "user": {
       "id": "d178fa75-3e53-4aae-a826-2128ba91823f",
       "handle": "realDonaldTrump",
@@ -21,21 +21,4986 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:19.078Z",
+      "lastSync": "2026-04-24T23:25:47.599Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:19.079Z"
+      "updatedAt": "2026-04-24T23:25:47.600Z"
     },
     "stats": {
-      "total": 0,
-      "cumulative": 0,
-      "pace": 0,
-      "percentComplete": 0,
-      "daysElapsed": 0,
-      "daysRemaining": 9,
+      "total": 6,
+      "cumulative": 6,
+      "pace": 42,
+      "percentComplete": 14,
+      "daysElapsed": 1,
+      "daysRemaining": 7,
       "daysTotal": 7,
       "isComplete": false,
-      "daily": []
+      "daily": [
+        {
+          "date": "2026-04-24T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-24T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-24T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-24T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 1
+        },
+        {
+          "date": "2026-04-24T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 1
+        },
+        {
+          "date": "2026-04-24T21:00:00.000Z",
+          "count": 4,
+          "cumulative": 5
+        },
+        {
+          "date": "2026-04-24T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-24T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 6
+        }
+      ]
+    },
+    "_tracking": {
+      "id": "9656a672-3ca0-4bc2-8dd2-6cec79d52dfd",
+      "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "title": "Donald Trump # Truth Social posts April 24 - May 1, 2026?",
+      "startDate": "2026-04-24T16:00:00.000Z",
+      "endDate": "2026-05-01T15:59:59.000Z",
+      "target": null,
+      "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-24-may-1",
+      "isActive": true,
+      "metrics": {},
+      "config": {},
+      "createdAt": "2026-04-21T04:00:04.214Z",
+      "updatedAt": "2026-04-21T04:00:04.214Z"
+    }
+  },
+  {
+    "id": "638cf12c-01c4-4671-a81d-e80a552e4b70",
+    "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+    "title": "Donald Trump # Truth Social posts April 21 - April 28, 2026?",
+    "startDate": "2026-04-21T16:00:00.000Z",
+    "endDate": "2026-04-28T15:59:59.000Z",
+    "target": null,
+    "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-21-april-28",
+    "isActive": true,
+    "metrics": {},
+    "config": {},
+    "createdAt": "2026-04-18T04:00:03.594Z",
+    "updatedAt": "2026-04-18T04:00:03.594Z",
+    "user": {
+      "id": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "handle": "realDonaldTrump",
+      "name": "Donald J. Trump",
+      "platform": "TRUTH_SOCIAL",
+      "platformId": "107780257626128497",
+      "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
+      "bio": "<p></p>",
+      "verified": true,
+      "lastSync": "2026-04-24T23:25:47.599Z",
+      "lastSyncError": null,
+      "createdAt": "2026-01-21T16:44:31.437Z",
+      "updatedAt": "2026-04-24T23:25:47.600Z"
+    },
+    "stats": {
+      "total": 89,
+      "cumulative": 89,
+      "pace": 156,
+      "percentComplete": 57,
+      "daysElapsed": 4,
+      "daysRemaining": 4,
+      "daysTotal": 7,
+      "isComplete": false,
+      "daily": [
+        {
+          "date": "2026-04-21T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 2
+        },
+        {
+          "date": "2026-04-21T17:00:00.000Z",
+          "count": 1,
+          "cumulative": 3
+        },
+        {
+          "date": "2026-04-21T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 3
+        },
+        {
+          "date": "2026-04-21T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 3
+        },
+        {
+          "date": "2026-04-21T20:00:00.000Z",
+          "count": 1,
+          "cumulative": 4
+        },
+        {
+          "date": "2026-04-21T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 4
+        },
+        {
+          "date": "2026-04-21T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 5
+        },
+        {
+          "date": "2026-04-21T23:00:00.000Z",
+          "count": 2,
+          "cumulative": 7
+        },
+        {
+          "date": "2026-04-22T00:00:00.000Z",
+          "count": 1,
+          "cumulative": 8
+        },
+        {
+          "date": "2026-04-22T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 8
+        },
+        {
+          "date": "2026-04-22T02:00:00.000Z",
+          "count": 1,
+          "cumulative": 9
+        },
+        {
+          "date": "2026-04-22T03:00:00.000Z",
+          "count": 11,
+          "cumulative": 20
+        },
+        {
+          "date": "2026-04-22T04:00:00.000Z",
+          "count": 2,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-22T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-22T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-22T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-22T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-22T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-22T10:00:00.000Z",
+          "count": 4,
+          "cumulative": 26
+        },
+        {
+          "date": "2026-04-22T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 26
+        },
+        {
+          "date": "2026-04-22T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 26
+        },
+        {
+          "date": "2026-04-22T13:00:00.000Z",
+          "count": 1,
+          "cumulative": 27
+        },
+        {
+          "date": "2026-04-22T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 27
+        },
+        {
+          "date": "2026-04-22T15:00:00.000Z",
+          "count": 4,
+          "cumulative": 31
+        },
+        {
+          "date": "2026-04-22T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 31
+        },
+        {
+          "date": "2026-04-22T17:00:00.000Z",
+          "count": 3,
+          "cumulative": 34
+        },
+        {
+          "date": "2026-04-22T18:00:00.000Z",
+          "count": 4,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-22T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 39
+        },
+        {
+          "date": "2026-04-22T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 39
+        },
+        {
+          "date": "2026-04-22T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-22T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-22T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-23T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-23T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-23T02:00:00.000Z",
+          "count": 4,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-23T03:00:00.000Z",
+          "count": 3,
+          "cumulative": 48
+        },
+        {
+          "date": "2026-04-23T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 48
+        },
+        {
+          "date": "2026-04-23T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 48
+        },
+        {
+          "date": "2026-04-23T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 48
+        },
+        {
+          "date": "2026-04-23T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 48
+        },
+        {
+          "date": "2026-04-23T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 48
+        },
+        {
+          "date": "2026-04-23T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 48
+        },
+        {
+          "date": "2026-04-23T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 48
+        },
+        {
+          "date": "2026-04-23T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 48
+        },
+        {
+          "date": "2026-04-23T12:00:00.000Z",
+          "count": 3,
+          "cumulative": 51
+        },
+        {
+          "date": "2026-04-23T13:00:00.000Z",
+          "count": 2,
+          "cumulative": 53
+        },
+        {
+          "date": "2026-04-23T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 54
+        },
+        {
+          "date": "2026-04-23T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 54
+        },
+        {
+          "date": "2026-04-23T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 56
+        },
+        {
+          "date": "2026-04-23T17:00:00.000Z",
+          "count": 1,
+          "cumulative": 57
+        },
+        {
+          "date": "2026-04-23T18:00:00.000Z",
+          "count": 1,
+          "cumulative": 58
+        },
+        {
+          "date": "2026-04-23T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-23T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-23T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 60
+        },
+        {
+          "date": "2026-04-23T22:00:00.000Z",
+          "count": 3,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-23T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-24T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-24T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-24T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-24T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-24T04:00:00.000Z",
+          "count": 12,
+          "cumulative": 75
+        },
+        {
+          "date": "2026-04-24T05:00:00.000Z",
+          "count": 1,
+          "cumulative": 76
+        },
+        {
+          "date": "2026-04-24T06:00:00.000Z",
+          "count": 5,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-24T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-24T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-24T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-24T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-24T11:00:00.000Z",
+          "count": 2,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-24T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-24T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-24T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-24T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-24T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-24T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-24T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-24T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-24T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-24T21:00:00.000Z",
+          "count": 4,
+          "cumulative": 88
+        },
+        {
+          "date": "2026-04-24T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-24T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        }
+      ]
+    },
+    "_tracking": {
+      "id": "638cf12c-01c4-4671-a81d-e80a552e4b70",
+      "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "title": "Donald Trump # Truth Social posts April 21 - April 28, 2026?",
+      "startDate": "2026-04-21T16:00:00.000Z",
+      "endDate": "2026-04-28T15:59:59.000Z",
+      "target": null,
+      "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-21-april-28",
+      "isActive": true,
+      "metrics": {},
+      "config": {},
+      "createdAt": "2026-04-18T04:00:03.594Z",
+      "updatedAt": "2026-04-18T04:00:03.594Z"
+    }
+  },
+  {
+    "id": "81b5e3f5-bab4-44c9-b27f-4441573a44bd",
+    "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+    "title": "Donald Trump # Truth Social posts April 17 - April 24, 2026?",
+    "startDate": "2026-04-17T16:00:00.000Z",
+    "endDate": "2026-04-24T15:59:59.000Z",
+    "target": null,
+    "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-17-april-24",
+    "isActive": false,
+    "metrics": {},
+    "config": {},
+    "createdAt": "2026-04-14T04:00:02.922Z",
+    "updatedAt": "2026-04-24T16:00:08.301Z",
+    "user": {
+      "id": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "handle": "realDonaldTrump",
+      "name": "Donald J. Trump",
+      "platform": "TRUTH_SOCIAL",
+      "platformId": "107780257626128497",
+      "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
+      "bio": "<p></p>",
+      "verified": true,
+      "lastSync": "2026-04-24T23:25:47.599Z",
+      "lastSyncError": null,
+      "createdAt": "2026-01-21T16:44:31.437Z",
+      "updatedAt": "2026-04-24T23:25:47.600Z"
+    },
+    "stats": {
+      "total": 198,
+      "cumulative": 198,
+      "pace": 198,
+      "percentComplete": 100,
+      "daysElapsed": 7,
+      "daysRemaining": 0,
+      "daysTotal": 7,
+      "isComplete": true,
+      "daily": [
+        {
+          "date": "2026-04-17T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-17T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-17T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-17T19:00:00.000Z",
+          "count": 10,
+          "cumulative": 10
+        },
+        {
+          "date": "2026-04-17T20:00:00.000Z",
+          "count": 1,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-17T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-17T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-17T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-18T00:00:00.000Z",
+          "count": 1,
+          "cumulative": 12
+        },
+        {
+          "date": "2026-04-18T01:00:00.000Z",
+          "count": 6,
+          "cumulative": 18
+        },
+        {
+          "date": "2026-04-18T02:00:00.000Z",
+          "count": 5,
+          "cumulative": 23
+        },
+        {
+          "date": "2026-04-18T03:00:00.000Z",
+          "count": 1,
+          "cumulative": 24
+        },
+        {
+          "date": "2026-04-18T04:00:00.000Z",
+          "count": 6,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-18T05:00:00.000Z",
+          "count": 8,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-18T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-18T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-18T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-18T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-18T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-18T11:00:00.000Z",
+          "count": 2,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-18T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-18T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-18T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-18T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-18T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-18T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-18T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-18T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-18T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-18T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-18T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-18T23:00:00.000Z",
+          "count": 9,
+          "cumulative": 50
+        },
+        {
+          "date": "2026-04-19T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 50
+        },
+        {
+          "date": "2026-04-19T01:00:00.000Z",
+          "count": 31,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-19T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-19T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-19T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-19T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-19T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-19T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-19T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-19T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-19T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-19T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-19T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 82
+        },
+        {
+          "date": "2026-04-19T13:00:00.000Z",
+          "count": 1,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-19T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-19T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-19T16:00:00.000Z",
+          "count": 1,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-19T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-19T18:00:00.000Z",
+          "count": 4,
+          "cumulative": 88
+        },
+        {
+          "date": "2026-04-19T19:00:00.000Z",
+          "count": 4,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-19T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-19T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-19T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-19T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 93
+        },
+        {
+          "date": "2026-04-20T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 93
+        },
+        {
+          "date": "2026-04-20T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 93
+        },
+        {
+          "date": "2026-04-20T02:00:00.000Z",
+          "count": 2,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-20T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-20T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-20T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-20T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-20T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-20T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-20T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-20T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-20T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 96
+        },
+        {
+          "date": "2026-04-20T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 96
+        },
+        {
+          "date": "2026-04-20T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 96
+        },
+        {
+          "date": "2026-04-20T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 97
+        },
+        {
+          "date": "2026-04-20T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 97
+        },
+        {
+          "date": "2026-04-20T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 97
+        },
+        {
+          "date": "2026-04-20T17:00:00.000Z",
+          "count": 2,
+          "cumulative": 99
+        },
+        {
+          "date": "2026-04-20T18:00:00.000Z",
+          "count": 2,
+          "cumulative": 101
+        },
+        {
+          "date": "2026-04-20T19:00:00.000Z",
+          "count": 3,
+          "cumulative": 104
+        },
+        {
+          "date": "2026-04-20T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 104
+        },
+        {
+          "date": "2026-04-20T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 104
+        },
+        {
+          "date": "2026-04-20T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 104
+        },
+        {
+          "date": "2026-04-20T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 104
+        },
+        {
+          "date": "2026-04-21T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 104
+        },
+        {
+          "date": "2026-04-21T01:00:00.000Z",
+          "count": 4,
+          "cumulative": 108
+        },
+        {
+          "date": "2026-04-21T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 108
+        },
+        {
+          "date": "2026-04-21T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 110
+        },
+        {
+          "date": "2026-04-21T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 110
+        },
+        {
+          "date": "2026-04-21T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 110
+        },
+        {
+          "date": "2026-04-21T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 110
+        },
+        {
+          "date": "2026-04-21T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 110
+        },
+        {
+          "date": "2026-04-21T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 110
+        },
+        {
+          "date": "2026-04-21T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 110
+        },
+        {
+          "date": "2026-04-21T10:00:00.000Z",
+          "count": 2,
+          "cumulative": 112
+        },
+        {
+          "date": "2026-04-21T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 113
+        },
+        {
+          "date": "2026-04-21T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 113
+        },
+        {
+          "date": "2026-04-21T13:00:00.000Z",
+          "count": 2,
+          "cumulative": 115
+        },
+        {
+          "date": "2026-04-21T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 115
+        },
+        {
+          "date": "2026-04-21T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 115
+        },
+        {
+          "date": "2026-04-21T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 117
+        },
+        {
+          "date": "2026-04-21T17:00:00.000Z",
+          "count": 1,
+          "cumulative": 118
+        },
+        {
+          "date": "2026-04-21T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 118
+        },
+        {
+          "date": "2026-04-21T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 118
+        },
+        {
+          "date": "2026-04-21T20:00:00.000Z",
+          "count": 1,
+          "cumulative": 119
+        },
+        {
+          "date": "2026-04-21T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 119
+        },
+        {
+          "date": "2026-04-21T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 120
+        },
+        {
+          "date": "2026-04-21T23:00:00.000Z",
+          "count": 2,
+          "cumulative": 122
+        },
+        {
+          "date": "2026-04-22T00:00:00.000Z",
+          "count": 1,
+          "cumulative": 123
+        },
+        {
+          "date": "2026-04-22T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 123
+        },
+        {
+          "date": "2026-04-22T02:00:00.000Z",
+          "count": 1,
+          "cumulative": 124
+        },
+        {
+          "date": "2026-04-22T03:00:00.000Z",
+          "count": 11,
+          "cumulative": 135
+        },
+        {
+          "date": "2026-04-22T04:00:00.000Z",
+          "count": 2,
+          "cumulative": 137
+        },
+        {
+          "date": "2026-04-22T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 137
+        },
+        {
+          "date": "2026-04-22T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 137
+        },
+        {
+          "date": "2026-04-22T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 137
+        },
+        {
+          "date": "2026-04-22T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 137
+        },
+        {
+          "date": "2026-04-22T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 137
+        },
+        {
+          "date": "2026-04-22T10:00:00.000Z",
+          "count": 4,
+          "cumulative": 141
+        },
+        {
+          "date": "2026-04-22T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 141
+        },
+        {
+          "date": "2026-04-22T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 141
+        },
+        {
+          "date": "2026-04-22T13:00:00.000Z",
+          "count": 1,
+          "cumulative": 142
+        },
+        {
+          "date": "2026-04-22T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 142
+        },
+        {
+          "date": "2026-04-22T15:00:00.000Z",
+          "count": 4,
+          "cumulative": 146
+        },
+        {
+          "date": "2026-04-22T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 146
+        },
+        {
+          "date": "2026-04-22T17:00:00.000Z",
+          "count": 3,
+          "cumulative": 149
+        },
+        {
+          "date": "2026-04-22T18:00:00.000Z",
+          "count": 4,
+          "cumulative": 153
+        },
+        {
+          "date": "2026-04-22T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 154
+        },
+        {
+          "date": "2026-04-22T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 154
+        },
+        {
+          "date": "2026-04-22T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 155
+        },
+        {
+          "date": "2026-04-22T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 156
+        },
+        {
+          "date": "2026-04-22T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 156
+        },
+        {
+          "date": "2026-04-23T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 156
+        },
+        {
+          "date": "2026-04-23T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 156
+        },
+        {
+          "date": "2026-04-23T02:00:00.000Z",
+          "count": 4,
+          "cumulative": 160
+        },
+        {
+          "date": "2026-04-23T03:00:00.000Z",
+          "count": 3,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-23T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-23T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-23T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-23T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-23T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-23T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-23T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-23T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-23T12:00:00.000Z",
+          "count": 3,
+          "cumulative": 166
+        },
+        {
+          "date": "2026-04-23T13:00:00.000Z",
+          "count": 2,
+          "cumulative": 168
+        },
+        {
+          "date": "2026-04-23T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 169
+        },
+        {
+          "date": "2026-04-23T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 169
+        },
+        {
+          "date": "2026-04-23T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 171
+        },
+        {
+          "date": "2026-04-23T17:00:00.000Z",
+          "count": 1,
+          "cumulative": 172
+        },
+        {
+          "date": "2026-04-23T18:00:00.000Z",
+          "count": 1,
+          "cumulative": 173
+        },
+        {
+          "date": "2026-04-23T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 174
+        },
+        {
+          "date": "2026-04-23T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 174
+        },
+        {
+          "date": "2026-04-23T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 175
+        },
+        {
+          "date": "2026-04-23T22:00:00.000Z",
+          "count": 3,
+          "cumulative": 178
+        },
+        {
+          "date": "2026-04-23T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 178
+        },
+        {
+          "date": "2026-04-24T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 178
+        },
+        {
+          "date": "2026-04-24T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 178
+        },
+        {
+          "date": "2026-04-24T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 178
+        },
+        {
+          "date": "2026-04-24T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 178
+        },
+        {
+          "date": "2026-04-24T04:00:00.000Z",
+          "count": 12,
+          "cumulative": 190
+        },
+        {
+          "date": "2026-04-24T05:00:00.000Z",
+          "count": 1,
+          "cumulative": 191
+        },
+        {
+          "date": "2026-04-24T06:00:00.000Z",
+          "count": 5,
+          "cumulative": 196
+        },
+        {
+          "date": "2026-04-24T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 196
+        },
+        {
+          "date": "2026-04-24T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 196
+        },
+        {
+          "date": "2026-04-24T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 196
+        },
+        {
+          "date": "2026-04-24T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 196
+        },
+        {
+          "date": "2026-04-24T11:00:00.000Z",
+          "count": 2,
+          "cumulative": 198
+        },
+        {
+          "date": "2026-04-24T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 198
+        },
+        {
+          "date": "2026-04-24T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 198
+        },
+        {
+          "date": "2026-04-24T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 198
+        },
+        {
+          "date": "2026-04-24T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 198
+        }
+      ]
+    },
+    "_tracking": {
+      "id": "81b5e3f5-bab4-44c9-b27f-4441573a44bd",
+      "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "title": "Donald Trump # Truth Social posts April 17 - April 24, 2026?",
+      "startDate": "2026-04-17T16:00:00.000Z",
+      "endDate": "2026-04-24T15:59:59.000Z",
+      "target": null,
+      "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-17-april-24",
+      "isActive": false,
+      "metrics": {},
+      "config": {},
+      "createdAt": "2026-04-14T04:00:02.922Z",
+      "updatedAt": "2026-04-24T16:00:08.301Z"
+    }
+  },
+  {
+    "id": "05e53515-80ff-4a8e-ae9f-800461f78706",
+    "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+    "title": "Donald Trump # Truth Social posts April 14 - April 21, 2026?",
+    "startDate": "2026-04-14T16:00:00.000Z",
+    "endDate": "2026-04-21T15:59:59.000Z",
+    "target": null,
+    "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-14-april-21",
+    "isActive": false,
+    "metrics": {},
+    "config": {},
+    "createdAt": "2026-04-11T04:00:03.978Z",
+    "updatedAt": "2026-04-21T16:00:08.597Z",
+    "user": {
+      "id": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "handle": "realDonaldTrump",
+      "name": "Donald J. Trump",
+      "platform": "TRUTH_SOCIAL",
+      "platformId": "107780257626128497",
+      "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
+      "bio": "<p></p>",
+      "verified": true,
+      "lastSync": "2026-04-24T23:25:47.599Z",
+      "lastSyncError": null,
+      "createdAt": "2026-01-21T16:44:31.437Z",
+      "updatedAt": "2026-04-24T23:25:47.600Z"
+    },
+    "stats": {
+      "total": 185,
+      "cumulative": 185,
+      "pace": 185,
+      "percentComplete": 100,
+      "daysElapsed": 7,
+      "daysRemaining": 0,
+      "daysTotal": 7,
+      "isComplete": true,
+      "daily": [
+        {
+          "date": "2026-04-14T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-14T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-14T18:00:00.000Z",
+          "count": 6,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-14T19:00:00.000Z",
+          "count": 4,
+          "cumulative": 10
+        },
+        {
+          "date": "2026-04-14T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 10
+        },
+        {
+          "date": "2026-04-14T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-14T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-14T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-15T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-15T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-15T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-15T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 13
+        },
+        {
+          "date": "2026-04-15T04:00:00.000Z",
+          "count": 6,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-15T05:00:00.000Z",
+          "count": 3,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-15T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-15T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-15T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-15T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-15T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-15T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 23
+        },
+        {
+          "date": "2026-04-15T12:00:00.000Z",
+          "count": 4,
+          "cumulative": 27
+        },
+        {
+          "date": "2026-04-15T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 27
+        },
+        {
+          "date": "2026-04-15T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 28
+        },
+        {
+          "date": "2026-04-15T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 28
+        },
+        {
+          "date": "2026-04-15T16:00:00.000Z",
+          "count": 1,
+          "cumulative": 29
+        },
+        {
+          "date": "2026-04-15T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 29
+        },
+        {
+          "date": "2026-04-15T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 29
+        },
+        {
+          "date": "2026-04-15T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-15T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-15T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-15T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-15T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-16T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-16T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-16T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-16T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-16T15:00:00.000Z",
+          "count": 2,
+          "cumulative": 34
+        },
+        {
+          "date": "2026-04-16T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 34
+        },
+        {
+          "date": "2026-04-16T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 34
+        },
+        {
+          "date": "2026-04-16T18:00:00.000Z",
+          "count": 1,
+          "cumulative": 35
+        },
+        {
+          "date": "2026-04-16T19:00:00.000Z",
+          "count": 2,
+          "cumulative": 37
+        },
+        {
+          "date": "2026-04-16T20:00:00.000Z",
+          "count": 3,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-16T21:00:00.000Z",
+          "count": 9,
+          "cumulative": 49
+        },
+        {
+          "date": "2026-04-16T22:00:00.000Z",
+          "count": 5,
+          "cumulative": 54
+        },
+        {
+          "date": "2026-04-16T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 55
+        },
+        {
+          "date": "2026-04-17T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 55
+        },
+        {
+          "date": "2026-04-17T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 55
+        },
+        {
+          "date": "2026-04-17T02:00:00.000Z",
+          "count": 2,
+          "cumulative": 57
+        },
+        {
+          "date": "2026-04-17T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 57
+        },
+        {
+          "date": "2026-04-17T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 57
+        },
+        {
+          "date": "2026-04-17T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 57
+        },
+        {
+          "date": "2026-04-17T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 57
+        },
+        {
+          "date": "2026-04-17T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 57
+        },
+        {
+          "date": "2026-04-17T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 57
+        },
+        {
+          "date": "2026-04-17T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 57
+        },
+        {
+          "date": "2026-04-17T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 57
+        },
+        {
+          "date": "2026-04-17T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 57
+        },
+        {
+          "date": "2026-04-17T12:00:00.000Z",
+          "count": 2,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-17T13:00:00.000Z",
+          "count": 3,
+          "cumulative": 62
+        },
+        {
+          "date": "2026-04-17T14:00:00.000Z",
+          "count": 8,
+          "cumulative": 70
+        },
+        {
+          "date": "2026-04-17T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 70
+        },
+        {
+          "date": "2026-04-17T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 70
+        },
+        {
+          "date": "2026-04-17T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 70
+        },
+        {
+          "date": "2026-04-17T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 70
+        },
+        {
+          "date": "2026-04-17T19:00:00.000Z",
+          "count": 10,
+          "cumulative": 80
+        },
+        {
+          "date": "2026-04-17T20:00:00.000Z",
+          "count": 1,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-17T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-17T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-17T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-18T00:00:00.000Z",
+          "count": 1,
+          "cumulative": 82
+        },
+        {
+          "date": "2026-04-18T01:00:00.000Z",
+          "count": 6,
+          "cumulative": 88
+        },
+        {
+          "date": "2026-04-18T02:00:00.000Z",
+          "count": 5,
+          "cumulative": 93
+        },
+        {
+          "date": "2026-04-18T03:00:00.000Z",
+          "count": 1,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-18T04:00:00.000Z",
+          "count": 6,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-18T05:00:00.000Z",
+          "count": 8,
+          "cumulative": 108
+        },
+        {
+          "date": "2026-04-18T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 108
+        },
+        {
+          "date": "2026-04-18T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 108
+        },
+        {
+          "date": "2026-04-18T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 108
+        },
+        {
+          "date": "2026-04-18T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 108
+        },
+        {
+          "date": "2026-04-18T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 108
+        },
+        {
+          "date": "2026-04-18T11:00:00.000Z",
+          "count": 2,
+          "cumulative": 110
+        },
+        {
+          "date": "2026-04-18T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 111
+        },
+        {
+          "date": "2026-04-18T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 111
+        },
+        {
+          "date": "2026-04-18T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 111
+        },
+        {
+          "date": "2026-04-18T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 111
+        },
+        {
+          "date": "2026-04-18T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 111
+        },
+        {
+          "date": "2026-04-18T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 111
+        },
+        {
+          "date": "2026-04-18T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 111
+        },
+        {
+          "date": "2026-04-18T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 111
+        },
+        {
+          "date": "2026-04-18T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 111
+        },
+        {
+          "date": "2026-04-18T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 111
+        },
+        {
+          "date": "2026-04-18T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 111
+        },
+        {
+          "date": "2026-04-18T23:00:00.000Z",
+          "count": 9,
+          "cumulative": 120
+        },
+        {
+          "date": "2026-04-19T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 120
+        },
+        {
+          "date": "2026-04-19T01:00:00.000Z",
+          "count": 31,
+          "cumulative": 151
+        },
+        {
+          "date": "2026-04-19T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 151
+        },
+        {
+          "date": "2026-04-19T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 151
+        },
+        {
+          "date": "2026-04-19T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 151
+        },
+        {
+          "date": "2026-04-19T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 151
+        },
+        {
+          "date": "2026-04-19T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 151
+        },
+        {
+          "date": "2026-04-19T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 151
+        },
+        {
+          "date": "2026-04-19T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 151
+        },
+        {
+          "date": "2026-04-19T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 151
+        },
+        {
+          "date": "2026-04-19T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 151
+        },
+        {
+          "date": "2026-04-19T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 151
+        },
+        {
+          "date": "2026-04-19T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 152
+        },
+        {
+          "date": "2026-04-19T13:00:00.000Z",
+          "count": 1,
+          "cumulative": 153
+        },
+        {
+          "date": "2026-04-19T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 153
+        },
+        {
+          "date": "2026-04-19T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 153
+        },
+        {
+          "date": "2026-04-19T16:00:00.000Z",
+          "count": 1,
+          "cumulative": 154
+        },
+        {
+          "date": "2026-04-19T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 154
+        },
+        {
+          "date": "2026-04-19T18:00:00.000Z",
+          "count": 4,
+          "cumulative": 158
+        },
+        {
+          "date": "2026-04-19T19:00:00.000Z",
+          "count": 4,
+          "cumulative": 162
+        },
+        {
+          "date": "2026-04-19T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 162
+        },
+        {
+          "date": "2026-04-19T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 162
+        },
+        {
+          "date": "2026-04-19T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 162
+        },
+        {
+          "date": "2026-04-19T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-20T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-20T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 163
+        },
+        {
+          "date": "2026-04-20T02:00:00.000Z",
+          "count": 2,
+          "cumulative": 165
+        },
+        {
+          "date": "2026-04-20T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 165
+        },
+        {
+          "date": "2026-04-20T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 165
+        },
+        {
+          "date": "2026-04-20T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 165
+        },
+        {
+          "date": "2026-04-20T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 165
+        },
+        {
+          "date": "2026-04-20T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 165
+        },
+        {
+          "date": "2026-04-20T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 165
+        },
+        {
+          "date": "2026-04-20T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 165
+        },
+        {
+          "date": "2026-04-20T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 165
+        },
+        {
+          "date": "2026-04-20T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 166
+        },
+        {
+          "date": "2026-04-20T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 166
+        },
+        {
+          "date": "2026-04-20T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 166
+        },
+        {
+          "date": "2026-04-20T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 167
+        },
+        {
+          "date": "2026-04-20T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 167
+        },
+        {
+          "date": "2026-04-20T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 167
+        },
+        {
+          "date": "2026-04-20T17:00:00.000Z",
+          "count": 2,
+          "cumulative": 169
+        },
+        {
+          "date": "2026-04-20T18:00:00.000Z",
+          "count": 2,
+          "cumulative": 171
+        },
+        {
+          "date": "2026-04-20T19:00:00.000Z",
+          "count": 3,
+          "cumulative": 174
+        },
+        {
+          "date": "2026-04-20T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 174
+        },
+        {
+          "date": "2026-04-20T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 174
+        },
+        {
+          "date": "2026-04-20T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 174
+        },
+        {
+          "date": "2026-04-20T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 174
+        },
+        {
+          "date": "2026-04-21T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 174
+        },
+        {
+          "date": "2026-04-21T01:00:00.000Z",
+          "count": 4,
+          "cumulative": 178
+        },
+        {
+          "date": "2026-04-21T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 178
+        },
+        {
+          "date": "2026-04-21T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 180
+        },
+        {
+          "date": "2026-04-21T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 180
+        },
+        {
+          "date": "2026-04-21T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 180
+        },
+        {
+          "date": "2026-04-21T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 180
+        },
+        {
+          "date": "2026-04-21T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 180
+        },
+        {
+          "date": "2026-04-21T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 180
+        },
+        {
+          "date": "2026-04-21T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 180
+        },
+        {
+          "date": "2026-04-21T10:00:00.000Z",
+          "count": 2,
+          "cumulative": 182
+        },
+        {
+          "date": "2026-04-21T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 183
+        },
+        {
+          "date": "2026-04-21T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 183
+        },
+        {
+          "date": "2026-04-21T13:00:00.000Z",
+          "count": 2,
+          "cumulative": 185
+        },
+        {
+          "date": "2026-04-21T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 185
+        },
+        {
+          "date": "2026-04-21T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 185
+        }
+      ]
+    },
+    "_tracking": {
+      "id": "05e53515-80ff-4a8e-ae9f-800461f78706",
+      "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "title": "Donald Trump # Truth Social posts April 14 - April 21, 2026?",
+      "startDate": "2026-04-14T16:00:00.000Z",
+      "endDate": "2026-04-21T15:59:59.000Z",
+      "target": null,
+      "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-14-april-21",
+      "isActive": false,
+      "metrics": {},
+      "config": {},
+      "createdAt": "2026-04-11T04:00:03.978Z",
+      "updatedAt": "2026-04-21T16:00:08.597Z"
+    }
+  },
+  {
+    "id": "27616c5b-23ba-41e2-9d8d-1c0be1ef5674",
+    "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+    "title": "Donald Trump # Truth Social posts April 10 - April 17, 2026?",
+    "startDate": "2026-04-10T16:00:00.000Z",
+    "endDate": "2026-04-17T15:59:59.000Z",
+    "target": null,
+    "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-10-april-17",
+    "isActive": false,
+    "metrics": {},
+    "config": {},
+    "createdAt": "2026-04-07T04:00:03.591Z",
+    "updatedAt": "2026-04-17T16:00:08.571Z",
+    "user": {
+      "id": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "handle": "realDonaldTrump",
+      "name": "Donald J. Trump",
+      "platform": "TRUTH_SOCIAL",
+      "platformId": "107780257626128497",
+      "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
+      "bio": "<p></p>",
+      "verified": true,
+      "lastSync": "2026-04-24T23:25:47.599Z",
+      "lastSyncError": null,
+      "createdAt": "2026-01-21T16:44:31.437Z",
+      "updatedAt": "2026-04-24T23:25:47.600Z"
+    },
+    "stats": {
+      "total": 138,
+      "cumulative": 138,
+      "pace": 138,
+      "percentComplete": 100,
+      "daysElapsed": 7,
+      "daysRemaining": 0,
+      "daysTotal": 7,
+      "isComplete": true,
+      "daily": [
+        {
+          "date": "2026-04-10T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 2
+        },
+        {
+          "date": "2026-04-10T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 2
+        },
+        {
+          "date": "2026-04-10T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 2
+        },
+        {
+          "date": "2026-04-10T19:00:00.000Z",
+          "count": 3,
+          "cumulative": 5
+        },
+        {
+          "date": "2026-04-10T20:00:00.000Z",
+          "count": 5,
+          "cumulative": 10
+        },
+        {
+          "date": "2026-04-10T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-10T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 12
+        },
+        {
+          "date": "2026-04-10T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 12
+        },
+        {
+          "date": "2026-04-11T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 12
+        },
+        {
+          "date": "2026-04-11T01:00:00.000Z",
+          "count": 1,
+          "cumulative": 13
+        },
+        {
+          "date": "2026-04-11T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 13
+        },
+        {
+          "date": "2026-04-11T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 13
+        },
+        {
+          "date": "2026-04-11T04:00:00.000Z",
+          "count": 1,
+          "cumulative": 14
+        },
+        {
+          "date": "2026-04-11T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 14
+        },
+        {
+          "date": "2026-04-11T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 14
+        },
+        {
+          "date": "2026-04-11T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 14
+        },
+        {
+          "date": "2026-04-11T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 14
+        },
+        {
+          "date": "2026-04-11T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 14
+        },
+        {
+          "date": "2026-04-11T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 14
+        },
+        {
+          "date": "2026-04-11T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 15
+        },
+        {
+          "date": "2026-04-11T12:00:00.000Z",
+          "count": 3,
+          "cumulative": 18
+        },
+        {
+          "date": "2026-04-11T13:00:00.000Z",
+          "count": 1,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-11T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-11T15:00:00.000Z",
+          "count": 1,
+          "cumulative": 20
+        },
+        {
+          "date": "2026-04-11T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 20
+        },
+        {
+          "date": "2026-04-11T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 20
+        },
+        {
+          "date": "2026-04-11T18:00:00.000Z",
+          "count": 1,
+          "cumulative": 21
+        },
+        {
+          "date": "2026-04-11T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 21
+        },
+        {
+          "date": "2026-04-11T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 21
+        },
+        {
+          "date": "2026-04-11T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-11T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 23
+        },
+        {
+          "date": "2026-04-11T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 24
+        },
+        {
+          "date": "2026-04-12T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 24
+        },
+        {
+          "date": "2026-04-12T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 24
+        },
+        {
+          "date": "2026-04-12T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 24
+        },
+        {
+          "date": "2026-04-12T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 24
+        },
+        {
+          "date": "2026-04-12T04:00:00.000Z",
+          "count": 4,
+          "cumulative": 28
+        },
+        {
+          "date": "2026-04-12T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 28
+        },
+        {
+          "date": "2026-04-12T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 28
+        },
+        {
+          "date": "2026-04-12T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 28
+        },
+        {
+          "date": "2026-04-12T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 28
+        },
+        {
+          "date": "2026-04-12T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 28
+        },
+        {
+          "date": "2026-04-12T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 28
+        },
+        {
+          "date": "2026-04-12T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 28
+        },
+        {
+          "date": "2026-04-12T12:00:00.000Z",
+          "count": 2,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-12T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-12T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-12T15:00:00.000Z",
+          "count": 2,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-12T16:00:00.000Z",
+          "count": 1,
+          "cumulative": 33
+        },
+        {
+          "date": "2026-04-12T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 33
+        },
+        {
+          "date": "2026-04-12T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 33
+        },
+        {
+          "date": "2026-04-12T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 33
+        },
+        {
+          "date": "2026-04-12T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 33
+        },
+        {
+          "date": "2026-04-12T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 33
+        },
+        {
+          "date": "2026-04-12T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 33
+        },
+        {
+          "date": "2026-04-12T23:00:00.000Z",
+          "count": 2,
+          "cumulative": 35
+        },
+        {
+          "date": "2026-04-13T00:00:00.000Z",
+          "count": 1,
+          "cumulative": 36
+        },
+        {
+          "date": "2026-04-13T01:00:00.000Z",
+          "count": 5,
+          "cumulative": 41
+        },
+        {
+          "date": "2026-04-13T02:00:00.000Z",
+          "count": 4,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-13T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-13T04:00:00.000Z",
+          "count": 1,
+          "cumulative": 46
+        },
+        {
+          "date": "2026-04-13T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 46
+        },
+        {
+          "date": "2026-04-13T06:00:00.000Z",
+          "count": 5,
+          "cumulative": 51
+        },
+        {
+          "date": "2026-04-13T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 51
+        },
+        {
+          "date": "2026-04-13T08:00:00.000Z",
+          "count": 1,
+          "cumulative": 52
+        },
+        {
+          "date": "2026-04-13T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 52
+        },
+        {
+          "date": "2026-04-13T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 52
+        },
+        {
+          "date": "2026-04-13T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 52
+        },
+        {
+          "date": "2026-04-13T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 52
+        },
+        {
+          "date": "2026-04-13T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 52
+        },
+        {
+          "date": "2026-04-13T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 53
+        },
+        {
+          "date": "2026-04-13T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 53
+        },
+        {
+          "date": "2026-04-13T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 55
+        },
+        {
+          "date": "2026-04-13T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 55
+        },
+        {
+          "date": "2026-04-13T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 55
+        },
+        {
+          "date": "2026-04-13T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 55
+        },
+        {
+          "date": "2026-04-13T20:00:00.000Z",
+          "count": 1,
+          "cumulative": 56
+        },
+        {
+          "date": "2026-04-13T21:00:00.000Z",
+          "count": 2,
+          "cumulative": 58
+        },
+        {
+          "date": "2026-04-13T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 58
+        },
+        {
+          "date": "2026-04-13T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-14T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-14T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-14T02:00:00.000Z",
+          "count": 2,
+          "cumulative": 61
+        },
+        {
+          "date": "2026-04-14T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-14T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-14T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-14T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-14T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-14T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-14T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-14T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-14T11:00:00.000Z",
+          "count": 2,
+          "cumulative": 65
+        },
+        {
+          "date": "2026-04-14T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 66
+        },
+        {
+          "date": "2026-04-14T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 66
+        },
+        {
+          "date": "2026-04-14T14:00:00.000Z",
+          "count": 2,
+          "cumulative": 68
+        },
+        {
+          "date": "2026-04-14T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 68
+        },
+        {
+          "date": "2026-04-14T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 68
+        },
+        {
+          "date": "2026-04-14T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 68
+        },
+        {
+          "date": "2026-04-14T18:00:00.000Z",
+          "count": 6,
+          "cumulative": 74
+        },
+        {
+          "date": "2026-04-14T19:00:00.000Z",
+          "count": 4,
+          "cumulative": 78
+        },
+        {
+          "date": "2026-04-14T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 78
+        },
+        {
+          "date": "2026-04-14T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-14T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-14T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-15T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-15T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-15T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-15T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-15T04:00:00.000Z",
+          "count": 6,
+          "cumulative": 87
+        },
+        {
+          "date": "2026-04-15T05:00:00.000Z",
+          "count": 3,
+          "cumulative": 90
+        },
+        {
+          "date": "2026-04-15T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 90
+        },
+        {
+          "date": "2026-04-15T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 90
+        },
+        {
+          "date": "2026-04-15T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 90
+        },
+        {
+          "date": "2026-04-15T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 90
+        },
+        {
+          "date": "2026-04-15T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 90
+        },
+        {
+          "date": "2026-04-15T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 91
+        },
+        {
+          "date": "2026-04-15T12:00:00.000Z",
+          "count": 4,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-15T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-15T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 96
+        },
+        {
+          "date": "2026-04-15T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 96
+        },
+        {
+          "date": "2026-04-15T16:00:00.000Z",
+          "count": 1,
+          "cumulative": 97
+        },
+        {
+          "date": "2026-04-15T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 97
+        },
+        {
+          "date": "2026-04-15T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 97
+        },
+        {
+          "date": "2026-04-15T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 98
+        },
+        {
+          "date": "2026-04-15T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 98
+        },
+        {
+          "date": "2026-04-15T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 98
+        },
+        {
+          "date": "2026-04-15T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 98
+        },
+        {
+          "date": "2026-04-15T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 98
+        },
+        {
+          "date": "2026-04-16T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 98
+        },
+        {
+          "date": "2026-04-16T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 98
+        },
+        {
+          "date": "2026-04-16T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 98
+        },
+        {
+          "date": "2026-04-16T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 100
+        },
+        {
+          "date": "2026-04-16T15:00:00.000Z",
+          "count": 2,
+          "cumulative": 102
+        },
+        {
+          "date": "2026-04-16T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 102
+        },
+        {
+          "date": "2026-04-16T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 102
+        },
+        {
+          "date": "2026-04-16T18:00:00.000Z",
+          "count": 1,
+          "cumulative": 103
+        },
+        {
+          "date": "2026-04-16T19:00:00.000Z",
+          "count": 2,
+          "cumulative": 105
+        },
+        {
+          "date": "2026-04-16T20:00:00.000Z",
+          "count": 3,
+          "cumulative": 108
+        },
+        {
+          "date": "2026-04-16T21:00:00.000Z",
+          "count": 9,
+          "cumulative": 117
+        },
+        {
+          "date": "2026-04-16T22:00:00.000Z",
+          "count": 5,
+          "cumulative": 122
+        },
+        {
+          "date": "2026-04-16T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 123
+        },
+        {
+          "date": "2026-04-17T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 123
+        },
+        {
+          "date": "2026-04-17T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 123
+        },
+        {
+          "date": "2026-04-17T02:00:00.000Z",
+          "count": 2,
+          "cumulative": 125
+        },
+        {
+          "date": "2026-04-17T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 125
+        },
+        {
+          "date": "2026-04-17T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 125
+        },
+        {
+          "date": "2026-04-17T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 125
+        },
+        {
+          "date": "2026-04-17T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 125
+        },
+        {
+          "date": "2026-04-17T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 125
+        },
+        {
+          "date": "2026-04-17T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 125
+        },
+        {
+          "date": "2026-04-17T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 125
+        },
+        {
+          "date": "2026-04-17T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 125
+        },
+        {
+          "date": "2026-04-17T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 125
+        },
+        {
+          "date": "2026-04-17T12:00:00.000Z",
+          "count": 2,
+          "cumulative": 127
+        },
+        {
+          "date": "2026-04-17T13:00:00.000Z",
+          "count": 3,
+          "cumulative": 130
+        },
+        {
+          "date": "2026-04-17T14:00:00.000Z",
+          "count": 8,
+          "cumulative": 138
+        },
+        {
+          "date": "2026-04-17T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 138
+        }
+      ]
+    },
+    "_tracking": {
+      "id": "27616c5b-23ba-41e2-9d8d-1c0be1ef5674",
+      "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "title": "Donald Trump # Truth Social posts April 10 - April 17, 2026?",
+      "startDate": "2026-04-10T16:00:00.000Z",
+      "endDate": "2026-04-17T15:59:59.000Z",
+      "target": null,
+      "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-10-april-17",
+      "isActive": false,
+      "metrics": {},
+      "config": {},
+      "createdAt": "2026-04-07T04:00:03.591Z",
+      "updatedAt": "2026-04-17T16:00:08.571Z"
+    }
+  },
+  {
+    "id": "b459a1ed-0214-4d85-ba91-2908d058e55a",
+    "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+    "title": "Donald Trump # Truth Social posts April 7 - April 14, 2026?",
+    "startDate": "2026-04-07T16:00:00.000Z",
+    "endDate": "2026-04-14T15:59:59.000Z",
+    "target": null,
+    "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-7-april-14",
+    "isActive": false,
+    "metrics": {},
+    "config": {},
+    "createdAt": "2026-04-04T04:00:03.705Z",
+    "updatedAt": "2026-04-14T16:00:10.143Z",
+    "user": {
+      "id": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "handle": "realDonaldTrump",
+      "name": "Donald J. Trump",
+      "platform": "TRUTH_SOCIAL",
+      "platformId": "107780257626128497",
+      "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
+      "bio": "<p></p>",
+      "verified": true,
+      "lastSync": "2026-04-24T23:25:47.599Z",
+      "lastSyncError": null,
+      "createdAt": "2026-01-21T16:44:31.437Z",
+      "updatedAt": "2026-04-24T23:25:47.600Z"
+    },
+    "stats": {
+      "total": 129,
+      "cumulative": 129,
+      "pace": 129,
+      "percentComplete": 100,
+      "daysElapsed": 7,
+      "daysRemaining": 0,
+      "daysTotal": 7,
+      "isComplete": true,
+      "daily": [
+        {
+          "date": "2026-04-07T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-07T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-07T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-07T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 1
+        },
+        {
+          "date": "2026-04-07T20:00:00.000Z",
+          "count": 29,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-07T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-07T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 31
+        },
+        {
+          "date": "2026-04-07T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-08T00:00:00.000Z",
+          "count": 1,
+          "cumulative": 33
+        },
+        {
+          "date": "2026-04-08T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 33
+        },
+        {
+          "date": "2026-04-08T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 33
+        },
+        {
+          "date": "2026-04-08T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 35
+        },
+        {
+          "date": "2026-04-08T04:00:00.000Z",
+          "count": 1,
+          "cumulative": 36
+        },
+        {
+          "date": "2026-04-08T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 36
+        },
+        {
+          "date": "2026-04-08T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 36
+        },
+        {
+          "date": "2026-04-08T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 36
+        },
+        {
+          "date": "2026-04-08T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 36
+        },
+        {
+          "date": "2026-04-08T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 36
+        },
+        {
+          "date": "2026-04-08T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 36
+        },
+        {
+          "date": "2026-04-08T11:00:00.000Z",
+          "count": 3,
+          "cumulative": 39
+        },
+        {
+          "date": "2026-04-08T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 39
+        },
+        {
+          "date": "2026-04-08T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 39
+        },
+        {
+          "date": "2026-04-08T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-08T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-08T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 42
+        },
+        {
+          "date": "2026-04-08T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 42
+        },
+        {
+          "date": "2026-04-08T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 42
+        },
+        {
+          "date": "2026-04-08T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 42
+        },
+        {
+          "date": "2026-04-08T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 42
+        },
+        {
+          "date": "2026-04-08T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 42
+        },
+        {
+          "date": "2026-04-08T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 42
+        },
+        {
+          "date": "2026-04-08T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 43
+        },
+        {
+          "date": "2026-04-09T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 43
+        },
+        {
+          "date": "2026-04-09T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 43
+        },
+        {
+          "date": "2026-04-09T02:00:00.000Z",
+          "count": 1,
+          "cumulative": 44
+        },
+        {
+          "date": "2026-04-09T03:00:00.000Z",
+          "count": 1,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-09T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-09T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-09T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-09T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-09T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-09T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-09T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-09T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-09T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 46
+        },
+        {
+          "date": "2026-04-09T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 46
+        },
+        {
+          "date": "2026-04-09T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-09T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-09T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-09T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-09T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-09T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-09T20:00:00.000Z",
+          "count": 1,
+          "cumulative": 48
+        },
+        {
+          "date": "2026-04-09T21:00:00.000Z",
+          "count": 3,
+          "cumulative": 51
+        },
+        {
+          "date": "2026-04-09T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 52
+        },
+        {
+          "date": "2026-04-09T23:00:00.000Z",
+          "count": 4,
+          "cumulative": 56
+        },
+        {
+          "date": "2026-04-10T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 56
+        },
+        {
+          "date": "2026-04-10T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 56
+        },
+        {
+          "date": "2026-04-10T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 56
+        },
+        {
+          "date": "2026-04-10T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 56
+        },
+        {
+          "date": "2026-04-10T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 56
+        },
+        {
+          "date": "2026-04-10T05:00:00.000Z",
+          "count": 3,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-10T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-10T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-10T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-10T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-10T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-10T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-10T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-10T13:00:00.000Z",
+          "count": 1,
+          "cumulative": 60
+        },
+        {
+          "date": "2026-04-10T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 61
+        },
+        {
+          "date": "2026-04-10T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 61
+        },
+        {
+          "date": "2026-04-10T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-10T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-10T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-10T19:00:00.000Z",
+          "count": 3,
+          "cumulative": 66
+        },
+        {
+          "date": "2026-04-10T20:00:00.000Z",
+          "count": 5,
+          "cumulative": 71
+        },
+        {
+          "date": "2026-04-10T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 72
+        },
+        {
+          "date": "2026-04-10T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 73
+        },
+        {
+          "date": "2026-04-10T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 73
+        },
+        {
+          "date": "2026-04-11T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 73
+        },
+        {
+          "date": "2026-04-11T01:00:00.000Z",
+          "count": 1,
+          "cumulative": 74
+        },
+        {
+          "date": "2026-04-11T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 74
+        },
+        {
+          "date": "2026-04-11T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 74
+        },
+        {
+          "date": "2026-04-11T04:00:00.000Z",
+          "count": 1,
+          "cumulative": 75
+        },
+        {
+          "date": "2026-04-11T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 75
+        },
+        {
+          "date": "2026-04-11T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 75
+        },
+        {
+          "date": "2026-04-11T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 75
+        },
+        {
+          "date": "2026-04-11T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 75
+        },
+        {
+          "date": "2026-04-11T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 75
+        },
+        {
+          "date": "2026-04-11T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 75
+        },
+        {
+          "date": "2026-04-11T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 76
+        },
+        {
+          "date": "2026-04-11T12:00:00.000Z",
+          "count": 3,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-11T13:00:00.000Z",
+          "count": 1,
+          "cumulative": 80
+        },
+        {
+          "date": "2026-04-11T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 80
+        },
+        {
+          "date": "2026-04-11T15:00:00.000Z",
+          "count": 1,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-11T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-11T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-11T18:00:00.000Z",
+          "count": 1,
+          "cumulative": 82
+        },
+        {
+          "date": "2026-04-11T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 82
+        },
+        {
+          "date": "2026-04-11T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 82
+        },
+        {
+          "date": "2026-04-11T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-11T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-11T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 85
+        },
+        {
+          "date": "2026-04-12T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 85
+        },
+        {
+          "date": "2026-04-12T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 85
+        },
+        {
+          "date": "2026-04-12T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 85
+        },
+        {
+          "date": "2026-04-12T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 85
+        },
+        {
+          "date": "2026-04-12T04:00:00.000Z",
+          "count": 4,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-12T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-12T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-12T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-12T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-12T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-12T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-12T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-12T12:00:00.000Z",
+          "count": 2,
+          "cumulative": 91
+        },
+        {
+          "date": "2026-04-12T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 91
+        },
+        {
+          "date": "2026-04-12T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 91
+        },
+        {
+          "date": "2026-04-12T15:00:00.000Z",
+          "count": 2,
+          "cumulative": 93
+        },
+        {
+          "date": "2026-04-12T16:00:00.000Z",
+          "count": 1,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-12T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-12T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-12T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-12T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-12T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-12T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-12T23:00:00.000Z",
+          "count": 2,
+          "cumulative": 96
+        },
+        {
+          "date": "2026-04-13T00:00:00.000Z",
+          "count": 1,
+          "cumulative": 97
+        },
+        {
+          "date": "2026-04-13T01:00:00.000Z",
+          "count": 5,
+          "cumulative": 102
+        },
+        {
+          "date": "2026-04-13T02:00:00.000Z",
+          "count": 4,
+          "cumulative": 106
+        },
+        {
+          "date": "2026-04-13T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 106
+        },
+        {
+          "date": "2026-04-13T04:00:00.000Z",
+          "count": 1,
+          "cumulative": 107
+        },
+        {
+          "date": "2026-04-13T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 107
+        },
+        {
+          "date": "2026-04-13T06:00:00.000Z",
+          "count": 5,
+          "cumulative": 112
+        },
+        {
+          "date": "2026-04-13T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 112
+        },
+        {
+          "date": "2026-04-13T08:00:00.000Z",
+          "count": 1,
+          "cumulative": 113
+        },
+        {
+          "date": "2026-04-13T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 113
+        },
+        {
+          "date": "2026-04-13T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 113
+        },
+        {
+          "date": "2026-04-13T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 113
+        },
+        {
+          "date": "2026-04-13T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 113
+        },
+        {
+          "date": "2026-04-13T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 113
+        },
+        {
+          "date": "2026-04-13T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 114
+        },
+        {
+          "date": "2026-04-13T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 114
+        },
+        {
+          "date": "2026-04-13T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 116
+        },
+        {
+          "date": "2026-04-13T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 116
+        },
+        {
+          "date": "2026-04-13T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 116
+        },
+        {
+          "date": "2026-04-13T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 116
+        },
+        {
+          "date": "2026-04-13T20:00:00.000Z",
+          "count": 1,
+          "cumulative": 117
+        },
+        {
+          "date": "2026-04-13T21:00:00.000Z",
+          "count": 2,
+          "cumulative": 119
+        },
+        {
+          "date": "2026-04-13T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 119
+        },
+        {
+          "date": "2026-04-13T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 120
+        },
+        {
+          "date": "2026-04-14T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 120
+        },
+        {
+          "date": "2026-04-14T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 120
+        },
+        {
+          "date": "2026-04-14T02:00:00.000Z",
+          "count": 2,
+          "cumulative": 122
+        },
+        {
+          "date": "2026-04-14T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 124
+        },
+        {
+          "date": "2026-04-14T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 124
+        },
+        {
+          "date": "2026-04-14T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 124
+        },
+        {
+          "date": "2026-04-14T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 124
+        },
+        {
+          "date": "2026-04-14T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 124
+        },
+        {
+          "date": "2026-04-14T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 124
+        },
+        {
+          "date": "2026-04-14T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 124
+        },
+        {
+          "date": "2026-04-14T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 124
+        },
+        {
+          "date": "2026-04-14T11:00:00.000Z",
+          "count": 2,
+          "cumulative": 126
+        },
+        {
+          "date": "2026-04-14T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 127
+        },
+        {
+          "date": "2026-04-14T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 127
+        },
+        {
+          "date": "2026-04-14T14:00:00.000Z",
+          "count": 2,
+          "cumulative": 129
+        },
+        {
+          "date": "2026-04-14T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 129
+        }
+      ]
+    },
+    "_tracking": {
+      "id": "b459a1ed-0214-4d85-ba91-2908d058e55a",
+      "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "title": "Donald Trump # Truth Social posts April 7 - April 14, 2026?",
+      "startDate": "2026-04-07T16:00:00.000Z",
+      "endDate": "2026-04-14T15:59:59.000Z",
+      "target": null,
+      "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-7-april-14",
+      "isActive": false,
+      "metrics": {},
+      "config": {},
+      "createdAt": "2026-04-04T04:00:03.705Z",
+      "updatedAt": "2026-04-14T16:00:10.143Z"
+    }
+  },
+  {
+    "id": "5bbf11f3-3970-4fd1-8704-1be33e781109",
+    "userId": "d178fa75-3e53-4aae-a826-2128ba91823f",
+    "title": "Donald Trump # Truth Social posts April 3 - April 10, 2026?",
+    "startDate": "2026-04-03T16:00:00.000Z",
+    "endDate": "2026-04-10T15:59:59.000Z",
+    "target": null,
+    "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-3-april-10",
+    "isActive": false,
+    "metrics": {},
+    "config": {},
+    "createdAt": "2026-03-31T04:00:03.069Z",
+    "updatedAt": "2026-04-10T16:00:08.551Z",
+    "user": {
+      "id": "d178fa75-3e53-4aae-a826-2128ba91823f",
+      "handle": "realDonaldTrump",
+      "name": "Donald J. Trump",
+      "platform": "TRUTH_SOCIAL",
+      "platformId": "107780257626128497",
+      "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
+      "bio": "<p></p>",
+      "verified": true,
+      "lastSync": "2026-04-24T23:30:24.351Z",
+      "lastSyncError": null,
+      "createdAt": "2026-01-21T16:44:31.437Z",
+      "updatedAt": "2026-04-24T23:30:24.352Z"
+    },
+    "stats": {
+      "total": 108,
+      "cumulative": 108,
+      "pace": 108,
+      "percentComplete": 100,
+      "daysElapsed": 7,
+      "daysRemaining": 0,
+      "daysTotal": 7,
+      "isComplete": true,
+      "daily": [
+        {
+          "date": "2026-04-03T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-03T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-03T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 0
+        },
+        {
+          "date": "2026-04-03T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 1
+        },
+        {
+          "date": "2026-04-03T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 1
+        },
+        {
+          "date": "2026-04-03T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 2
+        },
+        {
+          "date": "2026-04-03T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 2
+        },
+        {
+          "date": "2026-04-03T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 3
+        },
+        {
+          "date": "2026-04-04T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 3
+        },
+        {
+          "date": "2026-04-04T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 3
+        },
+        {
+          "date": "2026-04-04T02:00:00.000Z",
+          "count": 1,
+          "cumulative": 4
+        },
+        {
+          "date": "2026-04-04T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-04T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-04T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-04T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-04T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-04T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-04T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-04T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-04T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-04T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 6
+        },
+        {
+          "date": "2026-04-04T13:00:00.000Z",
+          "count": 2,
+          "cumulative": 8
+        },
+        {
+          "date": "2026-04-04T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 9
+        },
+        {
+          "date": "2026-04-04T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 9
+        },
+        {
+          "date": "2026-04-04T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 9
+        },
+        {
+          "date": "2026-04-04T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 9
+        },
+        {
+          "date": "2026-04-04T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 9
+        },
+        {
+          "date": "2026-04-04T19:00:00.000Z",
+          "count": 4,
+          "cumulative": 13
+        },
+        {
+          "date": "2026-04-04T20:00:00.000Z",
+          "count": 2,
+          "cumulative": 15
+        },
+        {
+          "date": "2026-04-04T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 15
+        },
+        {
+          "date": "2026-04-04T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 15
+        },
+        {
+          "date": "2026-04-04T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 15
+        },
+        {
+          "date": "2026-04-05T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 15
+        },
+        {
+          "date": "2026-04-05T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 15
+        },
+        {
+          "date": "2026-04-05T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 15
+        },
+        {
+          "date": "2026-04-05T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 15
+        },
+        {
+          "date": "2026-04-05T04:00:00.000Z",
+          "count": 1,
+          "cumulative": 16
+        },
+        {
+          "date": "2026-04-05T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 16
+        },
+        {
+          "date": "2026-04-05T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 16
+        },
+        {
+          "date": "2026-04-05T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 16
+        },
+        {
+          "date": "2026-04-05T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 16
+        },
+        {
+          "date": "2026-04-05T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 16
+        },
+        {
+          "date": "2026-04-05T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 16
+        },
+        {
+          "date": "2026-04-05T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 17
+        },
+        {
+          "date": "2026-04-05T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 18
+        },
+        {
+          "date": "2026-04-05T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 18
+        },
+        {
+          "date": "2026-04-05T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 18
+        },
+        {
+          "date": "2026-04-05T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 18
+        },
+        {
+          "date": "2026-04-05T16:00:00.000Z",
+          "count": 1,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-05T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-05T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-05T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-05T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-05T21:00:00.000Z",
+          "count": 6,
+          "cumulative": 25
+        },
+        {
+          "date": "2026-04-05T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 25
+        },
+        {
+          "date": "2026-04-05T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 25
+        },
+        {
+          "date": "2026-04-06T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 25
+        },
+        {
+          "date": "2026-04-06T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 25
+        },
+        {
+          "date": "2026-04-06T02:00:00.000Z",
+          "count": 1,
+          "cumulative": 26
+        },
+        {
+          "date": "2026-04-06T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 26
+        },
+        {
+          "date": "2026-04-06T04:00:00.000Z",
+          "count": 3,
+          "cumulative": 29
+        },
+        {
+          "date": "2026-04-06T05:00:00.000Z",
+          "count": 1,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-06T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-06T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-06T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-06T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-06T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-06T11:00:00.000Z",
+          "count": 2,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-06T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-06T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-06T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-06T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-06T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-06T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-06T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-06T19:00:00.000Z",
+          "count": 6,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-06T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-06T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-06T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-06T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-07T00:00:00.000Z",
+          "count": 2,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-07T01:00:00.000Z",
+          "count": 3,
+          "cumulative": 43
+        },
+        {
+          "date": "2026-04-07T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 43
+        },
+        {
+          "date": "2026-04-07T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-07T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-07T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-07T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-07T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-07T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-07T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-07T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 45
+        },
+        {
+          "date": "2026-04-07T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 46
+        },
+        {
+          "date": "2026-04-07T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-07T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-07T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-07T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-07T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-07T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-07T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-07T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 48
+        },
+        {
+          "date": "2026-04-07T20:00:00.000Z",
+          "count": 29,
+          "cumulative": 77
+        },
+        {
+          "date": "2026-04-07T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 77
+        },
+        {
+          "date": "2026-04-07T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 78
+        },
+        {
+          "date": "2026-04-07T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-08T00:00:00.000Z",
+          "count": 1,
+          "cumulative": 80
+        },
+        {
+          "date": "2026-04-08T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 80
+        },
+        {
+          "date": "2026-04-08T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 80
+        },
+        {
+          "date": "2026-04-08T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 82
+        },
+        {
+          "date": "2026-04-08T04:00:00.000Z",
+          "count": 1,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-08T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-08T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-08T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-08T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-08T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-08T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-08T11:00:00.000Z",
+          "count": 3,
+          "cumulative": 86
+        },
+        {
+          "date": "2026-04-08T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 86
+        },
+        {
+          "date": "2026-04-08T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 86
+        },
+        {
+          "date": "2026-04-08T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 87
+        },
+        {
+          "date": "2026-04-08T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 87
+        },
+        {
+          "date": "2026-04-08T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-08T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-08T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-08T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-08T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-08T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-08T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 89
+        },
+        {
+          "date": "2026-04-08T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 90
+        },
+        {
+          "date": "2026-04-09T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 90
+        },
+        {
+          "date": "2026-04-09T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 90
+        },
+        {
+          "date": "2026-04-09T02:00:00.000Z",
+          "count": 1,
+          "cumulative": 91
+        },
+        {
+          "date": "2026-04-09T03:00:00.000Z",
+          "count": 1,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-09T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-09T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-09T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-09T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-09T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-09T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-09T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-09T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 92
+        },
+        {
+          "date": "2026-04-09T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 93
+        },
+        {
+          "date": "2026-04-09T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 93
+        },
+        {
+          "date": "2026-04-09T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-09T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-09T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-09T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-09T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-09T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 94
+        },
+        {
+          "date": "2026-04-09T20:00:00.000Z",
+          "count": 1,
+          "cumulative": 95
+        },
+        {
+          "date": "2026-04-09T21:00:00.000Z",
+          "count": 3,
+          "cumulative": 98
+        },
+        {
+          "date": "2026-04-09T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 99
+        },
+        {
+          "date": "2026-04-09T23:00:00.000Z",
+          "count": 4,
+          "cumulative": 103
+        },
+        {
+          "date": "2026-04-10T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 103
+        },
+        {
+          "date": "2026-04-10T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 103
+        },
+        {
+          "date": "2026-04-10T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 103
+        },
+        {
+          "date": "2026-04-10T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 103
+        },
+        {
+          "date": "2026-04-10T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 103
+        },
+        {
+          "date": "2026-04-10T05:00:00.000Z",
+          "count": 3,
+          "cumulative": 106
+        },
+        {
+          "date": "2026-04-10T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 106
+        },
+        {
+          "date": "2026-04-10T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 106
+        },
+        {
+          "date": "2026-04-10T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 106
+        },
+        {
+          "date": "2026-04-10T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 106
+        },
+        {
+          "date": "2026-04-10T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 106
+        },
+        {
+          "date": "2026-04-10T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 106
+        },
+        {
+          "date": "2026-04-10T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 106
+        },
+        {
+          "date": "2026-04-10T13:00:00.000Z",
+          "count": 1,
+          "cumulative": 107
+        },
+        {
+          "date": "2026-04-10T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 108
+        },
+        {
+          "date": "2026-04-10T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 108
+        }
+      ]
     },
     "_tracking": {
       "id": "5bbf11f3-3970-4fd1-8704-1be33e781109",
@@ -45,11 +5010,11 @@
       "endDate": "2026-04-10T15:59:59.000Z",
       "target": null,
       "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-april-3-april-10",
-      "isActive": true,
+      "isActive": false,
       "metrics": {},
       "config": {},
       "createdAt": "2026-03-31T04:00:03.069Z",
-      "updatedAt": "2026-03-31T04:00:03.069Z"
+      "updatedAt": "2026-04-10T16:00:08.551Z"
     }
   },
   {
@@ -60,11 +5025,11 @@
     "endDate": "2026-04-07T15:59:59.000Z",
     "target": null,
     "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-march-31-april-7",
-    "isActive": true,
+    "isActive": false,
     "metrics": {},
     "config": {},
     "createdAt": "2026-03-28T04:00:03.392Z",
-    "updatedAt": "2026-03-28T04:00:03.392Z",
+    "updatedAt": "2026-04-07T16:00:08.652Z",
     "user": {
       "id": "d178fa75-3e53-4aae-a826-2128ba91823f",
       "handle": "realDonaldTrump",
@@ -74,20 +5039,20 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:19.078Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:19.079Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
-      "total": 11,
-      "cumulative": 11,
-      "pace": 39,
-      "percentComplete": 29,
-      "daysElapsed": 2,
-      "daysRemaining": 6,
+      "total": 81,
+      "cumulative": 81,
+      "pace": 81,
+      "percentComplete": 100,
+      "daysElapsed": 7,
+      "daysRemaining": 0,
       "daysTotal": 7,
-      "isComplete": false,
+      "isComplete": true,
       "daily": [
         {
           "date": "2026-03-31T16:00:00.000Z",
@@ -233,6 +5198,701 @@
           "date": "2026-04-01T20:00:00.000Z",
           "count": 0,
           "cumulative": 11
+        },
+        {
+          "date": "2026-04-01T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 11
+        },
+        {
+          "date": "2026-04-01T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 12
+        },
+        {
+          "date": "2026-04-01T23:00:00.000Z",
+          "count": 4,
+          "cumulative": 16
+        },
+        {
+          "date": "2026-04-02T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 16
+        },
+        {
+          "date": "2026-04-02T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 16
+        },
+        {
+          "date": "2026-04-02T02:00:00.000Z",
+          "count": 2,
+          "cumulative": 18
+        },
+        {
+          "date": "2026-04-02T03:00:00.000Z",
+          "count": 1,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-02T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-02T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-02T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-02T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-02T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-02T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-02T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 19
+        },
+        {
+          "date": "2026-04-02T11:00:00.000Z",
+          "count": 3,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-02T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-02T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 22
+        },
+        {
+          "date": "2026-04-02T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 23
+        },
+        {
+          "date": "2026-04-02T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 23
+        },
+        {
+          "date": "2026-04-02T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 25
+        },
+        {
+          "date": "2026-04-02T17:00:00.000Z",
+          "count": 2,
+          "cumulative": 27
+        },
+        {
+          "date": "2026-04-02T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 27
+        },
+        {
+          "date": "2026-04-02T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 27
+        },
+        {
+          "date": "2026-04-02T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 27
+        },
+        {
+          "date": "2026-04-02T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 27
+        },
+        {
+          "date": "2026-04-02T22:00:00.000Z",
+          "count": 3,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-02T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-03T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 30
+        },
+        {
+          "date": "2026-04-03T01:00:00.000Z",
+          "count": 1,
+          "cumulative": 31
+        },
+        {
+          "date": "2026-04-03T02:00:00.000Z",
+          "count": 1,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-03T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-03T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-03T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-03T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-03T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-03T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-03T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-03T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-03T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 32
+        },
+        {
+          "date": "2026-04-03T12:00:00.000Z",
+          "count": 2,
+          "cumulative": 34
+        },
+        {
+          "date": "2026-04-03T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 34
+        },
+        {
+          "date": "2026-04-03T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 34
+        },
+        {
+          "date": "2026-04-03T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 34
+        },
+        {
+          "date": "2026-04-03T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 34
+        },
+        {
+          "date": "2026-04-03T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 34
+        },
+        {
+          "date": "2026-04-03T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 34
+        },
+        {
+          "date": "2026-04-03T19:00:00.000Z",
+          "count": 1,
+          "cumulative": 35
+        },
+        {
+          "date": "2026-04-03T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 35
+        },
+        {
+          "date": "2026-04-03T21:00:00.000Z",
+          "count": 1,
+          "cumulative": 36
+        },
+        {
+          "date": "2026-04-03T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 36
+        },
+        {
+          "date": "2026-04-03T23:00:00.000Z",
+          "count": 1,
+          "cumulative": 37
+        },
+        {
+          "date": "2026-04-04T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 37
+        },
+        {
+          "date": "2026-04-04T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 37
+        },
+        {
+          "date": "2026-04-04T02:00:00.000Z",
+          "count": 1,
+          "cumulative": 38
+        },
+        {
+          "date": "2026-04-04T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-04T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-04T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-04T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-04T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-04T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-04T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-04T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-04T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-04T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 40
+        },
+        {
+          "date": "2026-04-04T13:00:00.000Z",
+          "count": 2,
+          "cumulative": 42
+        },
+        {
+          "date": "2026-04-04T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 43
+        },
+        {
+          "date": "2026-04-04T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 43
+        },
+        {
+          "date": "2026-04-04T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 43
+        },
+        {
+          "date": "2026-04-04T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 43
+        },
+        {
+          "date": "2026-04-04T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 43
+        },
+        {
+          "date": "2026-04-04T19:00:00.000Z",
+          "count": 4,
+          "cumulative": 47
+        },
+        {
+          "date": "2026-04-04T20:00:00.000Z",
+          "count": 2,
+          "cumulative": 49
+        },
+        {
+          "date": "2026-04-04T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 49
+        },
+        {
+          "date": "2026-04-04T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 49
+        },
+        {
+          "date": "2026-04-04T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 49
+        },
+        {
+          "date": "2026-04-05T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 49
+        },
+        {
+          "date": "2026-04-05T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 49
+        },
+        {
+          "date": "2026-04-05T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 49
+        },
+        {
+          "date": "2026-04-05T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 49
+        },
+        {
+          "date": "2026-04-05T04:00:00.000Z",
+          "count": 1,
+          "cumulative": 50
+        },
+        {
+          "date": "2026-04-05T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 50
+        },
+        {
+          "date": "2026-04-05T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 50
+        },
+        {
+          "date": "2026-04-05T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 50
+        },
+        {
+          "date": "2026-04-05T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 50
+        },
+        {
+          "date": "2026-04-05T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 50
+        },
+        {
+          "date": "2026-04-05T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 50
+        },
+        {
+          "date": "2026-04-05T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 51
+        },
+        {
+          "date": "2026-04-05T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 52
+        },
+        {
+          "date": "2026-04-05T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 52
+        },
+        {
+          "date": "2026-04-05T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 52
+        },
+        {
+          "date": "2026-04-05T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 52
+        },
+        {
+          "date": "2026-04-05T16:00:00.000Z",
+          "count": 1,
+          "cumulative": 53
+        },
+        {
+          "date": "2026-04-05T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 53
+        },
+        {
+          "date": "2026-04-05T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 53
+        },
+        {
+          "date": "2026-04-05T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 53
+        },
+        {
+          "date": "2026-04-05T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 53
+        },
+        {
+          "date": "2026-04-05T21:00:00.000Z",
+          "count": 6,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-05T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-05T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-06T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-06T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 59
+        },
+        {
+          "date": "2026-04-06T02:00:00.000Z",
+          "count": 1,
+          "cumulative": 60
+        },
+        {
+          "date": "2026-04-06T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 60
+        },
+        {
+          "date": "2026-04-06T04:00:00.000Z",
+          "count": 3,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-06T05:00:00.000Z",
+          "count": 1,
+          "cumulative": 64
+        },
+        {
+          "date": "2026-04-06T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 64
+        },
+        {
+          "date": "2026-04-06T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 64
+        },
+        {
+          "date": "2026-04-06T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 64
+        },
+        {
+          "date": "2026-04-06T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 64
+        },
+        {
+          "date": "2026-04-06T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 64
+        },
+        {
+          "date": "2026-04-06T11:00:00.000Z",
+          "count": 2,
+          "cumulative": 66
+        },
+        {
+          "date": "2026-04-06T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 66
+        },
+        {
+          "date": "2026-04-06T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 66
+        },
+        {
+          "date": "2026-04-06T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 66
+        },
+        {
+          "date": "2026-04-06T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 66
+        },
+        {
+          "date": "2026-04-06T16:00:00.000Z",
+          "count": 0,
+          "cumulative": 66
+        },
+        {
+          "date": "2026-04-06T17:00:00.000Z",
+          "count": 0,
+          "cumulative": 66
+        },
+        {
+          "date": "2026-04-06T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 66
+        },
+        {
+          "date": "2026-04-06T19:00:00.000Z",
+          "count": 6,
+          "cumulative": 72
+        },
+        {
+          "date": "2026-04-06T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 72
+        },
+        {
+          "date": "2026-04-06T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 72
+        },
+        {
+          "date": "2026-04-06T22:00:00.000Z",
+          "count": 0,
+          "cumulative": 72
+        },
+        {
+          "date": "2026-04-06T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 72
+        },
+        {
+          "date": "2026-04-07T00:00:00.000Z",
+          "count": 2,
+          "cumulative": 74
+        },
+        {
+          "date": "2026-04-07T01:00:00.000Z",
+          "count": 3,
+          "cumulative": 77
+        },
+        {
+          "date": "2026-04-07T02:00:00.000Z",
+          "count": 0,
+          "cumulative": 77
+        },
+        {
+          "date": "2026-04-07T03:00:00.000Z",
+          "count": 2,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-07T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-07T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-07T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-07T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-07T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-07T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-07T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-07T11:00:00.000Z",
+          "count": 1,
+          "cumulative": 80
+        },
+        {
+          "date": "2026-04-07T12:00:00.000Z",
+          "count": 1,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-07T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-07T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
+        },
+        {
+          "date": "2026-04-07T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 81
         }
       ]
     },
@@ -244,11 +5904,11 @@
       "endDate": "2026-04-07T15:59:59.000Z",
       "target": null,
       "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-march-31-april-7",
-      "isActive": true,
+      "isActive": false,
       "metrics": {},
       "config": {},
       "createdAt": "2026-03-28T04:00:03.392Z",
-      "updatedAt": "2026-03-28T04:00:03.392Z"
+      "updatedAt": "2026-04-07T16:00:08.652Z"
     }
   },
   {
@@ -259,11 +5919,11 @@
     "endDate": "2026-04-03T15:59:59.000Z",
     "target": null,
     "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-march-27-april-3",
-    "isActive": true,
+    "isActive": false,
     "metrics": {},
     "config": {},
     "createdAt": "2026-03-24T04:00:03.617Z",
-    "updatedAt": "2026-03-24T04:00:03.617Z",
+    "updatedAt": "2026-04-03T16:00:08.521Z",
     "user": {
       "id": "d178fa75-3e53-4aae-a826-2128ba91823f",
       "handle": "realDonaldTrump",
@@ -273,20 +5933,20 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:19.078Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:19.079Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
-      "total": 63,
-      "cumulative": 63,
-      "pace": 74,
-      "percentComplete": 86,
-      "daysElapsed": 6,
-      "daysRemaining": 2,
+      "total": 86,
+      "cumulative": 86,
+      "pace": 86,
+      "percentComplete": 100,
+      "daysElapsed": 7,
+      "daysRemaining": 0,
       "daysTotal": 7,
-      "isComplete": false,
+      "isComplete": true,
       "daily": [
         {
           "date": "2026-03-27T16:00:00.000Z",
@@ -912,6 +6572,221 @@
           "date": "2026-04-01T20:00:00.000Z",
           "count": 0,
           "cumulative": 63
+        },
+        {
+          "date": "2026-04-01T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 63
+        },
+        {
+          "date": "2026-04-01T22:00:00.000Z",
+          "count": 1,
+          "cumulative": 64
+        },
+        {
+          "date": "2026-04-01T23:00:00.000Z",
+          "count": 4,
+          "cumulative": 68
+        },
+        {
+          "date": "2026-04-02T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 68
+        },
+        {
+          "date": "2026-04-02T01:00:00.000Z",
+          "count": 0,
+          "cumulative": 68
+        },
+        {
+          "date": "2026-04-02T02:00:00.000Z",
+          "count": 2,
+          "cumulative": 70
+        },
+        {
+          "date": "2026-04-02T03:00:00.000Z",
+          "count": 1,
+          "cumulative": 71
+        },
+        {
+          "date": "2026-04-02T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 71
+        },
+        {
+          "date": "2026-04-02T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 71
+        },
+        {
+          "date": "2026-04-02T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 71
+        },
+        {
+          "date": "2026-04-02T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 71
+        },
+        {
+          "date": "2026-04-02T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 71
+        },
+        {
+          "date": "2026-04-02T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 71
+        },
+        {
+          "date": "2026-04-02T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 71
+        },
+        {
+          "date": "2026-04-02T11:00:00.000Z",
+          "count": 3,
+          "cumulative": 74
+        },
+        {
+          "date": "2026-04-02T12:00:00.000Z",
+          "count": 0,
+          "cumulative": 74
+        },
+        {
+          "date": "2026-04-02T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 74
+        },
+        {
+          "date": "2026-04-02T14:00:00.000Z",
+          "count": 1,
+          "cumulative": 75
+        },
+        {
+          "date": "2026-04-02T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 75
+        },
+        {
+          "date": "2026-04-02T16:00:00.000Z",
+          "count": 2,
+          "cumulative": 77
+        },
+        {
+          "date": "2026-04-02T17:00:00.000Z",
+          "count": 2,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-02T18:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-02T19:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-02T20:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-02T21:00:00.000Z",
+          "count": 0,
+          "cumulative": 79
+        },
+        {
+          "date": "2026-04-02T22:00:00.000Z",
+          "count": 3,
+          "cumulative": 82
+        },
+        {
+          "date": "2026-04-02T23:00:00.000Z",
+          "count": 0,
+          "cumulative": 82
+        },
+        {
+          "date": "2026-04-03T00:00:00.000Z",
+          "count": 0,
+          "cumulative": 82
+        },
+        {
+          "date": "2026-04-03T01:00:00.000Z",
+          "count": 1,
+          "cumulative": 83
+        },
+        {
+          "date": "2026-04-03T02:00:00.000Z",
+          "count": 1,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-03T03:00:00.000Z",
+          "count": 0,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-03T04:00:00.000Z",
+          "count": 0,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-03T05:00:00.000Z",
+          "count": 0,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-03T06:00:00.000Z",
+          "count": 0,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-03T07:00:00.000Z",
+          "count": 0,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-03T08:00:00.000Z",
+          "count": 0,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-03T09:00:00.000Z",
+          "count": 0,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-03T10:00:00.000Z",
+          "count": 0,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-03T11:00:00.000Z",
+          "count": 0,
+          "cumulative": 84
+        },
+        {
+          "date": "2026-04-03T12:00:00.000Z",
+          "count": 2,
+          "cumulative": 86
+        },
+        {
+          "date": "2026-04-03T13:00:00.000Z",
+          "count": 0,
+          "cumulative": 86
+        },
+        {
+          "date": "2026-04-03T14:00:00.000Z",
+          "count": 0,
+          "cumulative": 86
+        },
+        {
+          "date": "2026-04-03T15:00:00.000Z",
+          "count": 0,
+          "cumulative": 86
         }
       ]
     },
@@ -923,11 +6798,11 @@
       "endDate": "2026-04-03T15:59:59.000Z",
       "target": null,
       "marketLink": "https://polymarket.com/event/donald-trump-of-truth-social-posts-march-27-april-3",
-      "isActive": true,
+      "isActive": false,
       "metrics": {},
       "config": {},
       "createdAt": "2026-03-24T04:00:03.617Z",
-      "updatedAt": "2026-03-24T04:00:03.617Z"
+      "updatedAt": "2026-04-03T16:00:08.521Z"
     }
   },
   {
@@ -952,10 +6827,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 99,
@@ -1846,10 +7721,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 97,
@@ -2740,10 +8615,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 93,
@@ -3639,10 +9514,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 102,
@@ -4533,10 +10408,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 106,
@@ -5432,10 +11307,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 87,
@@ -6326,10 +12201,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 160,
@@ -7220,10 +13095,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 216,
@@ -8119,10 +13994,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 170,
@@ -9018,10 +14893,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 139,
@@ -9917,10 +15792,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 129,
@@ -10816,10 +16691,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 129,
@@ -11715,10 +17590,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 131,
@@ -12614,10 +18489,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 123,
@@ -13513,10 +19388,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 107,
@@ -14407,10 +20282,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 101,
@@ -15306,10 +21181,10 @@
       "avatarUrl": "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg",
       "bio": "<p></p>",
       "verified": true,
-      "lastSync": "2026-04-01T20:25:22.894Z",
+      "lastSync": "2026-04-24T23:30:24.351Z",
       "lastSyncError": null,
       "createdAt": "2026-01-21T16:44:31.437Z",
-      "updatedAt": "2026-04-01T20:25:22.895Z"
+      "updatedAt": "2026-04-24T23:30:24.352Z"
     },
     "stats": {
       "total": 252,
