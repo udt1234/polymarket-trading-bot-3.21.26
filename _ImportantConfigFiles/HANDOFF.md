@@ -20,6 +20,7 @@ Bot is LIVE (paper mode). 6 open positions on Trump, $289 invested. Major sessio
 2. **Monitor fill quality** — check liquidity check rejection rate
 3. **Elon module test** — verify pacing chart renders with Elon data
 4. **Edge Found** — resurface in analysis section if wanted
+5. **Elon X direct fetcher (FUTURE)** — mirror the Truth Social direct fetcher for X/Twitter. Truth Social is Mastodon-based and unauthenticated, so it was easy. X requires a Twitter API v2 bearer token (paid tier for user timelines) OR a session-based scrape via Playwright. Decision pending: pay for X API ($100/mo Basic) vs build a scraper. File location when built: `api/modules/elon_tweets/x_direct.py`. CLI mirror: `scripts/verify_x_count.py`. Wire into `api/routers/modules.py` with the same `truth_social_direct` pattern (rename key to `x_direct`).
 
 ## Key Config
 - Trump: e858d9ed-da0d-4e9a-8bef-2c2830686a5a (entry_gate=0)

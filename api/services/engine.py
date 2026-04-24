@@ -55,6 +55,7 @@ class TradingEngine:
         self.scheduler.add_job(self._run_auction_monitor, "interval", hours=1, max_instances=1)
         self.scheduler.add_job(self._run_order_ttl_sweep, "interval", minutes=5, max_instances=1)
         self.scheduler.add_job(self._run_order_book_snapshot, "interval", minutes=5, max_instances=1)
+        self.scheduler.add_job(self._run_post_count_snapshot, "interval", minutes=5, max_instances=1)
         self.scheduler.start()
         self._running = True
         log.info(f"Engine started: interval={interval}s, paper={settings.paper_mode}, shadow={settings.shadow_mode}, multi={self._multi_mode}")
@@ -363,6 +364,95 @@ class TradingEngine:
                 log.info(f"Order book snapshot: captured {total} rows")
         except Exception as e:
             log.error(f"Order book snapshot error: {e}")
+
+    def _run_post_count_snapshot(self):
+        try:
+            import asyncio as _asyncio
+            from datetime import datetime as _dt
+            from api.modules.truth_social.data import fetch_active_tracking, fetch_xtracker_stats, get_xtracker_summary, parse_hourly_counts, compute_running_total
+            from api.modules.truth_social.truthsocial_direct import count_posts_in_window
+
+            sb = get_supabase()
+            modules = sb.table("modules").select("id,name").in_("status", ["active", "paused", "paper"]).execute()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            rows = []
+
+            for m in modules.data or []:
+                name = (m.get("name") or "").lower()
+                if "trump" in name or "truth" in name:
+                    handle = "realDonaldTrump"
+                elif "elon" in name:
+                    handle = "elonmusk"
+                else:
+                    continue
+
+                try:
+                    tracking = _asyncio.get_event_loop().run_until_complete(fetch_active_tracking(handle))
+                except Exception as e:
+                    log.warning(f"Post count snapshot: tracking fetch failed for {handle}: {e}")
+                    continue
+                if not tracking:
+                    continue
+
+                tid = str(tracking.get("id") or tracking.get("trackingId") or "")
+                ws = tracking.get("startDate", "")
+                we = tracking.get("endDate", "")
+
+                try:
+                    raw = _asyncio.get_event_loop().run_until_complete(fetch_xtracker_stats(tid)) if tid else {}
+                    summary = get_xtracker_summary(raw)
+                    hourly = parse_hourly_counts(raw)
+                    xt_count = summary.get("total", 0) or compute_running_total(hourly, ws)
+                    rows.append({
+                        "module_id": m["id"],
+                        "source": "xtracker",
+                        "tracking_id": tid,
+                        "window_start": ws or None,
+                        "window_end": we or None,
+                        "count": int(xt_count) if xt_count is not None else None,
+                        "latest_post_at": hourly[-1].get("date") if hourly else None,
+                        "captured_at": now_iso,
+                    })
+                except Exception as e:
+                    log.warning(f"xTracker snapshot failed for {handle}: {e}")
+                    rows.append({
+                        "module_id": m["id"], "source": "xtracker", "tracking_id": tid,
+                        "window_start": ws or None, "window_end": we or None,
+                        "count": None, "error": str(e)[:200], "captured_at": now_iso,
+                    })
+
+                if handle == "realDonaldTrump" and ws and we:
+                    try:
+                        w_start = _dt.fromisoformat(ws.replace("Z", "+00:00"))
+                        w_end = _dt.fromisoformat(we.replace("Z", "+00:00"))
+                        w_end_capped = min(w_end, datetime.now(timezone.utc))
+                        ts_result = _asyncio.get_event_loop().run_until_complete(
+                            count_posts_in_window(w_start, w_end_capped, handle=handle)
+                        )
+                        rows.append({
+                            "module_id": m["id"],
+                            "source": "truthsocial_direct",
+                            "tracking_id": tid,
+                            "window_start": ws,
+                            "window_end": we,
+                            "count": ts_result.get("count"),
+                            "latest_post_at": ts_result.get("latest_post_at"),
+                            "error": ts_result.get("error"),
+                            "captured_at": now_iso,
+                        })
+                    except Exception as e:
+                        log.warning(f"Truth Social direct snapshot failed: {e}")
+                        rows.append({
+                            "module_id": m["id"], "source": "truthsocial_direct", "tracking_id": tid,
+                            "window_start": ws, "window_end": we,
+                            "count": None, "error": str(e)[:200], "captured_at": now_iso,
+                        })
+
+            if rows:
+                sb.table("post_count_snapshots").insert(rows).execute()
+                log.info(f"Post count snapshot: captured {len(rows)} rows ({sum(1 for r in rows if r.get('count') is not None)} with data)")
+        except Exception as e:
+            log.error(f"Post count snapshot error: {e}")
 
     def _run_order_ttl_sweep(self):
         ORDER_TTL_MINUTES = 5

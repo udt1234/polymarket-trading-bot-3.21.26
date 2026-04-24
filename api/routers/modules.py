@@ -1,8 +1,11 @@
 import asyncio
+import logging
 import math
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -448,6 +451,28 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
 
     ensemble_breakdown = _build_ensemble_breakdown(model_outputs, weights)
 
+    truth_social_direct = None
+    if handle == "realDonaldTrump" and tracking:
+        try:
+            from api.modules.truth_social.truthsocial_direct import count_posts_in_window
+            ws = (tracking or {}).get("startDate", "")
+            we = (tracking or {}).get("endDate", "")
+            if ws and we:
+                w_start = datetime.fromisoformat(ws.replace("Z", "+00:00"))
+                w_end = datetime.fromisoformat(we.replace("Z", "+00:00"))
+                w_end_capped = min(w_end, now)
+                ts_result = await count_posts_in_window(w_start, w_end_capped, handle=handle)
+                ts_count = ts_result.get("count")
+                truth_social_direct = {
+                    "count": ts_count,
+                    "latest_post_at": ts_result.get("latest_post_at"),
+                    "diff_vs_xtracker": (ts_count - running_total) if isinstance(ts_count, int) else None,
+                    "source": "truthsocial.com/api/v1",
+                }
+        except Exception as e:
+            log.warning(f"Truth Social direct fetch failed: {e}")
+            truth_social_direct = {"count": None, "error": str(e)[:120]}
+
     current_auction = {
         "period": f"{week_start_str} to {week_end_str}" if week_start_str else None,
         "title": (tracking or {}).get("title"),
@@ -459,6 +484,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         "projected_winner": conf_bands[0]["bracket"] if conf_bands else None,
         "market_implied_winner": market_implied,
         "ensemble_avg": round(ensemble_avg, 1),
+        "truth_social_direct": truth_social_direct,
     }
 
     next_auction = None
@@ -788,6 +814,62 @@ async def price_history(module_id: str, bracket: str | None = None, limit: int =
         trades = [t for t in trades if t.get("bracket") == bracket]
 
     return {"series": series, "trades": trades}
+
+
+@router.get("/{module_id}/post-count-history")
+async def post_count_history(
+    module_id: str,
+    tracking_id: str | None = Query(default=None),
+    limit: int = 500,
+):
+    """Time-series of xTracker vs Truth Social Direct post counts for the active (or specified) tracking."""
+    sb = get_supabase()
+    q = sb.table("post_count_snapshots").select(
+        "source,tracking_id,window_start,window_end,count,latest_post_at,error,captured_at"
+    ).eq("module_id", module_id)
+
+    if tracking_id:
+        q = q.eq("tracking_id", tracking_id)
+    else:
+        from api.modules.truth_social.data import fetch_active_tracking
+        handle = _detect_handle({"name": (sb.table("modules").select("name").eq("id", module_id).single().execute().data or {}).get("name", "")})
+        try:
+            tracking = await fetch_active_tracking(handle)
+            if tracking:
+                tid = str(tracking.get("id") or tracking.get("trackingId") or "")
+                if tid:
+                    q = q.eq("tracking_id", tid)
+        except Exception:
+            pass
+
+    result = q.order("captured_at", desc=False).limit(limit).execute()
+    rows = result.data or []
+
+    by_time: dict[str, dict] = {}
+    for r in rows:
+        t = r.get("captured_at")
+        if not t:
+            continue
+        bucket = by_time.setdefault(t, {"captured_at": t})
+        bucket[r["source"]] = r.get("count")
+        if r.get("error"):
+            bucket[f"{r['source']}_error"] = r["error"]
+
+    series = sorted(by_time.values(), key=lambda x: x["captured_at"])
+
+    latest = {"xtracker": None, "truthsocial_direct": None, "diff": None, "captured_at": None}
+    for row in reversed(series):
+        if latest["xtracker"] is None and row.get("xtracker") is not None:
+            latest["xtracker"] = row["xtracker"]
+            latest["captured_at"] = row["captured_at"]
+        if latest["truthsocial_direct"] is None and row.get("truthsocial_direct") is not None:
+            latest["truthsocial_direct"] = row["truthsocial_direct"]
+        if latest["xtracker"] is not None and latest["truthsocial_direct"] is not None:
+            break
+    if isinstance(latest["xtracker"], int) and isinstance(latest["truthsocial_direct"], int):
+        latest["diff"] = latest["truthsocial_direct"] - latest["xtracker"]
+
+    return {"series": series, "latest": latest, "row_count": len(rows)}
 
 
 @router.get("/{module_id}/kelly-tracker")

@@ -33,6 +33,7 @@
 | Source | Purpose | Modules |
 |--------|---------|---------|
 | xTracker | Post counts + tracking periods | Both |
+| Truth Social Direct | Independent post-count verification via Mastodon-compatible API | Trump |
 | CNN Archive | Truth Social count verification + historical hourly data | Trump |
 | Gamma API | Prices, brackets, volume | Both |
 | CLOB API | Order book + execution | Both |
