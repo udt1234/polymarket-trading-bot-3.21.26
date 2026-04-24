@@ -28,6 +28,7 @@ import { PriceOverTimeChart } from "./components/price-over-time-chart"
 import { VolumePriceChart } from "./components/volume-price-chart"
 import { OrderBookDepthChart } from "./components/order-book-depth-chart"
 import { LatencyHistogramChart } from "./components/latency-histogram-chart"
+import { PostCountDivergenceChart } from "./components/post-count-divergence-chart"
 
 interface ModuleData {
   id: string
@@ -621,53 +622,15 @@ export default function ModuleDetailPage() {
         )
       })()}
 
-      {/* New Module Analytics Charts */}
-      {(() => {
-        const allSignals = (moduleSignals || []).map((s: any) => s.bracket).filter(Boolean)
-        const uniqueBrackets = Array.from(new Set(allSignals)) as string[]
-        const hourlyData = (pacing?.hourly_counts || []).map((h: any) => ({
-          hour_label: h.hour_label || h.label || "",
-          count: h.count || 0,
-          price: pacing?.market_prices ? Object.values(pacing.market_prices)[0] as number : undefined,
-        }))
-        const timingData = (pacing?.dow_heatmap || []).flatMap((d: any, dow: number) =>
-          (pacing?.hourly_heatmap || []).map((h: any, hour: number) => ({
-            dow,
-            hour,
-            count: (d?.avg || 0) * (h?.avg || 0) / Math.max(1, (pacing?.dow_heatmap?.[0]?.avg || 1)),
-          }))
-        )
-        return (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <PositionBreakdownChart positions={[...openPositions, ...closedPositions]} />
-              <KellyTrackerChart moduleId={module.id} />
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <VolumePriceChart moduleId={module.id} />
-              <OrderBookDepthChart moduleId={module.id} />
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <LatencyHistogramChart moduleId={module.id} />
-              <PostTimingGrid data={timingData} />
-            </div>
-            <PostFrequencyChart hourlyData={hourlyData} />
-            {uniqueBrackets.length > 0 && (
-              <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} />
-            )}
-          </div>
-        )
-      })()}
-
-      {/* Analysis Cards — flex wrap, fixed-width */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Top Analysis Row — Current Auction + Confidence Bands */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         {(() => {
           const data = pacing?.current_auction
           const selectedAuc = auctions?.find((a) => a.tracking_id === (activeTrackingId || (pacing as any)?.tracking_id))
           const pastAucs = (auctions || []).filter((a) => a.status === "past")
             .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 6)
           return (
-            <div className="rounded-lg border border-border bg-card p-6">
+            <div className="rounded-lg border border-border bg-card p-6 h-full">
               <div className="flex items-center gap-2 mb-3">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Current Auction</h2>
                 {selectedAuc?.market_link && (
@@ -685,37 +648,80 @@ export default function ModuleDetailPage() {
                       <span className="text-xs">{data.period?.split(" to ").map((d: string) => formatDate(d.trim())).join(" -> ")}</span>
                     </div>
                   )}
-                  <div className="flex justify-between border-b border-border pb-2">
-                    <span className="text-muted-foreground">Running Total</span>
-                    <span className="font-bold">{data.running_total ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-border pb-2">
-                    <span className="text-muted-foreground">Days</span>
-                    <span>{data.days_elapsed ?? 0} elapsed / {data.days_remaining ?? 7} left</span>
-                  </div>
-                  {data.regime && (
-                    <div className="flex justify-between border-b border-border pb-2">
-                      <span className="text-muted-foreground">Regime</span>
-                      <span className={cn(
-                        "rounded px-1.5 py-0.5 text-xs font-medium",
-                        data.regime?.label === "HIGH" || data.regime?.label === "SURGE" ? "bg-success/20 text-success" :
-                        data.regime?.label === "LOW" || data.regime?.label === "QUIET" ? "bg-destructive/20 text-destructive" :
-                        "bg-muted text-muted-foreground"
-                      )}>
-                        {data.regime?.label || "NORMAL"} (z={data.regime?.zscore?.toFixed(2) ?? 0})
-                      </span>
+
+                  <div className="pt-2">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-2">XTracker</div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between border-b border-border pb-2">
+                        <span className="text-muted-foreground">Running Total</span>
+                        <span className="font-bold">{data.running_total ?? 0}</span>
+                      </div>
+                      <div className="flex justify-between border-b border-border pb-2">
+                        <span className="text-muted-foreground">Days</span>
+                        <span>{data.days_elapsed ?? 0} elapsed / {data.days_remaining ?? 7} left</span>
+                      </div>
+                      {data.regime && (
+                        <div className="flex justify-between border-b border-border pb-2">
+                          <span className="text-muted-foreground">Regime</span>
+                          <span className={cn(
+                            "rounded px-1.5 py-0.5 text-xs font-medium",
+                            data.regime?.label === "HIGH" || data.regime?.label === "SURGE" ? "bg-success/20 text-success" :
+                            data.regime?.label === "LOW" || data.regime?.label === "QUIET" ? "bg-destructive/20 text-destructive" :
+                            "bg-muted text-muted-foreground"
+                          )}>
+                            {data.regime?.label || "NORMAL"} (z={data.regime?.zscore?.toFixed(2) ?? 0})
+                          </span>
+                        </div>
+                      )}
+                      {data.projected_winner && (
+                        <div className="flex justify-between border-b border-border pb-2">
+                          <span className="text-muted-foreground">Projected Winner</span>
+                          <span className="font-semibold text-primary">{data.projected_winner}</span>
+                        </div>
+                      )}
+                      {data.ensemble_avg != null && (
+                        <div className="flex justify-between border-b border-border pb-2">
+                          <span className="text-muted-foreground">Ensemble Avg</span>
+                          <span className="font-bold">{data.ensemble_avg} posts</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {data.projected_winner && (
-                    <div className="flex justify-between border-b border-border pb-2">
-                      <span className="text-muted-foreground">Projected Winner</span>
-                      <span className="font-semibold text-primary">{data.projected_winner}</span>
-                    </div>
-                  )}
-                  {data.ensemble_avg != null && (
-                    <div className="flex justify-between border-b border-border pb-2">
-                      <span className="text-muted-foreground">Ensemble Avg</span>
-                      <span className="font-bold">{data.ensemble_avg} posts</span>
+                  </div>
+
+                  {data.truth_social_direct !== undefined && data.truth_social_direct !== null && (
+                    <div className="pt-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-2">Truth Social (Direct)</div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between border-b border-border pb-2">
+                          <span className="text-muted-foreground">Direct Count</span>
+                          <span className="font-bold">
+                            {data.truth_social_direct.count ?? "—"}
+                          </span>
+                        </div>
+                        {data.truth_social_direct.diff_vs_xtracker != null && (
+                          <div className="flex justify-between border-b border-border pb-2">
+                            <span className="text-muted-foreground">Diff vs xTracker</span>
+                            <span className={cn(
+                              "font-medium",
+                              data.truth_social_direct.diff_vs_xtracker === 0 ? "text-muted-foreground" :
+                              Math.abs(data.truth_social_direct.diff_vs_xtracker) > 2 ? "text-destructive" :
+                              "text-warning"
+                            )}>
+                              {data.truth_social_direct.diff_vs_xtracker > 0 ? "+" : ""}{data.truth_social_direct.diff_vs_xtracker}
+                            </span>
+                          </div>
+                        )}
+                        {data.truth_social_direct.latest_post_at && (
+                          <div className="flex justify-between border-b border-border pb-2">
+                            <span className="text-muted-foreground">Latest Post</span>
+                            <span className="text-xs">{new Date(data.truth_social_direct.latest_post_at).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {data.truth_social_direct.error && (
+                          <div className="text-xs text-destructive">Error: {data.truth_social_direct.error}</div>
+                        )}
+                        <div className="text-[10px] text-muted-foreground/60">Source: truthsocial.com/api/v1</div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -729,7 +735,6 @@ export default function ModuleDetailPage() {
                 const rejected = signals.filter((s: any) => !s.approved)
                 const topRejection = rejected[0]?.rejection_reason || ""
                 const hasPositions = (paperPositions || []).some((p: any) => p.status === "open")
-                const elapsedPct = data.days_elapsed && data.total_days ? (data.days_elapsed / data.total_days * 100).toFixed(0) : "?"
 
                 let reasoning = ""
                 if (approved.length > 0 && hasPositions) {
@@ -766,7 +771,6 @@ export default function ModuleDetailPage() {
                       const isExec = log.log_type === "execution"
                       const isRisk = log.log_type === "risk"
                       const icon = isExec ? "✅" : isRisk ? "🛡️" : "🔍"
-                      // Simplify message for display
                       let msg = log.message || ""
                       if (msg.startsWith("Cycle:")) {
                         const sigMatch = msg.match(/signals=(\d+)/)
@@ -835,6 +839,10 @@ export default function ModuleDetailPage() {
           )
         })()}
         <ConfidenceBands bands={pacing?.confidence_bands} allProbs={pacing?.all_bracket_probs} />
+      </div>
+
+      {/* Second Analysis Row — Ensemble Breakdown + Pace Acceleration */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         <EnsembleBreakdown
           ensemble={pacing?.ensemble_breakdown}
           ensembleAvg={pacing?.ensemble_avg || 0}
@@ -848,11 +856,53 @@ export default function ModuleDetailPage() {
             refetchConfig()
           }}
         />
-        <div className="col-span-full"><DailyPacingTable pacing={pacing} /></div>
-        <DowHeatmap dowAvg={pacing?.dow_heatmap} />
         <PaceAcceleration accel={pacing?.pace_acceleration} />
       </div>
 
+      {/* New Module Analytics Charts */}
+      {(() => {
+        const allSignals = (moduleSignals || []).map((s: any) => s.bracket).filter(Boolean)
+        const uniqueBrackets = Array.from(new Set(allSignals)) as string[]
+        const hourlyData = (pacing?.hourly_counts || []).map((h: any) => ({
+          hour_label: h.hour_label || h.label || "",
+          count: h.count || 0,
+          price: pacing?.market_prices ? Object.values(pacing.market_prices)[0] as number : undefined,
+        }))
+        const timingData = (pacing?.dow_heatmap || []).flatMap((d: any, dow: number) =>
+          (pacing?.hourly_heatmap || []).map((h: any, hour: number) => ({
+            dow,
+            hour,
+            count: (d?.avg || 0) * (h?.avg || 0) / Math.max(1, (pacing?.dow_heatmap?.[0]?.avg || 1)),
+          }))
+        )
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <PositionBreakdownChart positions={[...openPositions, ...closedPositions]} />
+              <KellyTrackerChart moduleId={module.id} />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <VolumePriceChart moduleId={module.id} />
+              <OrderBookDepthChart moduleId={module.id} />
+            </div>
+            <LatencyHistogramChart moduleId={module.id} />
+            <PostTimingGrid data={timingData} />
+            <PostFrequencyChart hourlyData={hourlyData} />
+            {uniqueBrackets.length > 0 && (
+              <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} />
+            )}
+            {(moduleName.includes("truth") || moduleName.includes("trump")) && (
+              <PostCountDivergenceChart moduleId={module.id} trackingId={activeTrackingId || (pacing as any)?.tracking_id} />
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Pacing detail — Daily table + DOW heatmap */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="col-span-full"><DailyPacingTable pacing={pacing} /></div>
+        <DowHeatmap dowAvg={pacing?.dow_heatmap} />
+      </div>
       {/* Open Positions */}
       <PositionsTable
         openPositions={openPositions}
