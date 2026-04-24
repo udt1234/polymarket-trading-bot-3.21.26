@@ -28,6 +28,7 @@ import { PriceOverTimeChart } from "./components/price-over-time-chart"
 import { VolumePriceChart } from "./components/volume-price-chart"
 import { OrderBookDepthChart } from "./components/order-book-depth-chart"
 import { LatencyHistogramChart } from "./components/latency-histogram-chart"
+import { PostCountDivergenceChart } from "./components/post-count-divergence-chart"
 
 interface ModuleData {
   id: string
@@ -655,6 +656,9 @@ export default function ModuleDetailPage() {
             {uniqueBrackets.length > 0 && (
               <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} />
             )}
+            {(moduleName.includes("truth") || moduleName.includes("trump")) && (
+              <PostCountDivergenceChart moduleId={module.id} trackingId={activeTrackingId || (pacing as any)?.tracking_id} />
+            )}
           </div>
         )
       })()}
@@ -685,37 +689,80 @@ export default function ModuleDetailPage() {
                       <span className="text-xs">{data.period?.split(" to ").map((d: string) => formatDate(d.trim())).join(" -> ")}</span>
                     </div>
                   )}
-                  <div className="flex justify-between border-b border-border pb-2">
-                    <span className="text-muted-foreground">Running Total</span>
-                    <span className="font-bold">{data.running_total ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-border pb-2">
-                    <span className="text-muted-foreground">Days</span>
-                    <span>{data.days_elapsed ?? 0} elapsed / {data.days_remaining ?? 7} left</span>
-                  </div>
-                  {data.regime && (
-                    <div className="flex justify-between border-b border-border pb-2">
-                      <span className="text-muted-foreground">Regime</span>
-                      <span className={cn(
-                        "rounded px-1.5 py-0.5 text-xs font-medium",
-                        data.regime?.label === "HIGH" || data.regime?.label === "SURGE" ? "bg-success/20 text-success" :
-                        data.regime?.label === "LOW" || data.regime?.label === "QUIET" ? "bg-destructive/20 text-destructive" :
-                        "bg-muted text-muted-foreground"
-                      )}>
-                        {data.regime?.label || "NORMAL"} (z={data.regime?.zscore?.toFixed(2) ?? 0})
-                      </span>
+
+                  <div className="pt-2">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-2">XTracker</div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between border-b border-border pb-2">
+                        <span className="text-muted-foreground">Running Total</span>
+                        <span className="font-bold">{data.running_total ?? 0}</span>
+                      </div>
+                      <div className="flex justify-between border-b border-border pb-2">
+                        <span className="text-muted-foreground">Days</span>
+                        <span>{data.days_elapsed ?? 0} elapsed / {data.days_remaining ?? 7} left</span>
+                      </div>
+                      {data.regime && (
+                        <div className="flex justify-between border-b border-border pb-2">
+                          <span className="text-muted-foreground">Regime</span>
+                          <span className={cn(
+                            "rounded px-1.5 py-0.5 text-xs font-medium",
+                            data.regime?.label === "HIGH" || data.regime?.label === "SURGE" ? "bg-success/20 text-success" :
+                            data.regime?.label === "LOW" || data.regime?.label === "QUIET" ? "bg-destructive/20 text-destructive" :
+                            "bg-muted text-muted-foreground"
+                          )}>
+                            {data.regime?.label || "NORMAL"} (z={data.regime?.zscore?.toFixed(2) ?? 0})
+                          </span>
+                        </div>
+                      )}
+                      {data.projected_winner && (
+                        <div className="flex justify-between border-b border-border pb-2">
+                          <span className="text-muted-foreground">Projected Winner</span>
+                          <span className="font-semibold text-primary">{data.projected_winner}</span>
+                        </div>
+                      )}
+                      {data.ensemble_avg != null && (
+                        <div className="flex justify-between border-b border-border pb-2">
+                          <span className="text-muted-foreground">Ensemble Avg</span>
+                          <span className="font-bold">{data.ensemble_avg} posts</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {data.projected_winner && (
-                    <div className="flex justify-between border-b border-border pb-2">
-                      <span className="text-muted-foreground">Projected Winner</span>
-                      <span className="font-semibold text-primary">{data.projected_winner}</span>
-                    </div>
-                  )}
-                  {data.ensemble_avg != null && (
-                    <div className="flex justify-between border-b border-border pb-2">
-                      <span className="text-muted-foreground">Ensemble Avg</span>
-                      <span className="font-bold">{data.ensemble_avg} posts</span>
+                  </div>
+
+                  {data.truth_social_direct !== undefined && data.truth_social_direct !== null && (
+                    <div className="pt-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-2">Truth Social (Direct)</div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between border-b border-border pb-2">
+                          <span className="text-muted-foreground">Direct Count</span>
+                          <span className="font-bold">
+                            {data.truth_social_direct.count ?? "—"}
+                          </span>
+                        </div>
+                        {data.truth_social_direct.diff_vs_xtracker != null && (
+                          <div className="flex justify-between border-b border-border pb-2">
+                            <span className="text-muted-foreground">Diff vs xTracker</span>
+                            <span className={cn(
+                              "font-medium",
+                              data.truth_social_direct.diff_vs_xtracker === 0 ? "text-muted-foreground" :
+                              Math.abs(data.truth_social_direct.diff_vs_xtracker) > 2 ? "text-destructive" :
+                              "text-warning"
+                            )}>
+                              {data.truth_social_direct.diff_vs_xtracker > 0 ? "+" : ""}{data.truth_social_direct.diff_vs_xtracker}
+                            </span>
+                          </div>
+                        )}
+                        {data.truth_social_direct.latest_post_at && (
+                          <div className="flex justify-between border-b border-border pb-2">
+                            <span className="text-muted-foreground">Latest Post</span>
+                            <span className="text-xs">{new Date(data.truth_social_direct.latest_post_at).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {data.truth_social_direct.error && (
+                          <div className="text-xs text-destructive">Error: {data.truth_social_direct.error}</div>
+                        )}
+                        <div className="text-[10px] text-muted-foreground/60">Source: truthsocial.com/api/v1</div>
+                      </div>
                     </div>
                   )}
                 </div>
