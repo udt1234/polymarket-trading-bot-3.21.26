@@ -29,7 +29,7 @@ export function PostCountDivergenceChart({ moduleId, trackingId }: { moduleId: s
   const url = trackingId
     ? `/api/modules/${moduleId}/post-count-history?tracking_id=${encodeURIComponent(trackingId)}&limit=500`
     : `/api/modules/${moduleId}/post-count-history?limit=500`
-  const { data, isLoading } = useApi<PostCountHistory>(moduleId ? url : null, [trackingId])
+  const { data, loading: isLoading } = useApi<PostCountHistory>(moduleId ? url : null, [trackingId])
 
   const series = data?.series || []
   const latest = data?.latest
