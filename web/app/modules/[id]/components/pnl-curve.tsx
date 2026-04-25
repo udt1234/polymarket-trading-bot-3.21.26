@@ -1,5 +1,6 @@
 "use client"
 
+// Build-tag: pnl-curve-v2 (forces Railway to pick up new chunk hash)
 import { cn } from "@/lib/utils"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
