@@ -868,13 +868,12 @@ export default function ModuleDetailPage() {
           count: h.count || 0,
           price: pacing?.market_prices ? Object.values(pacing.market_prices)[0] as number : undefined,
         }))
-        const timingData = (pacing?.dow_heatmap || []).flatMap((d: any, dow: number) =>
-          (pacing?.hourly_heatmap || []).map((h: any, hour: number) => ({
-            dow,
-            hour,
-            count: (d?.avg || 0) * (h?.avg || 0) / Math.max(1, (pacing?.dow_heatmap?.[0]?.avg || 1)),
-          }))
-        )
+        const timingData = (pacing?.dow_hour_heatmap || []).map((c: any) => ({
+          dow: c.dow,
+          hour: c.hour,
+          count: c.avg || 0,
+          samples: c.samples || 0,
+        }))
         return (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
