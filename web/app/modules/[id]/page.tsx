@@ -29,6 +29,7 @@ import { VolumePriceChart } from "./components/volume-price-chart"
 import { OrderBookDepthChart } from "./components/order-book-depth-chart"
 import { LatencyHistogramChart } from "./components/latency-histogram-chart"
 import { PostCountDivergenceChart } from "./components/post-count-divergence-chart"
+import { CollapsibleCard } from "./components/collapsible-card"
 
 interface ModuleData {
   id: string
@@ -75,6 +76,7 @@ interface Position {
   unrealized_pnl: number
   status: string
   module_id?: string
+  closed_at?: string | null
 }
 
 interface ModuleConfig {
@@ -493,18 +495,24 @@ export default function ModuleDetailPage() {
       </div>
 
       {/* Pending Signals */}
-      <PendingSignalsCard moduleId={module.id} />
+      <CollapsibleCard id="pending-signals" title="Pending Signals">
+        <PendingSignalsCard moduleId={module.id} />
+      </CollapsibleCard>
 
       {/* Last 3 Auctions P&L */}
-      <LastAuctionsPnl auctions={auctions || []} walletAuctions={relevantAuctions} />
+      <CollapsibleCard id="last-auctions-pnl" title="Recent Auctions P&L">
+        <LastAuctionsPnl auctions={auctions || []} walletAuctions={relevantAuctions} />
+      </CollapsibleCard>
 
       {/* Module P&L Curve */}
-      <PnlCurve
-        trades={trades?.data || []}
-        openPositions={openPositions}
-        closedPositions={closedPositions}
-        marketPrices={pacing?.market_prices}
-      />
+      <CollapsibleCard id="module-pnl" title="Module P&L">
+        <PnlCurve
+          trades={trades?.data || []}
+          openPositions={openPositions}
+          closedPositions={closedPositions}
+          marketPrices={pacing?.market_prices}
+        />
+      </CollapsibleCard>
 
       {/* Summary Cards */}
       {(() => {
@@ -624,6 +632,7 @@ export default function ModuleDetailPage() {
 
       {/* Top Analysis Row — Current Auction + Confidence Bands */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+        <CollapsibleCard id="current-auction" title="Current Auction">
         {(() => {
           const data = pacing?.current_auction
           const selectedAuc = auctions?.find((a) => a.tracking_id === (activeTrackingId || (pacing as any)?.tracking_id))
@@ -838,25 +847,32 @@ export default function ModuleDetailPage() {
             </div>
           )
         })()}
-        <ConfidenceBands bands={pacing?.confidence_bands} allProbs={pacing?.all_bracket_probs} />
+        </CollapsibleCard>
+        <CollapsibleCard id="confidence-bands" title="Confidence Bands">
+          <ConfidenceBands bands={pacing?.confidence_bands} allProbs={pacing?.all_bracket_probs} />
+        </CollapsibleCard>
       </div>
 
       {/* Second Analysis Row — Ensemble Breakdown + Pace Acceleration */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        <EnsembleBreakdown
-          ensemble={pacing?.ensemble_breakdown}
-          ensembleAvg={pacing?.ensemble_avg || 0}
-          weightOverrides={config?.weight_overrides}
-          onSaveWeights={async (overrides) => {
-            if (!id) return
-            await apiFetch(`/api/settings/module-configs/${id}`, {
-              method: "PUT",
-              body: JSON.stringify({ weight_overrides: overrides }),
-            })
-            refetchConfig()
-          }}
-        />
-        <PaceAcceleration accel={pacing?.pace_acceleration} />
+        <CollapsibleCard id="ensemble-breakdown" title="Ensemble Sub-Model Breakdown">
+          <EnsembleBreakdown
+            ensemble={pacing?.ensemble_breakdown}
+            ensembleAvg={pacing?.ensemble_avg || 0}
+            weightOverrides={config?.weight_overrides}
+            onSaveWeights={async (overrides) => {
+              if (!id) return
+              await apiFetch(`/api/settings/module-configs/${id}`, {
+                method: "PUT",
+                body: JSON.stringify({ weight_overrides: overrides }),
+              })
+              refetchConfig()
+            }}
+          />
+        </CollapsibleCard>
+        <CollapsibleCard id="pace-acceleration" title="Pace Acceleration">
+          <PaceAcceleration accel={pacing?.pace_acceleration} />
+        </CollapsibleCard>
       </div>
 
       {/* New Module Analytics Charts */}
@@ -877,43 +893,66 @@ export default function ModuleDetailPage() {
         return (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <PositionBreakdownChart positions={[...openPositions, ...closedPositions]} />
-              <KellyTrackerChart moduleId={module.id} />
+              <CollapsibleCard id="position-breakdown" title="Position Breakdown">
+                <PositionBreakdownChart positions={[...openPositions, ...closedPositions]} />
+              </CollapsibleCard>
+              <CollapsibleCard id="kelly-tracker" title="Kelly Sizing Tracker">
+                <KellyTrackerChart moduleId={module.id} />
+              </CollapsibleCard>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <VolumePriceChart moduleId={module.id} />
-              <OrderBookDepthChart moduleId={module.id} />
+              <CollapsibleCard id="volume-price" title="Volume vs Price">
+                <VolumePriceChart moduleId={module.id} />
+              </CollapsibleCard>
+              <CollapsibleCard id="order-book-depth" title="Order Book Depth">
+                <OrderBookDepthChart moduleId={module.id} />
+              </CollapsibleCard>
             </div>
-            <LatencyHistogramChart moduleId={module.id} />
-            <PostTimingGrid data={timingData} />
-            <PostFrequencyChart hourlyData={hourlyData} />
+            <CollapsibleCard id="latency-histogram" title="Signal-to-Fill Latency">
+              <LatencyHistogramChart moduleId={module.id} />
+            </CollapsibleCard>
+            <CollapsibleCard id="post-timing-heatmap" title="Post Timing Heatmap">
+              <PostTimingGrid data={timingData} />
+            </CollapsibleCard>
+            <CollapsibleCard id="post-frequency" title="Post Frequency">
+              <PostFrequencyChart hourlyData={hourlyData} />
+            </CollapsibleCard>
             {uniqueBrackets.length > 0 && (
-              <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} />
+              <CollapsibleCard id="price-over-time" title="Price Over Time">
+                <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} />
+              </CollapsibleCard>
             )}
             {(moduleName.includes("truth") || moduleName.includes("trump")) && (
-              <PostCountDivergenceChart moduleId={module.id} trackingId={activeTrackingId || (pacing as any)?.tracking_id} />
+              <CollapsibleCard id="post-count-divergence" title="xTracker vs Truth Social Direct">
+                <PostCountDivergenceChart moduleId={module.id} trackingId={activeTrackingId || (pacing as any)?.tracking_id} />
+              </CollapsibleCard>
             )}
           </div>
         )
       })()}
 
       {/* Pacing detail — Daily table + DOW heatmap */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="col-span-full"><DailyPacingTable pacing={pacing} /></div>
+      <CollapsibleCard id="daily-pacing" title="Daily Pacing">
+        <DailyPacingTable pacing={pacing} />
+      </CollapsibleCard>
+      <CollapsibleCard id="dow-heatmap" title="DOW Averages Heatmap">
         <DowHeatmap dowAvg={pacing?.dow_heatmap} />
-      </div>
+      </CollapsibleCard>
       {/* Open Positions */}
-      <PositionsTable
-        openPositions={openPositions}
-        totalInvested={totalInvested}
-        potentialWin={potentialWin}
-        bestBracket={bestBracket}
-        marketPrices={pacing?.market_prices}
-        auctionLabel={selectedAuction ? `${formatDateShort(selectedAuction.start_date)} - ${formatDateShort(selectedAuction.end_date)}` : undefined}
-      />
+      <CollapsibleCard id="open-positions" title="Open Positions">
+        <PositionsTable
+          openPositions={openPositions}
+          totalInvested={totalInvested}
+          potentialWin={potentialWin}
+          bestBracket={bestBracket}
+          marketPrices={pacing?.market_prices}
+          auctionLabel={selectedAuction ? `${formatDateShort(selectedAuction.start_date)} - ${formatDateShort(selectedAuction.end_date)}` : undefined}
+        />
+      </CollapsibleCard>
 
       {/* Closed Positions */}
       {closedPositions.length > 0 && (
+        <CollapsibleCard id="closed-positions" title={`Closed Positions (${closedPositions.length})`}>
         <div className="rounded-lg border border-border bg-card">
           <div className="border-b border-border px-6 py-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -959,18 +998,29 @@ export default function ModuleDetailPage() {
             </table>
           </div>
         </div>
+        </CollapsibleCard>
       )}
 
       {/* Hourly Heatmap */}
-      <HourlyHeatmap hourlyAvg={pacing?.hourly_heatmap} historicalHourly={pacing?.historical_hourly_heatmap} />
+      <CollapsibleCard id="hourly-heatmap" title="Hourly Posts Heatmap">
+        <HourlyHeatmap hourlyAvg={pacing?.hourly_heatmap} historicalHourly={pacing?.historical_hourly_heatmap} />
+      </CollapsibleCard>
 
-      <PriceByDowHourHeatmap data={priceHeatmaps?.by_dow_hour} />
+      <CollapsibleCard id="price-by-dow-hour" title="Price by DOW × Hour">
+        <PriceByDowHourHeatmap data={priceHeatmaps?.by_dow_hour} />
+      </CollapsibleCard>
 
-      <PriceByElapsedDayHeatmap data={priceHeatmaps?.by_elapsed_day} />
+      <CollapsibleCard id="price-by-elapsed-day" title="Price by Elapsed Day">
+        <PriceByElapsedDayHeatmap data={priceHeatmaps?.by_elapsed_day} />
+      </CollapsibleCard>
 
-      <SignalsTable signals={mySignals} />
+      <CollapsibleCard id="signals-table" title="Signals">
+        <SignalsTable signals={mySignals} />
+      </CollapsibleCard>
 
-      <TradeHistory trades={trades} />
+      <CollapsibleCard id="trade-history" title="Trade History">
+        <TradeHistory trades={trades} />
+      </CollapsibleCard>
 
       {id && <AuctionDeepDive moduleId={id} />}
 
