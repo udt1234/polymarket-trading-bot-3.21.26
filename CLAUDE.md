@@ -63,6 +63,10 @@ Automated Polymarket trading bot deployed on Railway.
 - For research: use subagents
 - For code review: use @qa-reviewer or /feature-dev:code-reviewer
 
+## Autonomy
+- **Use Claude in Chrome and Claude Preview MCP tools proactively whenever the task is browser-actionable.** This includes Railway deploys, redeploys, dashboard checks, deploy log inspection, and any other web-based action that would otherwise require user clicks. Do not ask the user to "open the dashboard" or "click redeploy" — drive the browser via MCP and report results.
+- Only escalate to the user when an action genuinely requires their physical input (e.g. 2FA codes, password entry on a locked-out account, financial confirmation).
+
 ## After Every Bug Fix
 Update `_ImportantConfigFiles/lessons.md` with what went wrong and the rule to prevent it.
 
