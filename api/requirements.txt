@@ -6,6 +6,7 @@ supabase>=2.11.0
 python-dotenv>=1.0.1
 apscheduler>=3.10.4
 httpx>=0.28.0
+curl_cffi>=0.7.0
 websockets>=14.0
 py-clob-client>=0.17.0
 numpy>=2.0.0

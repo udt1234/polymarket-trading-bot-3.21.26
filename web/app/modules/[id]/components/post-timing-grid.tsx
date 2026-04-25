@@ -4,6 +4,12 @@ import { cn } from "@/lib/utils"
 
 const DOWS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
+const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => {
+  if (h === 0) return "12 AM"
+  if (h === 12) return "12 PM"
+  return h < 12 ? `${h} AM` : `${h - 12} PM`
+})
+
 export function PostTimingGrid({ data }: { data: Array<{ dow: number; hour: number; count: number }> }) {
   const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0))
   let max = 0
@@ -30,8 +36,8 @@ export function PostTimingGrid({ data }: { data: Array<{ dow: number; hour: numb
           <div className="flex">
             <div className="w-10 flex-shrink-0" />
             <div className="flex-1 grid grid-cols-24 gap-[2px]" style={{ gridTemplateColumns: "repeat(24, minmax(0, 1fr))" }}>
-              {Array.from({ length: 24 }).map((_, h) => (
-                <div key={h} className="text-center text-[9px] text-muted-foreground">{h}</div>
+              {HOUR_LABELS.map((label, h) => (
+                <div key={h} className="text-center text-[9px] leading-tight text-muted-foreground whitespace-nowrap">{label}</div>
               ))}
             </div>
           </div>
