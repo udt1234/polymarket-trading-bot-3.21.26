@@ -451,6 +451,8 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
 
     ensemble_breakdown = _build_ensemble_breakdown(model_outputs, weights)
 
+    # Truth Social direct fetch is supplemental — must NEVER block the pacing endpoint.
+    # Wrap in a tight timeout; on timeout/failure we return None and the frontend renders gracefully.
     truth_social_direct = None
     if handle == "realDonaldTrump" and tracking:
         try:
@@ -461,7 +463,10 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
                 w_start = datetime.fromisoformat(ws.replace("Z", "+00:00"))
                 w_end = datetime.fromisoformat(we.replace("Z", "+00:00"))
                 w_end_capped = min(w_end, now)
-                ts_result = await count_posts_in_window(w_start, w_end_capped, handle=handle)
+                ts_result = await asyncio.wait_for(
+                    count_posts_in_window(w_start, w_end_capped, handle=handle),
+                    timeout=3.0,
+                )
                 ts_count = ts_result.get("count")
                 truth_social_direct = {
                     "count": ts_count,
@@ -469,6 +474,9 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
                     "diff_vs_xtracker": (ts_count - running_total) if isinstance(ts_count, int) else None,
                     "source": "truthsocial.com/api/v1",
                 }
+        except asyncio.TimeoutError:
+            log.warning("Truth Social direct fetch timed out (>3s) — pacing continues without it")
+            truth_social_direct = {"count": None, "error": "timeout"}
         except Exception as e:
             log.warning(f"Truth Social direct fetch failed: {e}")
             truth_social_direct = {"count": None, "error": str(e)[:120]}
