@@ -5,7 +5,7 @@ import { TrendingUp, TrendingDown } from "lucide-react"
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
 
 interface Trade { bracket: string; side: string; size: number; price: number; executed_at: string }
-interface Position { bracket: string; size: number; avg_price: number; realized_pnl: number; status: string }
+interface Position { bracket: string; size: number; avg_price: number; realized_pnl: number; status: string; closed_at?: string | null }
 
 export function PnlCurve({ trades, openPositions, closedPositions, marketPrices }: {
   trades: Trade[]
@@ -16,19 +16,30 @@ export function PnlCurve({ trades, openPositions, closedPositions, marketPrices 
   if (!trades.length && !closedPositions.length) return null
 
   const sortedTrades = [...trades].sort((a, b) => a.executed_at.localeCompare(b.executed_at))
+  const totalInvestedAll = sortedTrades.reduce((s, t) => s + t.size * t.price, 0)
+  const realizedPnlTotal = closedPositions.reduce((s, p) => s + (p.realized_pnl || 0), 0)
+  const unrealizedPnlTotal = openPositions.reduce(
+    (s, p) => s + (p.size * (marketPrices?.[p.bracket] ?? p.avg_price)) - (p.size * p.avg_price),
+    0,
+  )
+  const finalPnl = realizedPnlTotal + unrealizedPnlTotal
+
   let cumInvested = 0
   let cumPnl = 0
   let peak = 0
   let maxDrawdown = 0
-  const chartData = sortedTrades.map((t) => {
+  const chartData = sortedTrades.map((t, idx) => {
     cumInvested += t.size * t.price
-    const currentValue = openPositions
-      .filter((p) => p.bracket === t.bracket)
-      .reduce((s, p) => s + p.size * (marketPrices?.[p.bracket] ?? p.avg_price), 0)
-    const closedPnl = closedPositions
-      .filter((p) => p.bracket === t.bracket)
+
+    const tradeTime = t.executed_at
+    const realizedToDate = closedPositions
+      .filter((p) => (p.closed_at || "") <= tradeTime)
       .reduce((s, p) => s + (p.realized_pnl || 0), 0)
-    cumPnl = closedPnl + (currentValue - cumInvested)
+
+    const isLastTrade = idx === sortedTrades.length - 1
+    const unrealizedToDate = isLastTrade ? unrealizedPnlTotal : 0
+
+    cumPnl = realizedToDate + unrealizedToDate
     peak = Math.max(peak, cumPnl)
     const dd = peak > 0 ? ((peak - cumPnl) / peak) * 100 : 0
     maxDrawdown = Math.max(maxDrawdown, dd)
@@ -39,8 +50,8 @@ export function PnlCurve({ trades, openPositions, closedPositions, marketPrices 
     }
   })
 
-  const totalReturn = cumInvested > 0 ? ((cumPnl / cumInvested) * 100).toFixed(1) : "0"
-  const isPositive = cumPnl >= 0
+  const totalReturn = totalInvestedAll > 0 ? ((finalPnl / totalInvestedAll) * 100).toFixed(1) : "0"
+  const isPositive = finalPnl >= 0
 
   return (
     <div className="rounded-lg border border-border bg-card p-6">
@@ -55,7 +66,7 @@ export function PnlCurve({ trades, openPositions, closedPositions, marketPrices 
         <div className="flex gap-4 text-xs text-muted-foreground">
           <span>Max DD: <span className="font-medium text-amber-400">{maxDrawdown.toFixed(1)}%</span></span>
           <span>Trades: <span className="font-medium text-foreground">{sortedTrades.length}</span></span>
-          <span>Invested: <span className="font-medium text-foreground">${Math.round(cumInvested)}</span></span>
+          <span>Invested: <span className="font-medium text-foreground">${Math.round(totalInvestedAll)}</span></span>
         </div>
       </div>
       {chartData.length > 1 ? (

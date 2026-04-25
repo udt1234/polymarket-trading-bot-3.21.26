@@ -332,8 +332,24 @@ class TradingEngine:
                 slug = m.get("market_slug")
                 if not slug:
                     continue
+                bracket_set: set[str] = set()
+                # Brackets where we hold open positions — must always have order book data
+                open_pos = sb.table("positions").select("bracket").eq("module_id", m["id"]).eq("status", "open").execute()
+                for p in (open_pos.data or []):
+                    if p.get("bracket"):
+                        bracket_set.add(p["bracket"])
+                # Brackets with recent signal activity
                 recent_signals = sb.table("signals").select("bracket").eq("module_id", m["id"]).order("created_at", desc=True).limit(50).execute()
-                brackets = list({s["bracket"] for s in (recent_signals.data or []) if s.get("bracket")})
+                for s in (recent_signals.data or []):
+                    if s.get("bracket"):
+                        bracket_set.add(s["bracket"])
+                # Fallback when nothing fresh: pull all brackets ever seen in signals so chart isn't empty
+                if not bracket_set:
+                    all_signals = sb.table("signals").select("bracket").eq("module_id", m["id"]).limit(500).execute()
+                    for s in (all_signals.data or []):
+                        if s.get("bracket"):
+                            bracket_set.add(s["bracket"])
+                brackets = list(bracket_set)
                 if not brackets:
                     continue
                 try:
@@ -426,8 +442,13 @@ class TradingEngine:
                         w_start = _dt.fromisoformat(ws.replace("Z", "+00:00"))
                         w_end = _dt.fromisoformat(we.replace("Z", "+00:00"))
                         w_end_capped = min(w_end, datetime.now(timezone.utc))
+                        # 15s timeout — Cloudflare rate-limit responses can stall the call indefinitely.
+                        # Insert a row even on timeout so the divergence chart shows the gap explicitly.
                         ts_result = _asyncio.get_event_loop().run_until_complete(
-                            count_posts_in_window(w_start, w_end_capped, handle=handle)
+                            _asyncio.wait_for(
+                                count_posts_in_window(w_start, w_end_capped, handle=handle),
+                                timeout=15.0,
+                            )
                         )
                         rows.append({
                             "module_id": m["id"],
@@ -439,6 +460,13 @@ class TradingEngine:
                             "latest_post_at": ts_result.get("latest_post_at"),
                             "error": ts_result.get("error"),
                             "captured_at": now_iso,
+                        })
+                    except _asyncio.TimeoutError:
+                        log.warning("Truth Social direct snapshot timed out (>15s)")
+                        rows.append({
+                            "module_id": m["id"], "source": "truthsocial_direct", "tracking_id": tid,
+                            "window_start": ws, "window_end": we,
+                            "count": None, "error": "timeout", "captured_at": now_iso,
                         })
                     except Exception as e:
                         log.warning(f"Truth Social direct snapshot failed: {e}")
