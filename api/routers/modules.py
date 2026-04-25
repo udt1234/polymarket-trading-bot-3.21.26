@@ -327,6 +327,46 @@ def _build_historical_hourly_heatmap(hist_hourly: dict) -> list[dict]:
     ]
 
 
+def _build_dow_hour_heatmap(handle: str) -> list[dict]:
+    """Real DOW × hour averages from years of historical hourly post data.
+
+    Reads _DataMetricPulls/historical/{handle}/hourly.json which contains rows of
+    {date, hour, dow, count} aggregated from xTracker history. Computes mean
+    posts per (dow, hour) cell across all observed weeks.
+
+    Returns 168 cells (7 days × 24 hours). Empty cells (no historical data)
+    have avg=0, samples=0.
+    """
+    import json
+    hist_path = Path(__file__).parent.parent.parent / "_DataMetricPulls" / "historical" / handle / "hourly.json"
+    if not hist_path.exists():
+        return []
+    try:
+        with open(hist_path) as f:
+            rows = json.load(f)
+    except Exception:
+        return []
+
+    by_cell = defaultdict(list)
+    for r in rows:
+        try:
+            dow = int(r.get("dow"))
+            hr = int(r.get("hour"))
+            cnt = float(r.get("count", 0))
+            if 0 <= dow < 7 and 0 <= hr < 24:
+                by_cell[(dow, hr)].append(cnt)
+        except (TypeError, ValueError):
+            continue
+
+    out = []
+    for dow in range(7):
+        for hr in range(24):
+            vals = by_cell.get((dow, hr), [])
+            avg = round(sum(vals) / len(vals), 2) if vals else 0
+            out.append({"dow": dow, "hour": hr, "avg": avg, "samples": len(vals)})
+    return out
+
+
 def _build_hourly_heatmap(hourly_counts: list[dict]) -> list[dict]:
     by_hour = defaultdict(list)
     for h in hourly_counts:
@@ -443,6 +483,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     daily_table = _build_daily_table(daily_totals, week_start_str, week_end_str, now, var, hist_mean, dow_weights_map, cfg)
     dow_heatmap = _build_dow_heatmap(var)
     hourly_heatmap = _build_hourly_heatmap(hourly_counts)
+    dow_hour_heatmap = _build_dow_hour_heatmap(handle)
 
     from api.modules.truth_social.enhanced_pacing import historical_hourly_averages
     hist_dir = str(Path(__file__).resolve().parent.parent.parent / "_DataMetricPulls" / "historical")
@@ -525,6 +566,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         "dow_variance": var,
         "dow_heatmap": dow_heatmap,
         "hourly_heatmap": hourly_heatmap,
+        "dow_hour_heatmap": dow_hour_heatmap,
         "historical_hourly_heatmap": historical_hourly_heatmap,
         "pace_acceleration": accel,
         "dow_deviation": dev,
