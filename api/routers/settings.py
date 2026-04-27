@@ -5,6 +5,7 @@ from api.config import get_settings
 from api.services.profiles import (
     get_active_profile, list_profiles, save_profile,
     switch_profile, delete_profile, set_multi_exec, get_multi_exec_profiles,
+    strip_credentials, strip_credentials_list,
 )
 
 router = APIRouter()
@@ -102,7 +103,12 @@ async def update_notification_settings(config: dict):
 
 @router.get("/profiles")
 async def get_profiles():
-    return {"profiles": list_profiles(), "active": get_active_profile()}
+    # Never return raw Polymarket credentials in API responses. The dashboard
+    # only needs to know whether a profile has creds configured (`has_credentials`).
+    return {
+        "profiles": strip_credentials_list(list_profiles()),
+        "active": strip_credentials(get_active_profile()),
+    }
 
 
 @router.post("/profiles")
@@ -115,7 +121,7 @@ async def create_profile(profile: ProfileCreate):
 async def activate_profile(name: str):
     try:
         profile = switch_profile(name)
-        return {"ok": True, "profile": profile}
+        return {"ok": True, "profile": strip_credentials(profile)}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

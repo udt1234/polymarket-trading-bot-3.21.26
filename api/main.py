@@ -62,7 +62,7 @@ app.include_router(backtest_router, prefix="/api/backtest", tags=["backtest"], d
 app.include_router(ws_router)
 
 
-@app.get("/api/engine/status")
+@app.get("/api/engine/status", dependencies=[Depends(require_auth)])
 async def engine_status():
     return engine.status
 
