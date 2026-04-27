@@ -11,7 +11,7 @@ import {
   Save, Settings,
 } from "lucide-react"
 import { DailyPacingTable } from "./components/daily-pacing-table"
-import { DowHeatmap, HourlyHeatmap, PaceAcceleration, ConfidenceBands, EnsembleBreakdown } from "./components/pacing-analysis"
+import { DowHeatmap, HourlyHeatmap, ConfidenceBands, EnsembleBreakdown } from "./components/pacing-analysis"
 import { PriceByDowHourHeatmap, PriceByElapsedDayHeatmap } from "./components/price-heatmaps"
 import { PositionsTable } from "./components/positions-table"
 import { SignalsTable } from "./components/signals-table"
@@ -30,6 +30,7 @@ import { OrderBookDepthChart } from "./components/order-book-depth-chart"
 import { LatencyHistogramChart } from "./components/latency-histogram-chart"
 import { PostCountDivergenceChart } from "./components/post-count-divergence-chart"
 import { CollapsibleCard } from "./components/collapsible-card"
+import { BotStatusTimeline } from "./components/bot-status-timeline"
 
 interface ModuleData {
   id: string
@@ -626,6 +627,29 @@ export default function ModuleDetailPage() {
                 {recentSignals.length > 0 ? `${approvedCount}/${recentSignals.length} passed` : "No data"}
               </p>
             </div>
+            {(() => {
+              const accel = pacing?.pace_acceleration as { current_rate?: number; prior_rate?: number; momentum?: string } | undefined
+              const momentum = accel?.momentum || "—"
+              const cur = accel?.current_rate
+              const prior = accel?.prior_rate
+              const momColor =
+                momentum === "accelerating" ? "text-success" :
+                momentum === "decelerating" ? "text-destructive" :
+                momentum === "steady" ? "text-muted-foreground" :
+                "text-muted-foreground"
+              const label = momentum === "—" ? "—" : momentum.charAt(0).toUpperCase() + momentum.slice(1)
+              return (
+                <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Pace Acceleration</p>
+                  <p className={cn("mt-1 text-2xl font-bold capitalize", momColor)}>{label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {cur != null && prior != null
+                      ? `${cur.toFixed(2)} now vs ${prior.toFixed(2)} prior posts/hr`
+                      : "No data"}
+                  </p>
+                </div>
+              )
+            })()}
           </div>
         )
       })()}
@@ -636,8 +660,17 @@ export default function ModuleDetailPage() {
         {(() => {
           const data = pacing?.current_auction
           const selectedAuc = auctions?.find((a) => a.tracking_id === (activeTrackingId || (pacing as any)?.tracking_id))
-          const pastAucs = (auctions || []).filter((a) => a.status === "past")
-            .sort((a, b) => b.end_date.localeCompare(a.end_date)).slice(0, 6)
+          // Active auctions = auctions where we currently have open positions (bids in unresolved auctions)
+          const activeAucs = (auctions || []).filter((a) => {
+            const aSlug = a.market_link?.split("/").pop()?.toLowerCase() || ""
+            const walletAuc = relevantAuctions.find((wa: any) => {
+              const waSlug = (wa.slug || "").toLowerCase()
+              if (aSlug && waSlug === aSlug) return true
+              if ((wa.end_date || "").slice(0, 10) === a.end_date) return true
+              return false
+            })
+            return walletAuc?.status === "open" && (walletAuc?.bid_count || 0) > 0
+          }).sort((a, b) => a.end_date.localeCompare(b.end_date))
           return (
             <div className="rounded-lg border border-border bg-card p-6 h-full">
               <div className="flex items-center gap-2 mb-3">
@@ -737,106 +770,50 @@ export default function ModuleDetailPage() {
               ) : (
                 <p className="py-4 text-center text-sm text-muted-foreground">No data yet</p>
               )}
-              {/* Bot Reasoning */}
-              {data && (() => {
-                const signals = moduleSignals || []
-                const approved = signals.filter((s: any) => s.approved)
-                const rejected = signals.filter((s: any) => !s.approved)
-                const topRejection = rejected[0]?.rejection_reason || ""
-                const hasPositions = (paperPositions || []).some((p: any) => p.status === "open")
 
-                let reasoning = ""
-                if (approved.length > 0 && hasPositions) {
-                  reasoning = `The bot is actively trading this auction. It found ${approved.length} opportunities with positive edge and placed bets. Ensemble model predicts ~${data.ensemble_avg?.toFixed(0) || "?"} posts, putting the likely winner at ${data.projected_winner || "?"}.`
-                } else if (signals.length > 0 && approved.length === 0) {
-                  if (topRejection.includes("spread")) {
-                    reasoning = `The bot found ${signals.length} potential trades but skipped them all — the bid-ask spreads are too wide (market is illiquid). It's seeing edge on bracket ${rejected[0]?.bracket || "?"} but no one is actively trading that bracket, so it can't get a fair price.`
-                  } else if (topRejection.includes("exposure")) {
-                    reasoning = `The bot found signals but risk limits prevent new positions — portfolio exposure is at its cap.`
-                  } else {
-                    reasoning = `The bot generated ${signals.length} signals but the risk manager rejected them all (${topRejection || "various reasons"}). The models see edge but conditions aren't safe enough to trade.`
-                  }
-                } else if (signals.length === 0 && data.days_elapsed > 0) {
-                  reasoning = `No signals generated yet. The 5 models agree the market is roughly fairly priced — no bracket has enough edge to justify a bet. The bot checks every 5 minutes and will trade if odds shift.`
-                } else {
-                  reasoning = `Auction just started. The bot is collecting data and will begin evaluating opportunities shortly.`
-                }
+              {/* Bot Status Timeline — replaces raw log dump with human-readable status */}
+              <BotStatusTimeline
+                decisionLog={decisionLog || []}
+                openPositions={openPositions}
+                signals={moduleSignals || []}
+                regimeLabel={data?.regime?.label}
+                projectedWinner={data?.projected_winner}
+                ensembleAvg={data?.ensemble_avg}
+                marketPrices={pacing?.market_prices}
+              />
 
-                return (
-                  <div className="mt-3 pt-3 border-t border-border">
-                    <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-1.5">Bot Reasoning</p>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{reasoning}</p>
-                  </div>
-                )
-              })()}
 
-              {/* Action Timeline */}
-              {decisionLog && decisionLog.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-1.5">Action History</p>
-                  <div className="max-h-[180px] overflow-y-auto space-y-1">
-                    {decisionLog.slice(0, 15).map((log: any, i: number) => {
-                      const time = log.created_at ? new Date(log.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""
-                      const isExec = log.log_type === "execution"
-                      const isRisk = log.log_type === "risk"
-                      const icon = isExec ? "✅" : isRisk ? "🛡️" : "🔍"
-                      let msg = log.message || ""
-                      if (msg.startsWith("Cycle:")) {
-                        const sigMatch = msg.match(/signals=(\d+)/)
-                        const regMatch = msg.match(/regime=(\w+)/)
-                        msg = `Scanned market — ${sigMatch?.[1] || 0} signals, regime ${regMatch?.[1] || "?"}`
-                      } else if (msg.startsWith("Rejected")) {
-                        msg = msg.replace(/^Rejected /, "Skipped ")
-                      } else if (msg.startsWith("Executed")) {
-                        msg = msg.replace(/^Executed /, "Bought ")
-                      }
-                      return (
-                        <div key={i} className="flex items-start gap-1.5 text-[11px]">
-                          <span className="shrink-0 text-muted-foreground w-24">{time}</span>
-                          <span>{icon}</span>
-                          <span className="text-muted-foreground">{msg}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Past Auction Results */}
-              {pastAucs.length > 0 && (
+              {/* Active Auctions — auctions where we currently hold open positions */}
+              {activeAucs.length > 0 && (
                 <div className="mt-4 pt-3 border-t border-border">
-                  <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-2">Recent Auctions</p>
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-2">Active Auctions</p>
                   <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
-                    {pastAucs.map((a) => {
+                    {activeAucs.map((a) => {
                       const aSlug = a.market_link?.split("/").pop()?.toLowerCase() || ""
                       const walletAuc = relevantAuctions.find((wa: any) => {
                         const waSlug = (wa.slug || "").toLowerCase()
                         if (aSlug && waSlug === aSlug) return true
                         if ((wa.end_date || "").slice(0, 10) === a.end_date) return true
-                        if ((wa.slug || "").includes(a.start_date.slice(5).replace("-0", "-").replace("-", "-"))) return true
                         return false
                       })
-                      const pnl = walletAuc?.total_pnl ?? 0
-                      const won = walletAuc?.status === "won"
-                      const winBid = walletAuc?.bids?.find((b: any) => (b.pnl || 0) > 0)
-                      const winBracket = winBid?.outcome || winBid?.title?.match(/\d+-\d+|\d+\+/)?.[0] || ""
-                      const hadTrades = walletAuc && walletAuc.bid_count > 0
+                      const cost = (walletAuc?.bids || []).reduce((s: number, b: any) => s + (b.size || 0) * (b.avg_price || 0), 0)
+                      const pnl = walletAuc?.unrealized_pnl ?? walletAuc?.total_pnl ?? 0
+                      const bidCount = walletAuc?.bid_count || 0
+                      const isSelected = (activeTrackingId || (pacing as any)?.tracking_id) === a.tracking_id
                       return (
                         <button
                           key={a.tracking_id}
                           onClick={() => setActiveTrackingId(a.tracking_id)}
                           className={cn(
                             "rounded border p-1.5 text-center text-[9px] transition-colors",
-                            won ? "border-success/40 bg-success/10" :
-                            hadTrades && pnl < 0 ? "border-destructive/40 bg-destructive/10" :
-                            "border-border bg-muted/30",
-                            "hover:opacity-80"
+                            isSelected ? "border-primary bg-primary/10" : "border-border bg-muted/30",
+                            "hover:opacity-80",
                           )}
                         >
                           <p className="font-semibold text-foreground">{formatDateShort(a.start_date).replace(/, \d{4}$/, "")}</p>
-                          {winBracket && <p className="text-[8px] text-muted-foreground">{winBracket}</p>}
+                          <p className="text-[8px] text-muted-foreground">{bidCount} bracket{bidCount === 1 ? "" : "s"}</p>
                           <p className={cn("font-bold", pnl > 0 ? "text-success" : pnl < 0 ? "text-destructive" : "text-muted-foreground")}>
-                            {hadTrades ? (pnl > 0 ? "+" : "") + formatCurrency(pnl) : "No bets"}
+                            {pnl !== 0 ? (pnl > 0 ? "+" : "") + formatCurrency(pnl) : `$${Math.round(cost)}`}
                           </p>
                         </button>
                       )
@@ -853,27 +830,22 @@ export default function ModuleDetailPage() {
         </CollapsibleCard>
       </div>
 
-      {/* Second Analysis Row — Ensemble Breakdown + Pace Acceleration */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        <CollapsibleCard id="ensemble-breakdown" title="Ensemble Sub-Model Breakdown">
-          <EnsembleBreakdown
-            ensemble={pacing?.ensemble_breakdown}
-            ensembleAvg={pacing?.ensemble_avg || 0}
-            weightOverrides={config?.weight_overrides}
-            onSaveWeights={async (overrides) => {
-              if (!id) return
-              await apiFetch(`/api/settings/module-configs/${id}`, {
-                method: "PUT",
-                body: JSON.stringify({ weight_overrides: overrides }),
-              })
-              refetchConfig()
-            }}
-          />
-        </CollapsibleCard>
-        <CollapsibleCard id="pace-acceleration" title="Pace Acceleration">
-          <PaceAcceleration accel={pacing?.pace_acceleration} />
-        </CollapsibleCard>
-      </div>
+      {/* Second Analysis Row — Ensemble Breakdown (full width; Pace moved to KPI tile) */}
+      <CollapsibleCard id="ensemble-breakdown" title="Ensemble Sub-Model Breakdown">
+        <EnsembleBreakdown
+          ensemble={pacing?.ensemble_breakdown}
+          ensembleAvg={pacing?.ensemble_avg || 0}
+          weightOverrides={config?.weight_overrides}
+          onSaveWeights={async (overrides) => {
+            if (!id) return
+            await apiFetch(`/api/settings/module-configs/${id}`, {
+              method: "PUT",
+              body: JSON.stringify({ weight_overrides: overrides }),
+            })
+            refetchConfig()
+          }}
+        />
+      </CollapsibleCard>
 
       {/* New Module Analytics Charts */}
       {(() => {
