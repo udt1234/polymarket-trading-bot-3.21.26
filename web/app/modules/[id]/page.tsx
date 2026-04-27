@@ -404,6 +404,51 @@ export default function ModuleDetailPage() {
         </button>
         {configOpen && (
           <div className="border-t border-border px-6 py-4">
+            <details className="mb-4 rounded-md border border-border/60 bg-muted/20 px-4 py-3">
+              <summary className="cursor-pointer text-sm font-semibold text-foreground">
+                How this bot works (plain English)
+              </summary>
+              <div className="mt-3 space-y-2 text-xs leading-relaxed text-muted-foreground">
+                <p>
+                  Every cycle (~5 min), the bot pulls Trump's latest post count from xTracker, runs <strong>{(localConfig.enabled_models || []).length}</strong> forecasting
+                  models (<em>{(localConfig.enabled_models || []).join(", ") || "none"}</em>), and blends them into a probability for each of the 11 brackets.
+                </p>
+                <p>
+                  <strong>Floor by Running Total:</strong> brackets the post count has already passed get zeroed out (e.g. with 105 posts in,
+                  "0-19" through "80-99" become impossible). The remaining mass is renormalized over the surviving brackets.
+                </p>
+                <p>
+                  <strong>Bracket selection:</strong> the top <strong>{localConfig.max_brackets_per_cycle ?? 5}</strong> brackets by edge (model_prob &minus; market_price)
+                  are considered each cycle. Brackets with edge below <strong>{((localConfig.min_edge_threshold ?? 0.02) * 100).toFixed(1)}%</strong> are rejected outright.
+                </p>
+                <p>
+                  <strong>Position sizing:</strong> Kelly Criterion sizes each bid by <code>(model_prob &minus; market_price) / odds</code>, scaled by a
+                  fractional Kelly (10-25% based on regime), and capped at the per-bracket exposure limit. The result is multiplied by your bankroll to get the order size.
+                </p>
+                <p>
+                  <strong>Risk gate:</strong> 16 checks must all pass before any order is placed — circuit breaker, daily/weekly loss caps, drawdown,
+                  portfolio exposure, single-market exposure, correlated exposure, aggregate negative-EV, duplicate, settlement decay, spread, and liquidity. A signal
+                  that fails any one is logged and dropped.
+                </p>
+                <p>
+                  <strong>Order placement:</strong> <em>limit orders only</em>, never market orders. The bot uses the order book to size at most 30% of available depth.
+                </p>
+                <p>
+                  <strong>Exit rules:</strong>
+                  {(localConfig.stop_loss_pct ?? 0) > 0
+                    ? <> stop loss exits when price drops <strong>{((localConfig.stop_loss_pct ?? 0.30) * 100).toFixed(0)}%</strong> below cost.</>
+                    : <> stop loss is <strong>disabled</strong> (set Stop Loss % to enable).</>}
+                  {(localConfig.take_profit_pct ?? 0) > 0
+                    ? <> Take profit exits at <strong>+{((localConfig.take_profit_pct ?? 0) * 100).toFixed(0)}%</strong> from cost.</>
+                    : <> Take profit is <strong>disabled</strong> (winners run to settlement at $1).</>}
+                  Time-decay exits trigger after 5 days with negative P&amp;L. Edge-reversal exits when market price overtakes the model probability.
+                </p>
+                <p>
+                  <strong>Settings below</strong>: the top row tunes the <em>forecast</em> (how many past auctions, how to weight them, which models to blend).
+                  The "Position & Exit Rules" row tunes <em>buy/sell behavior</em>. Hover any field for an explanation.
+                </p>
+              </div>
+            </details>
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
               <label className="space-y-1" title="How many past weekly auctions feed the model. 9 ≈ 2 months of history. More = stable, fewer = adaptive to recent regime shifts.">
                 <span className="text-xs text-muted-foreground">Historical Periods</span>
@@ -713,13 +758,19 @@ export default function ModuleDetailPage() {
                 momentum === "decelerating" ? "Decel ↓" :
                 momentum === "steady" ? "Steady" :
                 "—"
+              // Format posts/hr as "1 post x N.N hrs" (hours per post). E.g. 0.75 -> "1 post x 1.3 hrs"
+              const fmtRate = (r?: number) => {
+                if (r == null || r <= 0) return "—"
+                const hrsPerPost = 1 / r
+                return `1 post x ${hrsPerPost.toFixed(1)} hrs`
+              }
               return (
                 <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Pace Acceleration</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Pacing</p>
                   <p className={cn("mt-1 text-2xl font-bold", momColor)}>{label}</p>
                   <p className="text-xs text-muted-foreground">
                     {cur != null && prior != null
-                      ? `${cur.toFixed(2)} now vs ${prior.toFixed(2)} prior posts/hr`
+                      ? `${fmtRate(cur)} now vs ${fmtRate(prior)} prior`
                       : "No data"}
                   </p>
                 </div>
@@ -905,86 +956,6 @@ export default function ModuleDetailPage() {
         </CollapsibleCard>
       </div>
 
-      {/* Second Analysis Row — Ensemble Breakdown (full width; Pace moved to KPI tile) */}
-      <CollapsibleCard id="ensemble-breakdown" title="Ensemble Sub-Model Breakdown">
-        <EnsembleBreakdown
-          ensemble={pacing?.ensemble_breakdown}
-          ensembleAvg={pacing?.ensemble_avg || 0}
-          weightOverrides={config?.weight_overrides}
-          onSaveWeights={async (overrides) => {
-            if (!id) return
-            await apiFetch(`/api/settings/module-configs/${id}`, {
-              method: "PUT",
-              body: JSON.stringify({ weight_overrides: overrides }),
-            })
-            refetchConfig()
-          }}
-        />
-      </CollapsibleCard>
-
-      {/* New Module Analytics Charts */}
-      {(() => {
-        const allSignals = (moduleSignals || []).map((s: any) => s.bracket).filter(Boolean)
-        const uniqueBrackets = Array.from(new Set(allSignals)) as string[]
-        const hourlyData = (pacing?.hourly_counts || []).map((h: any) => ({
-          hour_label: h.hour_label || h.label || "",
-          count: h.count || 0,
-          price: pacing?.market_prices ? Object.values(pacing.market_prices)[0] as number : undefined,
-        }))
-        const timingData = (pacing?.dow_hour_heatmap || []).map((c: any) => ({
-          dow: c.dow,
-          hour: c.hour,
-          count: c.avg || 0,
-          samples: c.samples || 0,
-        }))
-        return (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <CollapsibleCard id="position-breakdown" title="Position Breakdown">
-                <PositionBreakdownChart positions={[...openPositions, ...closedPositions]} />
-              </CollapsibleCard>
-              <CollapsibleCard id="kelly-tracker" title="Kelly Sizing Tracker">
-                <KellyTrackerChart moduleId={module.id} />
-              </CollapsibleCard>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <CollapsibleCard id="volume-price" title="Volume vs Price">
-                <VolumePriceChart moduleId={module.id} />
-              </CollapsibleCard>
-              <CollapsibleCard id="order-book-depth" title="Order Book Depth">
-                <OrderBookDepthChart moduleId={module.id} />
-              </CollapsibleCard>
-            </div>
-            <CollapsibleCard id="latency-histogram" title="Signal-to-Fill Latency">
-              <LatencyHistogramChart moduleId={module.id} />
-            </CollapsibleCard>
-            <CollapsibleCard id="post-timing-heatmap" title="Post Timing Heatmap">
-              <PostTimingGrid data={timingData} />
-            </CollapsibleCard>
-            <CollapsibleCard id="post-frequency" title="Post Frequency">
-              <PostFrequencyChart hourlyData={hourlyData} />
-            </CollapsibleCard>
-            {uniqueBrackets.length > 0 && (
-              <CollapsibleCard id="price-over-time" title="Price Over Time">
-                <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} />
-              </CollapsibleCard>
-            )}
-            {(moduleName.includes("truth") || moduleName.includes("trump")) && (
-              <CollapsibleCard id="post-count-divergence" title="xTracker vs Truth Social Direct">
-                <PostCountDivergenceChart moduleId={module.id} trackingId={activeTrackingId || (pacing as any)?.tracking_id} />
-              </CollapsibleCard>
-            )}
-          </div>
-        )
-      })()}
-
-      {/* Pacing detail — Daily table + DOW heatmap */}
-      <CollapsibleCard id="daily-pacing" title="Daily Pacing">
-        <DailyPacingTable pacing={pacing} />
-      </CollapsibleCard>
-      <CollapsibleCard id="dow-heatmap" title="DOW Averages Heatmap">
-        <DowHeatmap dowAvg={pacing?.dow_heatmap} />
-      </CollapsibleCard>
       {/* Open Positions */}
       <CollapsibleCard id="open-positions" title="Open Positions">
         <PositionsTable
@@ -1048,6 +1019,92 @@ export default function ModuleDetailPage() {
         </CollapsibleCard>
       )}
 
+      {/* Second Analysis Row — Ensemble Breakdown (full width; Pace moved to KPI tile) */}
+      <CollapsibleCard id="ensemble-breakdown" title="Ensemble Sub-Model Breakdown">
+        <EnsembleBreakdown
+          ensemble={pacing?.ensemble_breakdown}
+          ensembleAvg={pacing?.ensemble_avg || 0}
+          weightOverrides={config?.weight_overrides}
+          onSaveWeights={async (overrides) => {
+            if (!id) return
+            await apiFetch(`/api/settings/module-configs/${id}`, {
+              method: "PUT",
+              body: JSON.stringify({ weight_overrides: overrides }),
+            })
+            refetchConfig()
+          }}
+        />
+      </CollapsibleCard>
+
+      {/* New Module Analytics Charts */}
+      {(() => {
+        const allSignals = (moduleSignals || []).map((s: any) => s.bracket).filter(Boolean)
+        const uniqueBrackets = Array.from(new Set(allSignals)) as string[]
+        // Use hourly_heatmap (avg posts/hr by hour-of-day, returned by /pacing) since
+        // raw hourly_counts isn't in the payload. Overlay with current market price for top bracket.
+        const topBracketPrice = pacing?.confidence_bands?.[0]?.bracket
+          ? pacing?.market_prices?.[pacing.confidence_bands[0].bracket]
+          : undefined
+        const fmtHr = (h: number) => h === 0 ? "12 AM" : h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h - 12} PM`
+        const hourlyData = (pacing?.hourly_heatmap || []).map((h: any) => ({
+          hour_label: fmtHr(h.hour),
+          count: h.avg ?? 0,
+          price: topBracketPrice,
+        }))
+        const timingData = (pacing?.dow_hour_heatmap || []).map((c: any) => ({
+          dow: c.dow,
+          hour: c.hour,
+          count: c.avg || 0,
+          samples: c.samples || 0,
+        }))
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <CollapsibleCard id="position-breakdown" title="Position Breakdown">
+                <PositionBreakdownChart positions={[...openPositions, ...closedPositions]} />
+              </CollapsibleCard>
+              <CollapsibleCard id="kelly-tracker" title="Kelly Sizing Tracker">
+                <KellyTrackerChart moduleId={module.id} />
+              </CollapsibleCard>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <CollapsibleCard id="volume-price" title="Volume vs Price">
+                <VolumePriceChart moduleId={module.id} />
+              </CollapsibleCard>
+              <CollapsibleCard id="order-book-depth" title="Order Book Depth">
+                <OrderBookDepthChart moduleId={module.id} />
+              </CollapsibleCard>
+            </div>
+            <CollapsibleCard id="latency-histogram" title="Signal-to-Fill Latency">
+              <LatencyHistogramChart moduleId={module.id} />
+            </CollapsibleCard>
+            <CollapsibleCard id="post-timing-heatmap" title="Post Timing Heatmap">
+              <PostTimingGrid data={timingData} />
+            </CollapsibleCard>
+            <CollapsibleCard id="post-frequency" title="Post Frequency">
+              <PostFrequencyChart hourlyData={hourlyData} />
+            </CollapsibleCard>
+            {uniqueBrackets.length > 0 && (
+              <CollapsibleCard id="price-over-time" title="Price Over Time">
+                <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} />
+              </CollapsibleCard>
+            )}
+            {(moduleName.includes("truth") || moduleName.includes("trump")) && (
+              <CollapsibleCard id="post-count-divergence" title="xTracker vs Truth Social Direct">
+                <PostCountDivergenceChart moduleId={module.id} trackingId={activeTrackingId || (pacing as any)?.tracking_id} />
+              </CollapsibleCard>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Pacing detail — Daily table + DOW heatmap */}
+      <CollapsibleCard id="daily-pacing" title="Daily Pacing">
+        <DailyPacingTable pacing={pacing} />
+      </CollapsibleCard>
+      <CollapsibleCard id="dow-heatmap" title="DOW Averages Heatmap">
+        <DowHeatmap dowAvg={pacing?.dow_heatmap} />
+      </CollapsibleCard>
       {/* Hourly Heatmap */}
       <CollapsibleCard id="hourly-heatmap" title="Hourly Posts Heatmap">
         <HourlyHeatmap hourlyAvg={pacing?.hourly_heatmap} historicalHourly={pacing?.historical_hourly_heatmap} />

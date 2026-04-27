@@ -38,17 +38,24 @@ export function PnlCurve({ trades, openPositions, closedPositions, marketPrices 
   const denominator = totalCostBasis > 0 ? totalCostBasis : (closedPositions.reduce((s, p) => s + p.size * p.avg_price, 0) + openPositions.reduce((s, p) => s + p.size * p.avg_price, 0))
   const totalReturnPct = denominator > 0 ? (totalPnl / denominator) * 100 : 0
 
+  // Bucket trades by date (UTC day key). Cost basis = cumulative end-of-day,
+  // P&L is back-loaded onto the most recent day to match prior behavior.
+  const byDay = new Map<string, { date: Date; cumCost: number }>()
   let cumCostBasis = 0
-  const chartData = sortedTrades.map((t, idx) => {
+  for (const t of sortedTrades) {
     const isBuy = (t.side || "").toUpperCase() === "BUY"
     if (isBuy) cumCostBasis += t.size * t.price
-    const pnlAtPoint = idx === sortedTrades.length - 1 ? totalPnl : 0
+    const d = new Date(t.executed_at)
+    const dayKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`
+    byDay.set(dayKey, { date: d, cumCost: cumCostBasis })
+  }
+  const dayEntries = Array.from(byDay.entries()).sort(([a], [b]) => a.localeCompare(b))
+  const chartData = dayEntries.map(([_key, info], idx) => {
+    const pnlAtPoint = idx === dayEntries.length - 1 ? totalPnl : 0
     return {
       idx: idx + 1,
-      label: new Date(t.executed_at).toLocaleString("en-US", {
-        month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-      }),
-      costBasis: parseFloat(cumCostBasis.toFixed(2)),
+      label: info.date.toLocaleString("en-US", { month: "short", day: "numeric" }),
+      costBasis: parseFloat(info.cumCost.toFixed(2)),
       pnl: parseFloat(pnlAtPoint.toFixed(2)),
     }
   })
