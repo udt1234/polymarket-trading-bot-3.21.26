@@ -18,6 +18,7 @@ DEFAULT_CONFIG = {
     "use_hawkes_modifier": True,
     "stop_loss_pct": 0.30,
     "take_profit_pct": 0.0,
+    "trailing_stop_pct": 0.30,
     "max_brackets_per_cycle": 5,
     "min_edge_threshold": 0.02,
     "floor_brackets_by_running_total": True,
