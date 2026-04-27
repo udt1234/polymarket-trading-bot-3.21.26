@@ -62,6 +62,43 @@ async def fetch_active_tracking(handle: str = "realDonaldTrump") -> dict | None:
     return active[0][0]
 
 
+async def fetch_active_or_upcoming_tracking(
+    handle: str = "realDonaldTrump", allow_upcoming: bool = False,
+) -> dict | None:
+    """Prefer the currently active tracking; if none and allow_upcoming, return
+    the nearest future tracking. Used by modules with pre_auction_buying_enabled.
+    """
+    trackings = await _fetch_trackings_raw(handle)
+    if not trackings:
+        return None
+
+    now = datetime.now(timezone.utc)
+    active = []
+    upcoming = []
+    for t in trackings:
+        start = t.get("startDate", "")
+        end = t.get("endDate", "")
+        if not (start and end):
+            continue
+        try:
+            s = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            e = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if s <= now <= e:
+            active.append((t, s, e))
+        elif s > now:
+            upcoming.append((t, s, e))
+
+    if active:
+        active.sort(key=lambda x: x[1])
+        return active[0][0]
+    if allow_upcoming and upcoming:
+        upcoming.sort(key=lambda x: x[1])
+        return upcoming[0][0]
+    return None
+
+
 async def fetch_all_active_trackings(handle: str = "realDonaldTrump") -> list[dict]:
     trackings = await _fetch_trackings_raw(handle)
     now = datetime.now(timezone.utc)

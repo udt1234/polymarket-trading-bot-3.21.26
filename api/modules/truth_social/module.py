@@ -5,7 +5,8 @@ from datetime import datetime, timezone, timedelta
 from api.modules.base import BaseModule
 from api.services.risk_manager import Signal
 from api.modules.truth_social.data import (
-    fetch_xtracker_posts, fetch_active_tracking, extract_slug_from_tracking,
+    fetch_xtracker_posts, fetch_active_tracking, fetch_active_or_upcoming_tracking,
+    extract_slug_from_tracking,
     parse_hourly_counts, parse_daily_totals, compute_running_total,
     compute_elapsed_days, fetch_market_prices, fetch_historical_weekly_totals,
     fetch_order_books_for_brackets,
@@ -23,6 +24,9 @@ from api.modules.truth_social.enhanced_pacing import (
     pace_acceleration, dow_deviation, ensemble_confidence_bands,
     historical_hourly_averages, floor_bracket_probs,
 )
+from api.modules.truth_social.historical_winners import (
+    bracket_winner_frequencies, blend_with_historical, bracket_in_low_window,
+)
 from api.modules.truth_social.hawkes import hawkes_pace, fit_hawkes_params
 from api.modules.truth_social.news_classifier import classify_news_regime
 from api.modules.truth_social.schedule import fetch_presidential_schedule, compute_schedule_modifier
@@ -35,6 +39,25 @@ from api.services.lunarcrush import fetch_social_sentiment, fetch_creator_metric
 from api.dependencies import get_supabase
 
 log = logging.getLogger(__name__)
+
+
+def _is_pre_auction(tracking: dict | None, now: datetime) -> bool:
+    """True if the tracking's startDate is in the future.
+
+    Uses datetime parsing rather than string comparison because xTracker emits
+    `Z`-suffixed UTC strings while datetime.isoformat() of a tz-aware UTC
+    datetime emits `+00:00`. Lexicographic comparison of those is unreliable.
+    """
+    if not tracking:
+        return False
+    start_str = tracking.get("startDate", "") or ""
+    if not start_str:
+        return False
+    try:
+        start = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+        return start > now
+    except (ValueError, TypeError):
+        return False
 
 
 class TruthSocialModule(BaseModule):
@@ -68,10 +91,17 @@ class TruthSocialModule(BaseModule):
         module_config = module_row.data
         module_id = module_config["id"]
 
-        # Auto-discover the active market slug from xTracker
-        tracking = await fetch_active_tracking(self.HANDLE)
+        # Load module config once and reuse — used both for tracking selection
+        # (pre_auction_buying_enabled) and downstream signal generation.
+        mod_cfg = get_module_config(module_id)
+        allow_upcoming = bool(mod_cfg.get("pre_auction_buying_enabled", False))
+        # Auto-discover the active market slug from xTracker. If pre_auction_buying
+        # is enabled, fall back to the nearest upcoming tracking when no auction
+        # is currently live (lets the bot snipe early-listed brackets at low prices).
+        tracking = await fetch_active_or_upcoming_tracking(self.HANDLE, allow_upcoming=allow_upcoming)
         if not tracking:
-            self._log(sb, module_id, "decision", "warning", "No active xTracker tracking found")
+            self._log(sb, module_id, "decision", "warning",
+                      "No active or upcoming xTracker tracking found")
             return []
 
         slug = extract_slug_from_tracking(tracking)
@@ -93,8 +123,6 @@ class TruthSocialModule(BaseModule):
         if not market_prices:
             self._log(sb, module_id, "decision", "warning", f"No market prices for slug={slug}")
             return []
-
-        mod_cfg = get_module_config(module_id)
 
         # Historical data + news + social intelligence
         n_periods = mod_cfg.get("historical_periods", 9)
@@ -141,8 +169,13 @@ class TruthSocialModule(BaseModule):
         remaining_days = max(total_days - elapsed_days, 0.01)
         elapsed_pct_early = elapsed_days / total_days if total_days > 0 else 0
 
+        # Skip entry gate when this cycle is targeting a future tracking
+        # (pre_auction_buying_enabled). The gate is meant to delay buying
+        # until enough live data has accumulated; pre-auction has no live data
+        # by definition and the historical-blend prior is doing the work.
+        pre_auction = _is_pre_auction(tracking, now)
         entry_gate = mod_cfg.get("entry_gate_pct", 0.0)
-        if entry_gate > 0 and elapsed_pct_early < entry_gate:
+        if not pre_auction and entry_gate > 0 and elapsed_pct_early < entry_gate:
             self._log(sb, module_id, "decision", "info",
                       f"Entry gate: {elapsed_pct_early:.1%} < {entry_gate:.0%} — waiting for better data")
             return []
@@ -298,6 +331,24 @@ class TruthSocialModule(BaseModule):
         if mod_cfg.get("floor_brackets_by_running_total", True):
             bracket_probs = floor_bracket_probs(bracket_probs, running_total)
 
+        # Blend with historical bracket-winner frequencies (recency-weighted).
+        # Default weight: 70% live ensemble, 30% historical. Disabled if historical
+        # data is missing. Modules can tune `historical_blend_weight` (1.0 = pure
+        # ensemble, 0.0 = pure historical).
+        historical_blend = float(mod_cfg.get("historical_blend_weight", 0.70))
+        if 0.0 < historical_blend < 1.0:
+            hist_freqs = bracket_winner_frequencies(
+                hist_dir, self.HANDLE,
+                half_life_weeks=mod_cfg.get("historical_winner_half_life_weeks", 8.0),
+            )
+            if hist_freqs:
+                # Floor the historical freqs too — never give weight to impossible brackets.
+                if mod_cfg.get("floor_brackets_by_running_total", True):
+                    hist_freqs = floor_bracket_probs(hist_freqs, running_total)
+                bracket_probs = blend_with_historical(
+                    bracket_probs, hist_freqs, ensemble_weight=historical_blend,
+                )
+
         # Cross-bracket arbitrage: detect probability mass misallocations
         arb_opps = cross_bracket_arbitrage(bracket_probs, market_prices)
         if arb_opps:
@@ -335,6 +386,25 @@ class TruthSocialModule(BaseModule):
 
         elapsed_pct = min(elapsed_days / total_days, 1.0)
 
+        # Pre-fetch price snapshots once for the historical-low entry check.
+        # Skipped if the feature is disabled to avoid the DB hit.
+        low_window_boost = float(mod_cfg.get("low_window_kelly_boost", 1.30))
+        low_window_enabled = low_window_boost > 1.0
+        historical_prices: list[dict] = []
+        if low_window_enabled:
+            try:
+                snap_rows = sb.table("price_snapshots").select(
+                    "bracket,price,hour_of_day,dow"
+                ).eq("module_id", module_id).limit(2000).execute()
+                historical_prices = [
+                    {"bracket": r["bracket"], "price": r["price"],
+                     "hour": r["hour_of_day"], "dow": r["dow"]}
+                    for r in (snap_rows.data or [])
+                    if r.get("price") is not None and r.get("hour_of_day") is not None
+                ]
+            except Exception as e:
+                log.warning(f"low-window price snapshot fetch failed: {e}")
+
         signals = []
         for bracket_label, model_prob in bracket_probs.items():
             if bracket_label not in top_bracket_names:
@@ -350,6 +420,20 @@ class TruthSocialModule(BaseModule):
                 regime_label=regime.get("label", "NORMAL"),
                 elapsed_pct=elapsed_pct,
             )
+
+            # Historical-low entry boost (Approach C from spec): if (now.hour, now.dow)
+            # is in the historical bottom-quartile price window for this bracket,
+            # multiply Kelly by low_window_kelly_boost (default 1.30 = 30% bigger bet
+            # at empirically cheap times). Clipped to the 0.15 per-position cap so
+            # boosted signals trade AT the cap rather than getting rejected by risk.
+            in_low_window = False
+            if low_window_enabled and historical_prices:
+                in_low_window = bracket_in_low_window(
+                    bracket_label, now.hour, now.weekday(), historical_prices,
+                )
+                if in_low_window and sizing["kelly_pct"] > 0:
+                    boosted = sizing["kelly_pct"] * low_window_boost
+                    sizing["kelly_pct"] = round(min(boosted, 0.15), 4)
 
             if sizing["action"] == "BUY" and sizing["kelly_pct"] > 0:
                 book = order_books.get(bracket_label, {})
@@ -372,6 +456,9 @@ class TruthSocialModule(BaseModule):
                     metadata={
                         "min_edge_threshold": mod_cfg.get("min_edge_threshold"),
                         "auction_aggregate_price_ceiling": mod_cfg.get("auction_aggregate_price_ceiling"),
+                        "in_low_window": in_low_window,
+                        "historical_blend_weight": mod_cfg.get("historical_blend_weight"),
+                        "pre_auction_buy": _is_pre_auction(tracking, now),
                         "regime": regime_label,
                         "regime_override": news_override.get("override"),
                         "running_total": running_total,
