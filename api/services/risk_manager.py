@@ -104,8 +104,14 @@ class RiskManager:
         return True, ""
 
     def _check_edge_threshold(self, signal: Signal, settings) -> tuple[bool, str]:
-        if abs(signal.edge) < settings.min_edge_threshold:
-            return False, f"edge {signal.edge:.4f} below threshold {settings.min_edge_threshold}"
+        # Modules can RAISE the bar via signal metadata, but never lower it below the global floor
+        meta_threshold = (signal.metadata or {}).get("min_edge_threshold")
+        if meta_threshold is None:
+            threshold = settings.min_edge_threshold
+        else:
+            threshold = max(float(meta_threshold), settings.min_edge_threshold)
+        if abs(signal.edge) < threshold:
+            return False, f"edge {signal.edge:.4f} below threshold {threshold}"
         return True, ""
 
     def _check_kelly_valid(self, signal: Signal, settings) -> tuple[bool, str]:

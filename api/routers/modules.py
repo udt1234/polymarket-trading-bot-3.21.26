@@ -14,7 +14,7 @@ from api.modules.truth_social.data import _fetch_trackings_raw
 from api.modules.truth_social.module_config import get_module_config, save_module_config
 from api.modules.truth_social.enhanced_pacing import (
     recency_weighted_averages, dow_variance, pace_acceleration,
-    dow_deviation, ensemble_confidence_bands,
+    dow_deviation, ensemble_confidence_bands, floor_bracket_probs,
 )
 from api.modules.truth_social.parquet_history import (
     search_parquet_markets, download_and_cache_parquet, preview_parquet_data,
@@ -251,6 +251,8 @@ def _compute_pacing_models(running_total, elapsed_days, remaining_days, total_da
     enabled_models = cfg.get("enabled_models", ["pace", "bayesian", "dow", "historical", "hawkes"])
     weights = ew(elapsed_days, total_days, enabled_models=enabled_models)
     bracket_probs = ensemble_projection(model_outputs, weights, hist_std, bracket_labels=dynamic_brackets)
+    if cfg.get("floor_brackets_by_running_total", True):
+        bracket_probs = floor_bracket_probs(bracket_probs, running_total)
     conf_bands = ensemble_confidence_bands(bracket_probs, top_n=cfg.get("confidence_band_top_n", 3))
     ensemble_avg = sum(model_outputs[k] * weights.get(k, 0) for k in model_outputs)
 
