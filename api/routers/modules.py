@@ -250,7 +250,12 @@ def _compute_pacing_models(running_total, elapsed_days, remaining_days, total_da
     model_outputs = {"pace": pace_val, "bayesian": bayes_val, "dow": dow_val, "historical": hist_mean}
     enabled_models = cfg.get("enabled_models", ["pace", "bayesian", "dow", "historical", "hawkes"])
     weights = ew(elapsed_days, total_days, enabled_models=enabled_models)
-    bracket_probs = ensemble_projection(model_outputs, weights, hist_std, bracket_labels=dynamic_brackets)
+    time_remaining_frac = max(remaining_days / total_days, 0.0) if total_days > 0 else None
+    bracket_probs = ensemble_projection(
+        model_outputs, weights, hist_std,
+        bracket_labels=dynamic_brackets,
+        time_remaining_frac=time_remaining_frac,
+    )
     if cfg.get("floor_brackets_by_running_total", True):
         bracket_probs = floor_bracket_probs(bracket_probs, running_total)
     conf_bands = ensemble_confidence_bands(bracket_probs, top_n=cfg.get("confidence_band_top_n", 3))
