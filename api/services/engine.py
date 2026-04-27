@@ -16,6 +16,17 @@ log = logging.getLogger(__name__)
 STALE_DATA_THRESHOLD_HOURS = 2
 
 
+def _run_async(coro):
+    """Run an async coroutine from a sync context (e.g. APScheduler thread).
+
+    Python 3.12+ stopped auto-creating a default event loop in non-main threads,
+    so the previous `asyncio.get_event_loop().run_until_complete(coro)` raised
+    RuntimeError and silently broke every snapshot job. Use asyncio.run() which
+    creates a fresh loop for this thread.
+    """
+    return asyncio.run(coro)
+
+
 class TradingEngine:
     def __init__(self):
         self.scheduler = BackgroundScheduler()
@@ -150,7 +161,7 @@ class TradingEngine:
                         self._log_execution(signal, result)
                         try:
                             from api.services.notifications import notify_trade_executed
-                            asyncio.get_event_loop().run_until_complete(
+                            _run_async(
                                 notify_trade_executed(signal.side, signal.bracket, result.get("size", 0), result.get("price", 0), result.get("executor", "paper"))
                             )
                         except Exception:
@@ -261,9 +272,7 @@ class TradingEngine:
 
                 if slug not in prices_cache:
                     try:
-                        prices_cache[slug] = asyncio.get_event_loop().run_until_complete(
-                            fetch_market_prices(slug)
-                        )
+                        prices_cache[slug] = _run_async(fetch_market_prices(slug))
                     except Exception as e:
                         log.warning(f"Failed to fetch prices for pending signal on {slug}: {e}")
                         continue
@@ -353,9 +362,7 @@ class TradingEngine:
                 if not brackets:
                     continue
                 try:
-                    books = _asyncio.get_event_loop().run_until_complete(
-                        fetch_order_books_for_brackets(slug, brackets)
-                    )
+                    books = _run_async(fetch_order_books_for_brackets(slug, brackets))
                 except Exception as e:
                     log.warning(f"Order book snapshot fetch failed for {slug}: {e}")
                     continue
@@ -403,7 +410,7 @@ class TradingEngine:
                     continue
 
                 try:
-                    tracking = _asyncio.get_event_loop().run_until_complete(fetch_active_tracking(handle))
+                    tracking = _run_async(fetch_active_tracking(handle))
                 except Exception as e:
                     log.warning(f"Post count snapshot: tracking fetch failed for {handle}: {e}")
                     continue
@@ -415,7 +422,7 @@ class TradingEngine:
                 we = tracking.get("endDate", "")
 
                 try:
-                    raw = _asyncio.get_event_loop().run_until_complete(fetch_xtracker_stats(tid)) if tid else {}
+                    raw = _run_async(fetch_xtracker_stats(tid)) if tid else {}
                     summary = get_xtracker_summary(raw)
                     hourly = parse_hourly_counts(raw)
                     xt_count = summary.get("total", 0) or compute_running_total(hourly, ws)
@@ -444,7 +451,7 @@ class TradingEngine:
                         w_end_capped = min(w_end, datetime.now(timezone.utc))
                         # 15s timeout — Cloudflare rate-limit responses can stall the call indefinitely.
                         # Insert a row even on timeout so the divergence chart shows the gap explicitly.
-                        ts_result = _asyncio.get_event_loop().run_until_complete(
+                        ts_result = _run_async(
                             _asyncio.wait_for(
                                 count_posts_in_window(w_start, w_end_capped, handle=handle),
                                 timeout=15.0,
@@ -524,7 +531,7 @@ class TradingEngine:
                 if not handle:
                     continue
 
-                trackings = asyncio.get_event_loop().run_until_complete(_fetch_trackings_raw(handle))
+                trackings = _run_async(_fetch_trackings_raw(handle))
                 if not trackings:
                     continue
 
@@ -546,7 +553,7 @@ class TradingEngine:
                 if not active and most_recent_end:
                     gap_hours = (now - most_recent_end).total_seconds() / 3600
                     if gap_hours > 2:
-                        asyncio.get_event_loop().run_until_complete(
+                        _run_async(
                             notify_auction_gap(handle, most_recent_end.strftime("%Y-%m-%d %H:%M"), gap_hours)
                         )
                         log.warning(f"Auction gap for {handle}: {gap_hours:.0f}h since last auction ended")
@@ -564,7 +571,7 @@ class TradingEngine:
                 for t in active:
                     tid = str(t.get("id") or t.get("trackingId") or "")
                     if tid and tid not in known_ids:
-                        asyncio.get_event_loop().run_until_complete(
+                        _run_async(
                             notify_new_auction(handle, t.get("title", ""), t.get("startDate", "")[:10], t.get("endDate", "")[:10])
                         )
                         sb.table("logs").insert({
