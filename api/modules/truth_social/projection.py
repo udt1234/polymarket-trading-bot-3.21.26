@@ -81,8 +81,18 @@ def ensemble_weights(
     return weights
 
 
-def bracket_probabilities(mean: float, std: float, bracket_labels: list[str] | None = None) -> dict[str, float]:
-    std = max(std, 10.0)
+def bracket_probabilities(
+    mean: float, std: float, bracket_labels: list[str] | None = None,
+    time_remaining_frac: float | None = None,
+) -> dict[str, float]:
+    # As the auction nears resolution, the variance of the final outcome shrinks
+    # (most of the week's posts have already happened). Scale std by sqrt(remaining)
+    # with a floor so the right tail (e.g. 200+) doesn't keep mass it cannot earn.
+    if time_remaining_frac is not None:
+        shrink = max(time_remaining_frac, 0.05) ** 0.5
+        std = max(std * shrink, 5.0)
+    else:
+        std = max(std, 10.0)
     norm = stats.norm(loc=mean, scale=std)
     p_nb = mean / (std ** 2) if std ** 2 > mean else 0.99
     p_nb = max(min(p_nb, 0.99), 0.01)
@@ -142,6 +152,7 @@ def ensemble_projection(
     signal_modifier: float = 1.0,
     calibration_scores: dict[str, float] | None = None,
     bracket_labels: list[str] | None = None,
+    time_remaining_frac: float | None = None,
 ) -> dict[str, float]:
     final_weights = calibration_adjusted_weights(weights, calibration_scores)
     labels = bracket_labels or BRACKET_LABELS
@@ -151,7 +162,11 @@ def ensemble_projection(
     for model_name, projected_mean in model_outputs.items():
         w = final_weights.get(model_name, 0)
         adjusted_mean = projected_mean * signal_modifier
-        probs = bracket_probabilities(adjusted_mean, weekly_std, bracket_labels=bracket_labels)
+        probs = bracket_probabilities(
+            adjusted_mean, weekly_std,
+            bracket_labels=bracket_labels,
+            time_remaining_frac=time_remaining_frac,
+        )
         for label in labels:
             combined_probs[label] += w * probs.get(label, 0)
 

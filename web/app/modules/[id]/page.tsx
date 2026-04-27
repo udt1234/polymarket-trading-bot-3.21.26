@@ -173,6 +173,13 @@ export default function ModuleDetailPage() {
     conservative: ["pace", "bayesian"],
     momentum: ["pace", "hawkes", "dow"],
   }
+  const MODEL_DESCRIPTIONS: Record<string, string> = {
+    pace: "Linear projection: extrapolate current pace to end of week. Best when posting is steady.",
+    bayesian: "Bayesian update: blends current pace with historical mean, weighted by elapsed time. Best mid-week.",
+    dow: "Day-of-week pacing: weights remaining hours by historical posts-per-(dow,hour) averages.",
+    historical: "Plain historical mean of past N weeks. Stable anchor.",
+    hawkes: "Self-exciting process: detects post bursts where one post triggers more. Best in SURGE regimes.",
+  }
   const [localConfig, setLocalConfig] = useState<ModuleConfig>({
     historical_periods: 9,
     recency_half_life: 4.0,
@@ -398,7 +405,7 @@ export default function ModuleDetailPage() {
         {configOpen && (
           <div className="border-t border-border px-6 py-4">
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
-              <label className="space-y-1">
+              <label className="space-y-1" title="How many past weekly auctions feed the model. 9 ≈ 2 months of history. More = stable, fewer = adaptive to recent regime shifts.">
                 <span className="text-xs text-muted-foreground">Historical Periods</span>
                 <input
                   type="number" min={1} max={52}
@@ -407,7 +414,7 @@ export default function ModuleDetailPage() {
                   className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
                 />
               </label>
-              <label className="space-y-1">
+              <label className="space-y-1" title="Weeks until a past auction's weight halves. 4 = recent weeks dominate. Higher = treat all history more equally.">
                 <span className="text-xs text-muted-foreground">Recency Half-Life</span>
                 <input
                   type="number" min={0.5} max={20} step={0.5}
@@ -416,7 +423,7 @@ export default function ModuleDetailPage() {
                   className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
                 />
               </label>
-              <label className="space-y-1">
+              <label className="space-y-1" title="How day-of-week posting averages are computed. Recency = recent weeks weighted higher. Equal = all weeks equal. Regime = only weeks matching current regime.">
                 <span className="text-xs text-muted-foreground">DOW Weights Source</span>
                 <select
                   value={localConfig.dow_weights_source}
@@ -428,19 +435,19 @@ export default function ModuleDetailPage() {
                   <option value="regime">Regime-Conditional</option>
                 </select>
               </label>
-              <label className="flex items-center gap-2 self-end pb-1.5">
+              <label className="flex items-center gap-2 self-end pb-1.5" title="When ON, day-of-week averages only use past weeks with the same regime (HIGH / NORMAL / QUIET / SURGE / TRANSITION) as right now.">
                 <input type="checkbox" checked={localConfig.regime_conditional}
                   onChange={(e) => setLocalConfig({ ...localConfig, regime_conditional: e.target.checked })}
                   className="rounded border-border" />
                 <span className="text-sm">Regime-Conditional</span>
               </label>
-              <label className="flex items-center gap-2 self-end pb-1.5">
+              <label className="flex items-center gap-2 self-end pb-1.5" title="5th ensemble model: compares current week's price pattern to historical winning patterns from cached parquet snapshots.">
                 <input type="checkbox" checked={localConfig.parquet_model}
                   onChange={(e) => setLocalConfig({ ...localConfig, parquet_model: e.target.checked })}
                   className="rounded border-border" />
                 <span className="text-sm">Parquet Model</span>
               </label>
-              <label className="flex items-center gap-2 self-end pb-1.5">
+              <label className="flex items-center gap-2 self-end pb-1.5" title="Automatically picks the best Historical Periods value based on past Brier scores (lower = better calibration).">
                 <input type="checkbox" checked={localConfig.auto_optimize_periods}
                   onChange={(e) => setLocalConfig({ ...localConfig, auto_optimize_periods: e.target.checked })}
                   className="rounded border-border" />
@@ -450,7 +457,7 @@ export default function ModuleDetailPage() {
             <div className="mt-4 border-t border-border pt-4">
               <p className="text-xs text-muted-foreground font-semibold uppercase mb-2">Ensemble Models</p>
               <div className="flex flex-wrap items-center gap-4">
-                <label className="space-y-1">
+                <label className="space-y-1" title="Bundles of ensemble models. Full = all 5. Conservative = Pace + Bayesian only. Momentum = Pace + Hawkes + DOW for surge regimes.">
                   <span className="text-xs text-muted-foreground">Preset</span>
                   <select
                     value={localConfig.strategy_preset}
@@ -467,7 +474,7 @@ export default function ModuleDetailPage() {
                   </select>
                 </label>
                 {ALL_MODELS.map((model) => (
-                  <label key={model} className="flex items-center gap-1.5">
+                  <label key={model} className="flex items-center gap-1.5" title={MODEL_DESCRIPTIONS[model] || ""}>
                     <input
                       type="checkbox"
                       checked={localConfig.enabled_models.includes(model)}
@@ -494,7 +501,7 @@ export default function ModuleDetailPage() {
             <div className="mt-4 border-t border-border pt-4">
               <p className="text-xs text-muted-foreground font-semibold uppercase mb-2">Position & Exit Rules</p>
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
-                <label className="space-y-1">
+                <label className="space-y-1" title="Exit a position when its price drops by this fraction below the average cost (0.30 = -30%). Set to 0 to disable the stop loss entirely.">
                   <span className="text-xs text-muted-foreground">Stop Loss %</span>
                   <input
                     type="number" min={0} max={1} step={0.05}
@@ -504,7 +511,7 @@ export default function ModuleDetailPage() {
                   />
                   <span className="text-[10px] text-muted-foreground">Exit if price drops this much from cost (0 disables)</span>
                 </label>
-                <label className="space-y-1">
+                <label className="space-y-1" title="Exit a position when its price rises by this fraction above the average cost (0.50 = +50%). Set to 0 to disable. Bracket markets pay $1 binary, so disabling can be optimal for high-conviction winners.">
                   <span className="text-xs text-muted-foreground">Take Profit %</span>
                   <input
                     type="number" min={0} max={5} step={0.05}
@@ -514,7 +521,7 @@ export default function ModuleDetailPage() {
                   />
                   <span className="text-[10px] text-muted-foreground">Exit if price rises this much from cost (0 disables)</span>
                 </label>
-                <label className="space-y-1">
+                <label className="space-y-1" title="Maximum number of top-ranked brackets considered per evaluation cycle. The bot still applies risk checks; higher = more diversification, lower = more concentration.">
                   <span className="text-xs text-muted-foreground">Max Brackets / Cycle</span>
                   <input
                     type="number" min={1} max={11} step={1}
@@ -524,7 +531,7 @@ export default function ModuleDetailPage() {
                   />
                   <span className="text-[10px] text-muted-foreground">How many top-ranked brackets to consider per cycle</span>
                 </label>
-                <label className="space-y-1">
+                <label className="space-y-1" title="Minimum edge (model_prob - market_price) needed to approve a signal. Clamped to never drop below the global 2% floor.">
                   <span className="text-xs text-muted-foreground">Min Edge Threshold</span>
                   <input
                     type="number" min={0} max={0.5} step={0.005}
@@ -534,7 +541,7 @@ export default function ModuleDetailPage() {
                   />
                   <span className="text-[10px] text-muted-foreground">Reject signals whose edge is below this (0.02 = 2%)</span>
                 </label>
-                <label className="flex items-center gap-2 self-end pb-1.5">
+                <label className="flex items-center gap-2 self-end pb-1.5" title="When ON, brackets whose upper bound is below the current running post total are zeroed out (mathematically impossible). The remaining mass redistributes to surviving brackets.">
                   <input
                     type="checkbox"
                     checked={localConfig.floor_brackets_by_running_total}
@@ -602,19 +609,19 @@ export default function ModuleDetailPage() {
 
         return (
           <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Cost Basis</p>
               <p className="mt-1 text-2xl font-bold">{fmtDollars(totalInvested)}</p>
               <p className="text-xs text-muted-foreground">{openPositions.length} open position{openPositions.length !== 1 ? "s" : ""}</p>
             </div>
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Current Value</p>
               <p className="mt-1 text-2xl font-bold">{fmtDollars(marketValue)}</p>
               <p className={cn("text-xs", unrealizedPnl >= 0 ? "text-success" : "text-destructive")}>
                 {fmtDollarsSigned(unrealizedPnl)} unrealized
               </p>
             </div>
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Unrealized P&L</p>
               <p className={cn("mt-1 text-2xl font-bold", unrealizedPnl >= 0 ? "text-success" : "text-destructive")}>
                 {fmtDollarsSigned(unrealizedPnl)}
@@ -623,14 +630,14 @@ export default function ModuleDetailPage() {
                 {totalInvested > 0 ? `${((unrealizedPnl / totalInvested) * 100).toFixed(1)}% return` : "No positions"}
               </p>
             </div>
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Realized P&L</p>
               <p className={cn("mt-1 text-2xl font-bold", realizedPnl >= 0 ? "text-success" : "text-destructive")}>
                 {fmtDollarsSigned(realizedPnl)}
               </p>
               <p className="text-xs text-muted-foreground">{closedPositions.length} closed trade{closedPositions.length !== 1 ? "s" : ""}</p>
             </div>
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Win Rate</p>
               <p className="mt-1 text-2xl font-bold">{fmt(winRate)}%</p>
               <p className="text-xs text-muted-foreground">{wins}W / {closedPositions.length - wins}L · {totalTrades} total</p>
@@ -642,9 +649,9 @@ export default function ModuleDetailPage() {
               const curBracketDollars = Math.round(curBudget * curBracketPct / 100)
               return (
                 <>
-                  <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+                  <div className="flex-1 min-w-[180px] max-w-[230px] rounded-lg border border-border bg-card p-4 text-center">
                     <p className="text-xs text-muted-foreground uppercase tracking-wide">Bankroll</p>
-                    <div className="mt-1 flex items-center gap-0">
+                    <div className="mt-1 flex items-center justify-center gap-0">
                       <input
                         type="number"
                         value={curBankrollPct}
@@ -656,15 +663,15 @@ export default function ModuleDetailPage() {
                             apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ budget: newBudget }) })
                           }
                         }}
-                        className="w-10 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
+                        className="w-12 bg-transparent text-center text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
                       />
                       <span className="text-2xl font-bold">%</span>
                     </div>
                     <p className="text-xs text-muted-foreground">${curBudget} of ${accountBankroll} account</p>
                   </div>
-                  <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+                  <div className="flex-1 min-w-[180px] max-w-[230px] rounded-lg border border-border bg-card p-4 text-center">
                     <p className="text-xs text-muted-foreground uppercase tracking-wide">Bracket Cap</p>
-                    <div className="mt-1 flex items-center gap-0">
+                    <div className="mt-1 flex items-center justify-center gap-0">
                       <input
                         type="number"
                         value={curBracketPct}
@@ -675,7 +682,7 @@ export default function ModuleDetailPage() {
                             apiFetch(`/api/modules/${module.id}`, { method: "PUT", body: JSON.stringify({ max_position_pct: pct / 100 }) })
                           }
                         }}
-                        className="w-10 bg-transparent text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
+                        className="w-12 bg-transparent text-center text-2xl font-bold border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
                       />
                       <span className="text-2xl font-bold">%</span>
                     </div>
@@ -684,7 +691,7 @@ export default function ModuleDetailPage() {
                 </>
               )
             })()}
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Spread Health</p>
               <p className={cn("mt-1 text-2xl font-bold", spreadColor)}>{spreadHealth}</p>
               <p className="text-xs text-muted-foreground">
@@ -701,11 +708,15 @@ export default function ModuleDetailPage() {
                 momentum === "decelerating" ? "text-destructive" :
                 momentum === "steady" ? "text-muted-foreground" :
                 "text-muted-foreground"
-              const label = momentum === "—" ? "—" : momentum.charAt(0).toUpperCase() + momentum.slice(1)
+              const label =
+                momentum === "accelerating" ? "Accel ↑" :
+                momentum === "decelerating" ? "Decel ↓" :
+                momentum === "steady" ? "Steady" :
+                "—"
               return (
-                <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4">
+                <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">Pace Acceleration</p>
-                  <p className={cn("mt-1 text-2xl font-bold capitalize", momColor)}>{label}</p>
+                  <p className={cn("mt-1 text-2xl font-bold", momColor)}>{label}</p>
                   <p className="text-xs text-muted-foreground">
                     {cur != null && prior != null
                       ? `${cur.toFixed(2)} now vs ${prior.toFixed(2)} prior posts/hr`
@@ -794,15 +805,18 @@ export default function ModuleDetailPage() {
                     </div>
                   </div>
 
-                  {data.truth_social_direct !== undefined && data.truth_social_direct !== null && (
+                  {data.truth_social_direct && data.truth_social_direct.count != null && !data.truth_social_direct.error && (
                     <div className="pt-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-2">Truth Social (Direct)</div>
+                      <div
+                        className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-2"
+                        title="Live read of Trump's Truth Social posts directly from truthsocial.com/api/v1, used to cross-check the xTracker number."
+                      >
+                        Truth Social (Direct)
+                      </div>
                       <div className="space-y-2">
                         <div className="flex justify-between border-b border-border pb-2">
                           <span className="text-muted-foreground">Direct Count</span>
-                          <span className="font-bold">
-                            {data.truth_social_direct.count ?? "—"}
-                          </span>
+                          <span className="font-bold">{data.truth_social_direct.count}</span>
                         </div>
                         {data.truth_social_direct.diff_vs_xtracker != null && (
                           <div className="flex justify-between border-b border-border pb-2">
@@ -822,9 +836,6 @@ export default function ModuleDetailPage() {
                             <span className="text-muted-foreground">Latest Post</span>
                             <span className="text-xs">{new Date(data.truth_social_direct.latest_post_at).toLocaleString()}</span>
                           </div>
-                        )}
-                        {data.truth_social_direct.error && (
-                          <div className="text-xs text-destructive">Error: {data.truth_social_direct.error}</div>
                         )}
                         <div className="text-[10px] text-muted-foreground/60">Source: truthsocial.com/api/v1</div>
                       </div>

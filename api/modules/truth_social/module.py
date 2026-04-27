@@ -285,7 +285,13 @@ class TruthSocialModule(BaseModule):
 
         # Backtest result: signal modifiers hurt Trump performance — use raw ensemble
         use_signal_mod = mod_cfg.get("use_signal_modifier", False)
-        bracket_probs = ensemble_projection(model_outputs, weights, hist_std, signal_mod if use_signal_mod else 1.0, calibration_scores)
+        time_remaining_frac = max(remaining_days / total_days, 0.0) if total_days > 0 else None
+        bracket_probs = ensemble_projection(
+            model_outputs, weights, hist_std,
+            signal_mod if use_signal_mod else 1.0,
+            calibration_scores,
+            time_remaining_frac=time_remaining_frac,
+        )
 
         # Zero out brackets whose upper bound is below the current running total —
         # they are mathematically impossible. Renormalize the surviving mass.
