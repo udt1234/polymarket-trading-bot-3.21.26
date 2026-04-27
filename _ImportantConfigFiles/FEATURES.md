@@ -117,3 +117,15 @@ correlated (30%), duplicate, cross-module, settlement decay, spread, liquidity
 - `/pre-commit` — Chain QA + strategy + risk + verify
 - `/check-status` — Project status overview
 - `/post-session` — End-of-session doc updates
+
+## Future Items (Backlog)
+
+### Strategy A/B testing via per-module separation
+- **Goal:** run two distinct bidding strategies side-by-side on the same auction with isolated bankrolls so we can compare realized P&L, win rate, Brier score, and execution behavior cleanly.
+- **Approach:** add a second module (e.g. `truth_social_floor_buyer`) extending `BaseModule`, distinct row in `modules` table, fixed dollar bankroll per module (not %). Reuses shared `data.py`, regime detection, risk manager, executor, exit manager. Only `_evaluate_async()` and `module_config.py` differ.
+- **Strategy 2 (rough idea, needs spec):** buy all posting brackets when price < $X during historical-low time windows. Needs decisions on price ceiling, low-window definition, equal vs weighted share per bracket, exit rule.
+- **Prereqs before starting:**
+  - PR #9 snapshot fixes verified live (Order Book Depth + Truth Social Direct populating)
+  - Current module's projection/floor/variance changes proven over at least one full auction cycle
+  - Strategy 2 logic written down in detail (don't iterate on architecture and strategy simultaneously)
+- **Estimated cost:** ~30 min scaffold via `@module-scaffolder` + 100-150 LOC for `_evaluate_async()` + dashboard auto-renders both modules.
