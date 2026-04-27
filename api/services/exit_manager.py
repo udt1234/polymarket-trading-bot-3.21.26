@@ -200,6 +200,18 @@ def check_exits(positions: list[dict]) -> list[ExitSignal]:
 
 
 def execute_exits(exits: list[ExitSignal], positions_by_id: dict, executor) -> list[dict]:
+    """Place actual SELL orders for each exit signal.
+
+    PRIOR BUG: this function previously called close_position() directly which
+    only updated the DB row to status='closed' — it never placed a sell order
+    on Polymarket. Stop-loss / trailing-stop / take-profit were no-ops in live
+    mode. Fix: build a SELL Signal per position and route through executor.
+    The executor's SELL path now handles close_position() on fill.
+
+    Exits intentionally bypass risk_manager.check() because the entry-side risk
+    rules (edge threshold, kelly cap, etc.) don't apply to liquidations.
+    """
+    from api.services.risk_manager import Signal
     results = []
     sb = get_supabase()
     for ex in exits:
@@ -207,16 +219,39 @@ def execute_exits(exits: list[ExitSignal], positions_by_id: dict, executor) -> l
         if not pos:
             continue
         current_price = pos.get("current_price", pos.get("avg_price", 0))
+        if current_price <= 0 or current_price >= 1:
+            log.warning(f"Exit skipped for {ex.position_id}: invalid price {current_price}")
+            continue
         try:
-            pnl = close_position(ex.position_id, current_price)
+            sell_signal = Signal(
+                module_id=pos.get("module_id", ""),
+                market_id=pos.get("market_id", ""),
+                bracket=pos.get("bracket", ""),
+                side="SELL",
+                edge=0.0,
+                model_prob=0.0,
+                market_price=float(current_price),
+                kelly_pct=1.0,  # liquidate full position; executor reads existing size
+                metadata={"exit_reason": ex.reason, "exit_urgency": ex.urgency},
+            )
+            result = executor.execute(sell_signal)
+            status = (result or {}).get("status") if isinstance(result, dict) else None
+            if status != "filled":
+                log.warning(
+                    f"Exit order not filled for {ex.position_id} ({ex.reason}): {result}"
+                )
+                continue
             sb.table("logs").insert({
                 "log_type": "exit",
                 "severity": "info",
                 "module_id": pos.get("module_id"),
-                "message": f"Exit {pos.get('bracket')}: {ex.reason} (pnl={pnl:.4f})",
-                "metadata": {"position_id": ex.position_id, "reason": ex.reason, "urgency": ex.urgency},
+                "message": f"Exit {pos.get('bracket')}: {ex.reason} @ {current_price:.4f}",
+                "metadata": {
+                    "position_id": ex.position_id, "reason": ex.reason,
+                    "urgency": ex.urgency, "fill_price": current_price,
+                },
             }).execute()
-            results.append({"position_id": ex.position_id, "reason": ex.reason, "pnl": pnl})
+            results.append({"position_id": ex.position_id, "reason": ex.reason, "fill_price": current_price})
         except Exception as e:
             log.error(f"Exit failed for {ex.position_id}: {e}")
     return results

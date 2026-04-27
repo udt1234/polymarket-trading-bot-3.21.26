@@ -41,9 +41,31 @@ class PaperExecutor:
             return {"status": "rejected", "reason": "no_liquidity"}
 
         order_id = str(uuid.uuid4())
-        raw_size = self.balance * signal.kelly_pct
-        size = min(raw_size, max_depth) if max_depth > 0 else raw_size
+        # On SELL, "size" comes from kelly_pct meaning "fraction of position to liquidate".
+        # On BUY, "size" comes from kelly_pct meaning "fraction of bankroll to deploy".
+        existing = None
+        if signal.side == "SELL":
+            from api.services.position_manager import find_open_position, claim_position_for_exit
+            existing = find_open_position(signal.module_id, signal.market_id, signal.bracket)
+            if not existing:
+                self._log_rejection(signal, "no_position_to_sell")
+                return {"status": "rejected", "reason": "no_position_to_sell"}
+            # Atomically claim the position so a parallel cycle can't double-sell.
+            if not claim_position_for_exit(existing["id"]):
+                self._log_rejection(signal, "lost_race_to_concurrent_exit")
+                return {"status": "rejected", "reason": "lost_race_to_concurrent_exit"}
+            raw_size = float(existing.get("size") or 0)
+            size = min(raw_size, max_depth) if max_depth > 0 else raw_size
+        else:
+            raw_size = self.balance * signal.kelly_pct
+            size = min(raw_size, max_depth) if max_depth > 0 else raw_size
+
         if size <= 0:
+            # If we claimed a position for exit but can't fill, release it so the
+            # next cycle can retry.
+            if existing:
+                from api.services.position_manager import release_position_after_failed_exit
+                release_position_after_failed_exit(existing["id"])
             self._log_rejection(signal, "zero_size")
             return {"status": "rejected", "reason": "zero_size"}
 
@@ -84,7 +106,17 @@ class PaperExecutor:
             "executed_at": now,
         }).execute()
 
-        open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, fill_price)
+        if signal.side == "SELL":
+            # Partial fill (depth-capped): only close the portion that filled and
+            # leave the rest open for the next cycle. Full fill: close completely.
+            if size < raw_size and raw_size > 0:
+                from api.services.position_manager import partial_close_position
+                partial_close_position(existing["id"], size, fill_price)
+            else:
+                from api.services.position_manager import close_position
+                close_position(existing["id"], fill_price)
+        else:
+            open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, fill_price)
 
         try:
             sb.table("signals").insert({
@@ -186,7 +218,23 @@ class LiveExecutor:
             raise ValueError(f"Invalid price: {signal.market_price}")
 
         order_id = str(uuid.uuid4())
-        size = 1000.0 * signal.kelly_pct
+        # On SELL, kelly_pct means "fraction of the existing position to liquidate".
+        # On BUY, kelly_pct means "fraction of bankroll to deploy".
+        # KNOWN LIMITATION: this path marks orders 'filled' as soon as the CLOB
+        # POST returns. GTC limit orders may rest unfilled. A reconciliation job
+        # against actual on-chain fills is in the backlog. Until that lands,
+        # treat live execution results as best-effort. See FEATURES.md backlog.
+        existing_position = None
+        if signal.side == "SELL":
+            from api.services.position_manager import find_open_position, claim_position_for_exit
+            existing_position = find_open_position(signal.module_id, signal.market_id, signal.bracket)
+            if not existing_position:
+                raise ValueError(f"No open BUY position to sell: {signal.bracket}")
+            if not claim_position_for_exit(existing_position["id"]):
+                raise ValueError(f"Lost race to concurrent exit on {signal.bracket}")
+            size = float(existing_position.get("size") or 0)
+        else:
+            size = 1000.0 * signal.kelly_pct
         if size <= 0:
             raise ValueError(f"Invalid order size: {size}")
         now = datetime.now(timezone.utc).isoformat()
@@ -238,13 +286,25 @@ class LiveExecutor:
                 "metadata": {"profile": profile_name},
             }).execute()
 
-            open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, signal.market_price)
+            if signal.side == "SELL" and existing_position:
+                from api.services.position_manager import close_position
+                close_position(existing_position["id"], signal.market_price)
+            else:
+                open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, signal.market_price)
 
             log.info(f"LIVE [{profile_name}] {signal.side} {signal.bracket} size={size:.2f} @ {signal.market_price:.4f}")
             return {"id": order_id, "status": "filled", "profile": profile_name, "clob_response": str(order)}
 
         except Exception as e:
             sb.table("orders").update({"status": "rejected"}).eq("id", order_id).execute()
+            # If we claimed an open position to exit but the order failed,
+            # release it back to 'open' so the next exit cycle retries.
+            if signal.side == "SELL" and existing_position:
+                try:
+                    from api.services.position_manager import release_position_after_failed_exit
+                    release_position_after_failed_exit(existing_position["id"])
+                except Exception:
+                    pass
             log.error(f"Live execution failed [{profile_name}]: {e}")
             raise
 
