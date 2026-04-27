@@ -244,6 +244,7 @@ class ElonTweetsModule(BaseModule):
                     ask_depth_5=book.get("ask_depth_5", 0.0),
                     metadata={
                         "min_edge_threshold": mod_cfg.get("min_edge_threshold"),
+                        "auction_aggregate_price_ceiling": mod_cfg.get("auction_aggregate_price_ceiling"),
                         "regime": regime_label,
                         "regime_override": news_override.get("override"),
                         "running_total": running_total,

@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     min_edge_threshold: float = 0.02
     slippage_tolerance: float = 0.05
     kelly_fraction: float = 0.25
+    # Global floor for the per-auction aggregate price ceiling. Modules may RAISE
+    # this in their config (more strict) but cannot LOWER it below this floor.
+    # Set to 0 to disable the global floor (modules then control entirely).
+    auction_aggregate_price_ceiling_floor: float = 0.65
 
     # Circuit breaker
     circuit_breaker_enabled: bool = True
