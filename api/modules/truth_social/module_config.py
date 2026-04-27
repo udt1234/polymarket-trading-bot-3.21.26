@@ -19,6 +19,7 @@ DEFAULT_CONFIG = {
     "max_brackets_per_cycle": 5,
     "min_edge_threshold": 0.02,
     "floor_brackets_by_running_total": True,
+    "auction_aggregate_price_ceiling": 0.65,
     "wait_for_dip_enabled": True,
     "wait_min_drop_threshold": 0.05,
     "wait_max_days": 3.0,

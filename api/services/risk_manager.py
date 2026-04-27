@@ -80,6 +80,7 @@ class RiskManager:
             self._check_single_market_exposure,
             self._check_correlated_exposure,
             self._check_negative_ev_aggregate,
+            self._check_auction_aggregate_price,
             self._check_duplicate,
             self._check_cross_module_correlation,
             self._check_settlement_decay,
@@ -230,6 +231,66 @@ class RiskManager:
                 return False, f"aggregate EV negative: payout ${expected_payout:.2f} < cost ${total_cost:.2f}"
         except Exception as e:
             log.error(f"Aggregate EV check failed (fail-open): {e}")
+        return True, ""
+
+    def _check_auction_aggregate_price(self, signal: Signal, settings) -> tuple[bool, str]:
+        """Cap the SUM of avg_prices across all brackets we hold in this auction.
+
+        In a mutually-exclusive bracket market, exactly one bracket pays $1/share.
+        The sum of per-bracket avg_prices is the implied probability mass we've
+        bought. If we keep that sum below the ceiling (default 0.65), then any
+        winning bracket guarantees a positive return.
+
+        Per-module override via signal.metadata['auction_aggregate_price_ceiling'].
+        Set to 0 (or None) to disable.
+        """
+        # Per-module override via signal metadata. Modules may set this STRICTER
+        # (lower) than the global floor — but the floor itself caps the maximum
+        # leniency, mirroring the min_edge_threshold pattern. If both are 0 the
+        # check is fully disabled (operator opt-out via settings).
+        meta_ceiling = (signal.metadata or {}).get("auction_aggregate_price_ceiling")
+        floor = float(getattr(settings, "auction_aggregate_price_ceiling_floor", 0.0) or 0.0)
+        meta_ceiling_f = float(meta_ceiling) if meta_ceiling is not None else 0.0
+        if meta_ceiling_f > 0 and floor > 0:
+            ceiling = min(meta_ceiling_f, floor)
+        elif meta_ceiling_f > 0:
+            ceiling = meta_ceiling_f
+        elif floor > 0:
+            ceiling = floor
+        else:
+            return True, ""
+        try:
+            sb = get_supabase()
+            existing = (
+                sb.table("positions")
+                .select("bracket,avg_price")
+                .eq("status", "open")
+                .eq("market_id", signal.market_id)
+                .eq("side", "BUY")
+                .execute()
+            )
+            # Sum per-bracket avg_price across distinct brackets we already hold.
+            by_bracket: dict[str, float] = {}
+            for p in existing.data or []:
+                b = p.get("bracket")
+                ap = float(p.get("avg_price") or 0)
+                if b and ap > 0:
+                    by_bracket[b] = max(by_bracket.get(b, 0.0), ap)
+            current_sum = sum(by_bracket.values())
+            # If we're adding to an existing bracket, the avg_price changes — for the
+            # purposes of this check, use whichever is higher (the new market_price is
+            # what we'd buy at right now, so it's the worst-case contribution).
+            new_contribution = max(by_bracket.get(signal.bracket, 0.0), float(signal.market_price))
+            projected_sum = current_sum - by_bracket.get(signal.bracket, 0.0) + new_contribution
+            if projected_sum > ceiling:
+                return False, (
+                    f"auction aggregate price ${projected_sum:.2f} would exceed "
+                    f"ceiling ${ceiling:.2f} (current ${current_sum:.2f} + new bracket "
+                    f"{signal.bracket} @ ${new_contribution:.2f})"
+                )
+        except Exception as e:
+            log.error(f"Auction aggregate price check failed (fail-closed): {e}")
+            return False, "auction aggregate price check unavailable — DB error"
         return True, ""
 
     def _check_duplicate(self, signal: Signal, settings) -> tuple[bool, str]:
