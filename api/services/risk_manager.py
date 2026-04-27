@@ -230,7 +230,10 @@ class RiskManager:
             if ev < 0:
                 return False, f"aggregate EV negative: payout ${expected_payout:.2f} < cost ${total_cost:.2f}"
         except Exception as e:
-            log.error(f"Aggregate EV check failed (fail-open): {e}")
+            # Fail-CLOSED to match every other exposure check in this file.
+            # Prior fail-open was inconsistent and flagged in the 2026-04-27 QA pass.
+            log.error(f"Aggregate EV check failed (fail-closed): {e}")
+            return False, "aggregate EV check unavailable — DB error"
         return True, ""
 
     def _check_auction_aggregate_price(self, signal: Signal, settings) -> tuple[bool, str]:

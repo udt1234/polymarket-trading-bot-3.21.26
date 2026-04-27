@@ -4,6 +4,34 @@ from api.config import get_settings
 
 log = logging.getLogger(__name__)
 
+CREDENTIAL_FIELDS = (
+    "polymarket_api_key",
+    "polymarket_secret",
+    "polymarket_passphrase",
+    "polymarket_private_key",
+)
+
+
+def strip_credentials(profile: dict | None) -> dict | None:
+    """Remove all Polymarket credential fields from a profile dict.
+
+    Use at every API response boundary that returns profile data. Internal
+    callers (e.g. LiveExecutor) call get_active_profile() directly and need
+    the unstripped credentials.
+    """
+    if not profile:
+        return profile
+    stripped = dict(profile)
+    for f in CREDENTIAL_FIELDS:
+        stripped.pop(f, None)
+    # Mark presence so the dashboard can show whether creds are configured.
+    stripped["has_credentials"] = all(profile.get(f) for f in CREDENTIAL_FIELDS)
+    return stripped
+
+
+def strip_credentials_list(profiles: list[dict]) -> list[dict]:
+    return [strip_credentials(p) for p in (profiles or [])]
+
 
 def get_active_profile() -> dict:
     sb = get_supabase()
