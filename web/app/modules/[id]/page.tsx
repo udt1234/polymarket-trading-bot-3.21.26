@@ -90,6 +90,11 @@ interface ModuleConfig {
   enabled_models: string[]
   strategy_preset: string
   weight_overrides?: Record<string, number>
+  stop_loss_pct: number
+  take_profit_pct: number
+  max_brackets_per_cycle: number
+  min_edge_threshold: number
+  floor_brackets_by_running_total: boolean
 }
 
 interface AuctionTab {
@@ -177,6 +182,11 @@ export default function ModuleDetailPage() {
     auto_optimize_periods: false,
     enabled_models: ALL_MODELS,
     strategy_preset: "full",
+    stop_loss_pct: 0.30,
+    take_profit_pct: 0.0,
+    max_brackets_per_cycle: 5,
+    min_edge_threshold: 0.02,
+    floor_brackets_by_running_total: true,
   })
 
   useEffect(() => {
@@ -479,6 +489,60 @@ export default function ModuleDetailPage() {
                     <span className="text-sm capitalize">{model}</span>
                   </label>
                 ))}
+              </div>
+            </div>
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase mb-2">Position & Exit Rules</p>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
+                <label className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Stop Loss %</span>
+                  <input
+                    type="number" min={0} max={1} step={0.05}
+                    value={localConfig.stop_loss_pct}
+                    onChange={(e) => setLocalConfig({ ...localConfig, stop_loss_pct: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Exit if price drops this much from cost (0 disables)</span>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Take Profit %</span>
+                  <input
+                    type="number" min={0} max={5} step={0.05}
+                    value={localConfig.take_profit_pct}
+                    onChange={(e) => setLocalConfig({ ...localConfig, take_profit_pct: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Exit if price rises this much from cost (0 disables)</span>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Max Brackets / Cycle</span>
+                  <input
+                    type="number" min={1} max={11} step={1}
+                    value={localConfig.max_brackets_per_cycle}
+                    onChange={(e) => setLocalConfig({ ...localConfig, max_brackets_per_cycle: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">How many top-ranked brackets to consider per cycle</span>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Min Edge Threshold</span>
+                  <input
+                    type="number" min={0} max={0.5} step={0.005}
+                    value={localConfig.min_edge_threshold}
+                    onChange={(e) => setLocalConfig({ ...localConfig, min_edge_threshold: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Reject signals whose edge is below this (0.02 = 2%)</span>
+                </label>
+                <label className="flex items-center gap-2 self-end pb-1.5">
+                  <input
+                    type="checkbox"
+                    checked={localConfig.floor_brackets_by_running_total}
+                    onChange={(e) => setLocalConfig({ ...localConfig, floor_brackets_by_running_total: e.target.checked })}
+                    className="rounded border-border"
+                  />
+                  <span className="text-sm">Floor by Running Total</span>
+                </label>
               </div>
             </div>
             <div className="mt-4 flex justify-end">

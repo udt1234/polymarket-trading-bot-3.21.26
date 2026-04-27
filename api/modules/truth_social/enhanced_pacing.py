@@ -1,5 +1,8 @@
+import logging
 import math
 from collections import defaultdict
+
+log = logging.getLogger(__name__)
 
 
 def recency_weighted_averages(weekly_totals: list[float], half_life: float = 4.0) -> dict:
@@ -176,6 +179,48 @@ def period_type_dow_adjustment(
     period_daily_avg = sum(dow_avgs.get(d, daily_avg) for d in dows_in_period) / len(dows_in_period)
 
     return round(period_daily_avg * 7, 2)
+
+
+def floor_bracket_probs(
+    bracket_probs: dict[str, float], running_total: int | float
+) -> dict[str, float]:
+    """Zero out brackets whose upper bound is below the current running total.
+
+    Once a bracket is mathematically impossible (upper < running_total), its
+    probability mass is redistributed proportionally over the surviving brackets.
+    """
+    if not bracket_probs or running_total is None:
+        return bracket_probs
+
+    surviving = {}
+    for label, prob in bracket_probs.items():
+        try:
+            if "-" in label:
+                hi = int(label.split("-", 1)[1])
+            elif label.endswith("+"):
+                hi = 99999
+            elif label.startswith("<"):
+                hi = int(label[1:])
+            else:
+                hi = int(label)
+        except (ValueError, IndexError):
+            surviving[label] = prob
+            continue
+        if hi >= running_total:
+            surviving[label] = prob
+
+    if not surviving:
+        log.warning(
+            f"floor_bracket_probs: all brackets below running_total={running_total}; "
+            f"returning unfloored probs as fallback (likely upstream data issue)"
+        )
+        return bracket_probs
+
+    total = sum(surviving.values())
+    if total <= 0:
+        return bracket_probs
+
+    return {label: (surviving.get(label, 0.0) / total) for label in bracket_probs}
 
 
 def ensemble_confidence_bands(

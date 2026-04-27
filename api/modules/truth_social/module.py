@@ -21,7 +21,7 @@ from api.modules.truth_social.signals import (
 from api.modules.truth_social.enhanced_pacing import (
     recency_weighted_averages, regime_conditional_dow_averages,
     pace_acceleration, dow_deviation, ensemble_confidence_bands,
-    historical_hourly_averages,
+    historical_hourly_averages, floor_bracket_probs,
 )
 from api.modules.truth_social.hawkes import hawkes_pace, fit_hawkes_params
 from api.modules.truth_social.news_classifier import classify_news_regime
@@ -287,6 +287,11 @@ class TruthSocialModule(BaseModule):
         use_signal_mod = mod_cfg.get("use_signal_modifier", False)
         bracket_probs = ensemble_projection(model_outputs, weights, hist_std, signal_mod if use_signal_mod else 1.0, calibration_scores)
 
+        # Zero out brackets whose upper bound is below the current running total —
+        # they are mathematically impossible. Renormalize the surviving mass.
+        if mod_cfg.get("floor_brackets_by_running_total", True):
+            bracket_probs = floor_bracket_probs(bracket_probs, running_total)
+
         # Cross-bracket arbitrage: detect probability mass misallocations
         arb_opps = cross_bracket_arbitrage(bracket_probs, market_prices)
         if arb_opps:
@@ -294,7 +299,8 @@ class TruthSocialModule(BaseModule):
                       f"Arbitrage: {[f'{o['bracket']}({o['side']},{o['misallocation']:+.1%})' for o in arb_opps[:3]]}")
 
         # Fetch order books for top brackets (needed for spread + liquidity risk checks)
-        max_brackets = module_config.get("max_brackets_per_cycle", 5)
+        # Read from module_config (per-module DB-backed settings) so dashboard edits take effect.
+        max_brackets = mod_cfg.get("max_brackets_per_cycle", 5)
         top_brackets_for_books = rank_brackets(bracket_probs, market_prices, top_n=max_brackets)
         top_bracket_names_for_books = [b["bracket"] for b in top_brackets_for_books]
         order_books = await fetch_order_books_for_brackets(slug, top_bracket_names_for_books)
@@ -358,6 +364,7 @@ class TruthSocialModule(BaseModule):
                     bid_depth_5=book.get("bid_depth_5", 0.0),
                     ask_depth_5=book.get("ask_depth_5", 0.0),
                     metadata={
+                        "min_edge_threshold": mod_cfg.get("min_edge_threshold"),
                         "regime": regime_label,
                         "regime_override": news_override.get("override"),
                         "running_total": running_total,
