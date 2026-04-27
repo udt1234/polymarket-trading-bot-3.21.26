@@ -129,3 +129,14 @@ correlated (30%), duplicate, cross-module, settlement decay, spread, liquidity
   - Current module's projection/floor/variance changes proven over at least one full auction cycle
   - Strategy 2 logic written down in detail (don't iterate on architecture and strategy simultaneously)
 - **Estimated cost:** ~30 min scaffold via `@module-scaffolder` + 100-150 LOC for `_evaluate_async()` + dashboard auto-renders both modules.
+
+### Future strategy tests (deferred during PR 1-5 strategy upgrade)
+- **Sell winners when pacing turns against** — backtest historically lost money on this rule (capped upside on real winners). Worth re-testing now that the ensemble has running_total floor + variance shrinkage. Build as a togglable exit rule (`sell_on_pacing_reversal`, default OFF).
+- **Manual buy/sell UI in dashboard** — currently user trades directly on Polymarket. Adding a manual buy panel + sell button per open position lets the user act on divergence alerts without leaving the dashboard. Requires: `POST /api/orders/manual` route, dashboard form, and reuse of existing executor (paper/live based on env).
+- **Polymarket position reconciliation job** — every cycle, pull actual Polymarket positions and reconcile against `positions` table. Makes the bot self-healing regardless of where the user trades. ~30 LOC, decoupled from the manual UI.
+- **`buy_at_historical_low_regardless_of_edge` toggle** — Approach B from the Q5 spec: bypass the edge check entirely when current price is below the historical-low entry. Removed from PR 4 because it was unwired. Wire when needed.
+
+### Pre-existing fixes deferred during PR 1-5
+- **Move `rank_brackets()` to AFTER contrarian_signal adjustment** — flagged by @strategy-reviewer in PR 4. Currently `top_brackets_for_books` is computed before contrarian adjusts probabilities, so the top-N never reflects contrarian signals. Pre-existing bug, separate refactor. ~5 LOC change in `truth_social/module.py`.
+- **Pre-auction order book quality** — flagged by @risk-auditor in PR 4. Pre-auction Polymarket markets often have wide one-sided spreads that bypass `_check_spread`'s sentinel. Before flipping `pre_auction_buying_enabled` to True, verify `slippage_tolerance` is tight (~0.05) and consider forcing `fetch_order_book(token_id)` (real CLOB) over Gamma's `bestBid`/`bestAsk` in that path.
+- **`_check_negative_ev_aggregate` fail-open inconsistency** — sibling exposure checks fail-closed on DB error, this one fails-open. Align before live trading on real money.
