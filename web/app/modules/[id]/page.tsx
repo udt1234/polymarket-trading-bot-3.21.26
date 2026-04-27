@@ -92,9 +92,19 @@ interface ModuleConfig {
   weight_overrides?: Record<string, number>
   stop_loss_pct: number
   take_profit_pct: number
+  trailing_stop_pct: number
   max_brackets_per_cycle: number
   min_edge_threshold: number
   floor_brackets_by_running_total: boolean
+  auction_aggregate_price_ceiling: number
+  historical_blend_weight: number
+  historical_winner_half_life_weeks: number
+  low_window_kelly_boost: number
+  pre_auction_buying_enabled: boolean
+  divergence_alerts_enabled: boolean
+  divergence_market_price_min: number
+  divergence_model_prob_max: number
+  divergence_cooldown_hours: number
 }
 
 interface AuctionTab {
@@ -191,9 +201,19 @@ export default function ModuleDetailPage() {
     strategy_preset: "full",
     stop_loss_pct: 0.30,
     take_profit_pct: 0.0,
+    trailing_stop_pct: 0.30,
     max_brackets_per_cycle: 5,
     min_edge_threshold: 0.02,
     floor_brackets_by_running_total: true,
+    auction_aggregate_price_ceiling: 0.65,
+    historical_blend_weight: 0.70,
+    historical_winner_half_life_weeks: 8.0,
+    low_window_kelly_boost: 1.30,
+    pre_auction_buying_enabled: false,
+    divergence_alerts_enabled: true,
+    divergence_market_price_min: 0.20,
+    divergence_model_prob_max: 0.05,
+    divergence_cooldown_hours: 6.0,
   })
 
   useEffect(() => {
@@ -586,6 +606,16 @@ export default function ModuleDetailPage() {
                   />
                   <span className="text-[10px] text-muted-foreground">Reject signals whose edge is below this (0.02 = 2%)</span>
                 </label>
+                <label className="space-y-1" title="Trailing stop: if a position's price has been at least 5% above cost (ran up) and then falls this fraction below the peak, exit. Locks in profit before the fixed Stop Loss fires deeper in the red. 0 disables.">
+                  <span className="text-xs text-muted-foreground">Trailing Stop %</span>
+                  <input
+                    type="number" min={0} max={1} step={0.05}
+                    value={localConfig.trailing_stop_pct}
+                    onChange={(e) => setLocalConfig({ ...localConfig, trailing_stop_pct: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Sell at -X% off the peak after a runup (0 disables)</span>
+                </label>
                 <label className="flex items-center gap-2 self-end pb-1.5" title="When ON, brackets whose upper bound is below the current running post total are zeroed out (mathematically impossible). The remaining mass redistributes to surviving brackets.">
                   <input
                     type="checkbox"
@@ -594,6 +624,108 @@ export default function ModuleDetailPage() {
                     className="rounded border-border"
                   />
                   <span className="text-sm">Floor by Running Total</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Auction Cost & Historical Tilt */}
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase mb-2">Auction Cost & Historical Tilt</p>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
+                <label className="space-y-1" title="Hard cap on the SUM of avg_prices across all brackets you hold in a single auction. In a mutually-exclusive bracket market, keeping this sum < ceiling guarantees a positive return when any one wins. Set to 0 to disable (a global floor of 0.65 still applies).">
+                  <span className="text-xs text-muted-foreground">Auction $ Ceiling</span>
+                  <input
+                    type="number" min={0} max={1} step={0.05}
+                    value={localConfig.auction_aggregate_price_ceiling}
+                    onChange={(e) => setLocalConfig({ ...localConfig, auction_aggregate_price_ceiling: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Sum of avg_prices across held brackets must stay below this</span>
+                </label>
+                <label className="space-y-1" title="Blend weight between live ensemble and historical bracket-winner frequencies. 0.70 = 70% live ensemble + 30% historical prior. Lower = more reliance on past bracket frequencies.">
+                  <span className="text-xs text-muted-foreground">Historical Blend</span>
+                  <input
+                    type="number" min={0.5} max={1} step={0.05}
+                    value={localConfig.historical_blend_weight}
+                    onChange={(e) => setLocalConfig({ ...localConfig, historical_blend_weight: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Live ensemble weight (rest goes to historical prior)</span>
+                </label>
+                <label className="space-y-1" title="Recency half-life for historical bracket-winner frequencies. 8 weeks = a winner from 8 weeks ago has half the weight of last week's. Higher = treat all weeks more equally.">
+                  <span className="text-xs text-muted-foreground">Hist Half-Life (wks)</span>
+                  <input
+                    type="number" min={2} max={26} step={0.5}
+                    value={localConfig.historical_winner_half_life_weeks}
+                    onChange={(e) => setLocalConfig({ ...localConfig, historical_winner_half_life_weeks: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Half-life for past auction weight decay</span>
+                </label>
+                <label className="space-y-1" title="When (now.hour, now.dow) is in the historical bottom-quartile price window for a bracket, multiply Kelly by this factor. 1.30 = 30% bigger bet at empirically cheap times. Capped to the 15% per-position limit.">
+                  <span className="text-xs text-muted-foreground">Low-Window Boost</span>
+                  <input
+                    type="number" min={1} max={2} step={0.05}
+                    value={localConfig.low_window_kelly_boost}
+                    onChange={(e) => setLocalConfig({ ...localConfig, low_window_kelly_boost: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Kelly multiplier in historical-low time windows (1.0 disables)</span>
+                </label>
+                <label className="flex items-center gap-2 self-end pb-1.5" title="When ON, the bot can also trade against UPCOMING auctions (not yet started). Useful for sniping early-listed brackets at low prices. The historical-blend prior carries the cycle when no live data exists.">
+                  <input
+                    type="checkbox"
+                    checked={localConfig.pre_auction_buying_enabled}
+                    onChange={(e) => setLocalConfig({ ...localConfig, pre_auction_buying_enabled: e.target.checked })}
+                    className="rounded border-border"
+                  />
+                  <span className="text-sm">Pre-Auction Buying</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Divergence Alerts */}
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase mb-2">Divergence Alerts (Slack)</p>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
+                <label className="flex items-center gap-2 self-end pb-1.5" title="When ON, fire a Slack alert when the market thinks a bracket is likely (>= Market Price Min) but our model thinks it's unlikely (<= Model Prob Max). Alert-only — bot does not auto-trade on divergences.">
+                  <input
+                    type="checkbox"
+                    checked={localConfig.divergence_alerts_enabled}
+                    onChange={(e) => setLocalConfig({ ...localConfig, divergence_alerts_enabled: e.target.checked })}
+                    className="rounded border-border"
+                  />
+                  <span className="text-sm">Enable Divergence Alerts</span>
+                </label>
+                <label className="space-y-1" title="Alert only when market_price for a bracket is at or above this. Lower = more sensitive (more alerts).">
+                  <span className="text-xs text-muted-foreground">Market Price Min</span>
+                  <input
+                    type="number" min={0.05} max={0.5} step={0.05}
+                    value={localConfig.divergence_market_price_min}
+                    onChange={(e) => setLocalConfig({ ...localConfig, divergence_market_price_min: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Crowd-thinks-it's-likely floor (e.g. 0.20 = 20%)</span>
+                </label>
+                <label className="space-y-1" title="Alert only when model_prob for a bracket is at or below this. Higher = more sensitive (more alerts).">
+                  <span className="text-xs text-muted-foreground">Model Prob Max</span>
+                  <input
+                    type="number" min={0.005} max={0.20} step={0.005}
+                    value={localConfig.divergence_model_prob_max}
+                    onChange={(e) => setLocalConfig({ ...localConfig, divergence_model_prob_max: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Model-thinks-it's-unlikely ceiling (e.g. 0.05 = 5%)</span>
+                </label>
+                <label className="space-y-1" title="Hours between repeat alerts on the same (module, market, bracket). Prevents Slack spam while a divergence persists across cycles.">
+                  <span className="text-xs text-muted-foreground">Cooldown (hrs)</span>
+                  <input
+                    type="number" min={0.5} max={48} step={0.5}
+                    value={localConfig.divergence_cooldown_hours}
+                    onChange={(e) => setLocalConfig({ ...localConfig, divergence_cooldown_hours: +e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Min hours between repeat alerts on same bracket</span>
                 </label>
               </div>
             </div>
