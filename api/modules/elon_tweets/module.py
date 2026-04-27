@@ -215,6 +215,25 @@ class ElonTweetsModule(BaseModule):
         order_books = await fetch_order_books_for_brackets(slug, top_bracket_names)
 
         elapsed_pct = min(elapsed_days / total_days, 1.0)
+
+        # Crowd-vs-model divergence alerter (PR 5). Fires Slack when market
+        # thinks a bracket is likely but our model says it's not. Cooldown
+        # de-duped, fire-and-forget, failures don't block the trading cycle.
+        try:
+            from api.services.divergence_detector import check_and_alert_divergences
+            await check_and_alert_divergences(
+                handle=self.HANDLE,
+                module_id=module_id,
+                market_id=slug,
+                bracket_probs=bracket_probs,
+                market_prices=market_prices,
+                running_total=running_total,
+                hours_remaining=remaining_days * 24.0,
+                config=mod_cfg,
+            )
+        except Exception as e:
+            log.warning(f"divergence detector failed (non-blocking): {e}")
+
         signals = []
         for bracket_label, model_prob in bracket_probs.items():
             market_price = market_prices.get(bracket_label, 0)

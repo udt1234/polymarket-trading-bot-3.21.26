@@ -79,3 +79,26 @@ async def notify_new_auction(handle: str, title: str, start: str, end: str):
     await send_slack(
         f":new: *New Auction* | {handle} | {title} | {start} → {end}"
     )
+
+
+async def notify_divergence(
+    handle: str, bracket: str, market_price: float, model_prob: float,
+    running_total: int, hours_remaining: float, context: str = "",
+):
+    """Crowd-vs-model divergence: market priced high but model says unlikely.
+
+    Concrete example: 200+ priced at 38% but model says 4% (running_total=198,
+    4h left). The user wants these as Slack pings so they can manually take
+    advantage (sell the 200+, buy the real winner).
+    """
+    delta = market_price - model_prob
+    msg = (
+        f":rotating_light: *Divergence Alert* | {handle} | bracket *{bracket}*\n"
+        f"Market price *{market_price * 100:.1f}%* but model says *{model_prob * 100:.1f}%* "
+        f"(delta {delta * 100:+.1f} pp)\n"
+        f"Running total: *{running_total}*  |  Time left: *{hours_remaining:.1f}h*"
+    )
+    if context:
+        msg += f"\n_{context}_"
+    msg += "\nAction: consider selling the over-priced bracket or buying the real winner."
+    await send_slack(msg)

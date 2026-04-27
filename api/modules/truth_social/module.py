@@ -386,6 +386,25 @@ class TruthSocialModule(BaseModule):
 
         elapsed_pct = min(elapsed_days / total_days, 1.0)
 
+        # Crowd-vs-model divergence alerter. Fires Slack when the market thinks
+        # a bracket is likely but our model says it's not. De-duped via settings
+        # table (cooldown 6h default). Async fire-and-forget; failures don't
+        # block the trading cycle.
+        try:
+            from api.services.divergence_detector import check_and_alert_divergences
+            await check_and_alert_divergences(
+                handle=self.HANDLE,
+                module_id=module_id,
+                market_id=slug,
+                bracket_probs=bracket_probs,
+                market_prices=market_prices,
+                running_total=running_total,
+                hours_remaining=remaining_days * 24.0,
+                config=mod_cfg,
+            )
+        except Exception as e:
+            log.warning(f"divergence detector failed (non-blocking): {e}")
+
         # Pre-fetch price snapshots once for the historical-low entry check.
         # Skipped if the feature is disabled to avoid the DB hit.
         low_window_boost = float(mod_cfg.get("low_window_kelly_boost", 1.30))
