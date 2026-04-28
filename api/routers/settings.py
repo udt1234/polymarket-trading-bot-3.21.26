@@ -16,7 +16,7 @@ class RiskSettingsUpdate(BaseModel):
     """Bounds-checked. paper_mode/shadow_mode are read at boot from ENV; setting
     them via this endpoint is a dead write — removed to avoid false sense of
     control (flagged in 2026-04-27 QA pass)."""
-    bankroll: float | None = Field(default=None, ge=0)
+    bankroll: float | None = Field(default=None, ge=0, le=1_000_000)
     max_portfolio_exposure: float | None = Field(default=None, ge=0, le=1)
     max_single_market_exposure: float | None = Field(default=None, ge=0, le=1)
     max_correlated_exposure: float | None = Field(default=None, ge=0, le=1)
@@ -181,6 +181,19 @@ async def create_profile(profile: ProfileCreate):
     return {"ok": True}
 
 
+# NOTE: this route MUST be declared before any /profiles/{name}/... routes so
+# FastAPI doesn't try to interpret "multi-status" as a profile name once a
+# GET /profiles/{name} endpoint is added in the future.
+@router.get("/profiles/multi-status")
+async def get_multi_status():
+    profiles = get_multi_exec_profiles()
+    return {
+        "enabled_count": len(profiles),
+        "active": len(profiles) > 1,
+        "profiles": [{"name": p["name"], "wallet_address": p.get("wallet_address", "")} for p in profiles],
+    }
+
+
 @router.put("/profiles/{name}/activate")
 async def activate_profile(name: str):
     try:
@@ -257,12 +270,3 @@ async def update_module_config(module_id: str, config: "ModuleConfigUpdate"):
     save_module_config(module_id, payload)
     return {"ok": True}
 
-
-@router.get("/profiles/multi-status")
-async def get_multi_status():
-    profiles = get_multi_exec_profiles()
-    return {
-        "enabled_count": len(profiles),
-        "active": len(profiles) > 1,
-        "profiles": [{"name": p["name"], "wallet_address": p.get("wallet_address", "")} for p in profiles],
-    }

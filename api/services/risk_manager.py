@@ -376,7 +376,11 @@ class RiskManager:
         return True, ""
 
     def _check_spread(self, signal: Signal, settings) -> tuple[bool, str]:
-        if signal.best_bid == 0.0 and signal.best_ask == 1.0:
+        # Either default sentinel means no real book data was populated by the
+        # module (Signal dataclass defaults: best_bid=0.0, best_ask=1.0). Prior
+        # AND condition only matched when BOTH defaults were present, leaving a
+        # gap where best_bid=0.0 + a non-1 ask passed through.
+        if signal.best_bid == 0.0 or signal.best_ask == 1.0:
             return False, "no order book data available — cannot verify spread"
         spread = signal.best_ask - signal.best_bid
         if spread <= 0:
