@@ -48,7 +48,11 @@ def get_module_config(module_id: str) -> dict:
 
 
 def save_module_config(module_id: str, config: dict):
+    """Persist a partial config update without resetting other fields.
+    See api/modules/truth_social/module_config.py for the full rationale."""
     sb = get_supabase()
     key = f"module_config:{module_id}"
-    merged = {**DEFAULT_CONFIG, **config}
+    existing_row = sb.table("settings").select("value").eq("key", key).execute()
+    stored = (existing_row.data[0].get("value") or {}) if existing_row.data else {}
+    merged = {**DEFAULT_CONFIG, **stored, **(config or {})}
     sb.table("settings").upsert({"key": key, "value": merged}).execute()
