@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from api.services.risk_manager import RiskManager
 from api.services.executor import PaperExecutor, LiveExecutor, MultiExecutor
-from api.services.exit_manager import check_exits, execute_exits
+from api.services.exit_manager import check_exits, execute_exits, release_stuck_closing_positions
 from api.services.walk_forward import run_walk_forward_check
 from api.services.resolution_tracker import check_resolutions
 from api.modules import ModuleRegistry
@@ -115,6 +115,10 @@ class TradingEngine:
 
     def _run_exits(self):
         try:
+            # First: rescue any positions stuck in 'closing' from a prior
+            # crashed exit cycle (claim succeeded, order placement died).
+            release_stuck_closing_positions()
+
             sb = get_supabase()
             positions = sb.table("positions").select("*").eq("status", "open").execute()
             if not positions.data:

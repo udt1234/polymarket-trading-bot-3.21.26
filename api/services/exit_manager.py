@@ -1,10 +1,50 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from api.dependencies import get_supabase
 from api.services.position_manager import close_position
 
 log = logging.getLogger(__name__)
+
+
+# A position stuck in 'closing' for longer than this is assumed to be the
+# residue of a crashed exit cycle (claim succeeded, order placement died) and
+# is rolled back to 'open' so the next cycle can retry. Conservative ceiling —
+# a normal exit completes in seconds.
+STUCK_CLOSING_THRESHOLD_MINUTES = 5
+
+
+def release_stuck_closing_positions() -> int:
+    """Find positions stuck in status='closing' for too long and release them
+    back to 'open'. Returns the number released. Called at the top of every
+    exit cycle so a single crashed liquidation doesn't strand the position
+    forever.
+    """
+    sb = get_supabase()
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=STUCK_CLOSING_THRESHOLD_MINUTES)).isoformat()
+    try:
+        # Supabase doesn't support a single conditional bulk update with a
+        # timestamp WHERE on `updated_at`, so we list and individually release.
+        stuck = sb.table("positions").select("id,updated_at,bracket,module_id").eq("status", "closing").lt("updated_at", cutoff).execute()
+        released = 0
+        for row in (stuck.data or []):
+            res = (
+                sb.table("positions")
+                .update({"status": "open"})
+                .eq("id", row["id"])
+                .eq("status", "closing")
+                .execute()
+            )
+            if res.data:
+                released += 1
+                log.warning(
+                    f"Released stuck closing position {row['id']} "
+                    f"(module={row.get('module_id')}, bracket={row.get('bracket')})"
+                )
+        return released
+    except Exception as e:
+        log.error(f"release_stuck_closing_positions failed: {e}")
+        return 0
 
 
 @dataclass

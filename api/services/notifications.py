@@ -20,15 +20,14 @@ async def send_slack(message: str, blocks: list[dict] | None = None):
     except Exception:
         pass
 
-    # Master kill switch: if slack_enabled is explicitly False, don't send.
-    # Backward compat: the legacy `enabled` flag still respected — if either
-    # is False, skip. Default both to True (existing behavior preserved when
-    # the keys are missing).
-    if notif_value.get("slack_enabled", True) is False:
-        log.debug("Slack disabled via slack_enabled=False — skipping notification")
+    # Master kill switches. Truthy/falsy check (not `is False`) so a manual
+    # Supabase edit storing the integer 0 or string "false" still disables
+    # notifications correctly.
+    if not notif_value.get("slack_enabled", True):
+        log.debug("Slack disabled — skipping notification")
         return False
-    if notif_value.get("enabled", True) is False:
-        log.debug("Notifications disabled via enabled=False — skipping notification")
+    if not notif_value.get("enabled", True):
+        log.debug("Notifications disabled — skipping")
         return False
 
     if not webhook_url:
@@ -36,6 +35,16 @@ async def send_slack(message: str, blocks: list[dict] | None = None):
 
     if not webhook_url:
         log.debug("Slack webhook not configured — skipping notification")
+        return False
+
+    # Re-validate the webhook URL at send time, not just at PUT time. If a
+    # direct Supabase edit (or pre-PR-19 stored value) has a hostile URL, we
+    # refuse to POST trade data to it. Pydantic only validates the write path.
+    if not str(webhook_url).startswith("https://hooks.slack.com/"):
+        log.error(
+            f"Refusing to POST to non-Slack URL ({str(webhook_url)[:40]}...). "
+            "Update via dashboard Settings -> Notifications to a hooks.slack.com URL."
+        )
         return False
 
     payload = {"text": message}
@@ -71,11 +80,13 @@ async def send_email(subject: str, body: str):
     except Exception:
         pass
 
-    if notif_value.get("email_enabled", False) is False:
-        log.debug("Email disabled via email_enabled=False — skipping notification")
+    # Truthy/falsy check (not `is False`) so a manual Supabase edit storing
+    # the integer 0 or string "false" still disables email correctly.
+    if not notif_value.get("email_enabled", False):
+        log.debug("Email disabled — skipping notification")
         return False
-    if notif_value.get("enabled", True) is False:
-        log.debug("Notifications disabled via enabled=False — skipping email")
+    if not notif_value.get("enabled", True):
+        log.debug("Notifications disabled — skipping email")
         return False
 
     log.info(
