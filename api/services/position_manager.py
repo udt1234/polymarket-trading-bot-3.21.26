@@ -112,10 +112,15 @@ def close_position(position_id: str, exit_price: float):
     if p["side"] == "SELL":
         pnl = -pnl
 
+    # Accumulate any previously-recorded realized P&L from earlier partial
+    # closes on this position. Without this, a partial-fill sequence loses
+    # the first tranche's P&L when the residual finally fully closes.
+    total_realized = float(p.get("realized_pnl") or 0) + pnl
+
     sb.table("positions").update({
         "status": "closed",
         "exit_price": exit_price,
-        "realized_pnl": pnl,
+        "realized_pnl": total_realized,
     }).eq("id", position_id).execute()
 
-    return pnl
+    return total_realized

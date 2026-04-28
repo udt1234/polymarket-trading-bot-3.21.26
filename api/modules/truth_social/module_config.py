@@ -46,7 +46,17 @@ def get_module_config(module_id: str) -> dict:
 
 
 def save_module_config(module_id: str, config: dict):
+    """Persist a partial config update without resetting other fields.
+
+    Prior implementation merged the incoming `config` over `DEFAULT_CONFIG`
+    every save, which silently reset every previously-customized field
+    (min_edge_threshold, stop_loss_pct, etc.) when the caller only sent one
+    field. Now we read the stored value first and merge `config` over that;
+    DEFAULT_CONFIG only fills in keys that have never been set.
+    """
     sb = get_supabase()
     key = f"module_config:{module_id}"
-    merged = {**DEFAULT_CONFIG, **config}
+    existing_row = sb.table("settings").select("value").eq("key", key).execute()
+    stored = (existing_row.data[0].get("value") or {}) if existing_row.data else {}
+    merged = {**DEFAULT_CONFIG, **stored, **(config or {})}
     sb.table("settings").upsert({"key": key, "value": merged}).execute()

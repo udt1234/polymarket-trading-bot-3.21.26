@@ -130,16 +130,22 @@ class TradingEngine:
 
     def _run_cycle(self):
         self._cycle_count += 1
+
+        # Exits run UNCONDITIONALLY — must fire even when the circuit breaker is
+        # tripped or data is stale, otherwise an open losing position keeps
+        # bleeding for the entire cooldown window (audit finding 2026-04-28).
+        # Risk state sync also runs always so loss-cap math stays current.
+        self._sync_risk_state()
+        self._run_exits()
+
         if self.risk_manager.circuit_breaker_tripped:
-            log.warning("Circuit breaker tripped — skipping cycle")
+            log.warning("Circuit breaker tripped — exits ran, skipping new entries this cycle")
             return
 
         if not self._check_data_freshness():
-            log.warning(f"Stale data detected (>{STALE_DATA_THRESHOLD_HOURS}h) — skipping cycle")
+            log.warning(f"Stale data detected (>{STALE_DATA_THRESHOLD_HOURS}h) — exits ran, skipping new entries this cycle")
             return
 
-        self._sync_risk_state()
-        self._run_exits()
         self._process_pending_signals()
 
         for module in self.registry.active_modules():
