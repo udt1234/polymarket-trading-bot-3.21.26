@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from api.dependencies import get_supabase
+from api.routers.modules import ModuleConfigUpdate
 from api.config import get_settings
 from api.services.profiles import (
     get_active_profile, list_profiles, save_profile,
@@ -12,21 +13,22 @@ router = APIRouter()
 
 
 class RiskSettingsUpdate(BaseModel):
-    bankroll: float | None = None
-    max_portfolio_exposure: float | None = None
-    max_single_market_exposure: float | None = None
-    max_correlated_exposure: float | None = None
-    daily_loss_limit: float | None = None
-    weekly_loss_limit: float | None = None
-    max_drawdown: float | None = None
-    min_edge_threshold: float | None = None
-    slippage_tolerance: float | None = None
-    kelly_fraction: float | None = None
+    """Bounds-checked. paper_mode/shadow_mode are read at boot from ENV; setting
+    them via this endpoint is a dead write — removed to avoid false sense of
+    control (flagged in 2026-04-27 QA pass)."""
+    bankroll: float | None = Field(default=None, ge=0)
+    max_portfolio_exposure: float | None = Field(default=None, ge=0, le=1)
+    max_single_market_exposure: float | None = Field(default=None, ge=0, le=1)
+    max_correlated_exposure: float | None = Field(default=None, ge=0, le=1)
+    daily_loss_limit: float | None = Field(default=None, ge=0, le=0.5)
+    weekly_loss_limit: float | None = Field(default=None, ge=0, le=0.5)
+    max_drawdown: float | None = Field(default=None, ge=0, le=0.5)
+    min_edge_threshold: float | None = Field(default=None, ge=0, le=0.5)
+    slippage_tolerance: float | None = Field(default=None, ge=0, le=0.2)
+    kelly_fraction: float | None = Field(default=None, ge=0, le=1)
     circuit_breaker_enabled: bool | None = None
-    circuit_breaker_max_consecutive_losses: int | None = None
-    circuit_breaker_cooldown_minutes: int | None = None
-    shadow_mode: bool | None = None
-    paper_mode: bool | None = None
+    circuit_breaker_max_consecutive_losses: int | None = Field(default=None, ge=1, le=20)
+    circuit_breaker_cooldown_minutes: int | None = Field(default=None, ge=1, le=1440)
 
 
 class ProfileCreate(BaseModel):
@@ -92,11 +94,41 @@ async def get_notification_settings():
     return res.data.get("value", {}) if res.data else {}
 
 
+class NotificationSettingsUpdate(BaseModel):
+    """Slack webhook URL must point at an official Slack webhook host so a
+    misconfig or compromised dashboard cannot exfiltrate trade data to an
+    attacker-controlled URL. Empty string is allowed (disables Slack)."""
+    slack_webhook: str | None = None
+    discord_webhook: str | None = None
+    enabled: bool | None = None
+
+    @field_validator("slack_webhook")
+    @classmethod
+    def validate_slack(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        if not v.startswith("https://hooks.slack.com/"):
+            raise ValueError("slack_webhook must start with https://hooks.slack.com/")
+        return v
+
+    @field_validator("discord_webhook")
+    @classmethod
+    def validate_discord(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        if not (v.startswith("https://discord.com/api/webhooks/") or v.startswith("https://discordapp.com/api/webhooks/")):
+            raise ValueError("discord_webhook must point at discord.com/api/webhooks/")
+        return v
+
+    model_config = {"extra": "ignore"}
+
+
 @router.put("/notifications")
-async def update_notification_settings(config: dict):
+async def update_notification_settings(config: NotificationSettingsUpdate):
     sb = get_supabase()
-    sb.table("settings").upsert({"key": "notifications", "value": config}).execute()
-    return config
+    payload = config.model_dump(exclude_unset=True)
+    sb.table("settings").upsert({"key": "notifications", "value": payload}).execute()
+    return payload
 
 
 # --- Wallet/Profile Management ---
@@ -187,9 +219,10 @@ async def get_module_config_endpoint(module_id: str):
 
 
 @router.put("/module-configs/{module_id}")
-async def update_module_config(module_id: str, config: dict):
+async def update_module_config(module_id: str, config: "ModuleConfigUpdate"):
     from api.modules.truth_social.module_config import save_module_config
-    save_module_config(module_id, config)
+    payload = config.model_dump(exclude_unset=True)
+    save_module_config(module_id, payload)
     return {"ok": True}
 
 
