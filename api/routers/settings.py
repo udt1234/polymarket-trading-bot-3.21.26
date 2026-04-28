@@ -87,20 +87,38 @@ async def add_statistical_test(test_config: dict):
     return res.data[0]
 
 
+# Defaults applied on first read so the channel toggles always exist.
+NOTIFICATION_DEFAULTS = {
+    "enabled": True,        # global toggle; back-compat with prior code
+    "slack_enabled": True,  # master kill for Slack channel
+    "email_enabled": False, # email path not yet wired (Option A); default OFF
+}
+
+
 @router.get("/notifications")
 async def get_notification_settings():
     sb = get_supabase()
-    res = sb.table("settings").select("*").eq("key", "notifications").single().execute()
-    return res.data.get("value", {}) if res.data else {}
+    res = sb.table("settings").select("value").eq("key", "notifications").execute()
+    stored = (res.data[0].get("value") or {}) if res.data else {}
+    # Backfill defaults so the dashboard always sees the channel-toggle keys.
+    return {**NOTIFICATION_DEFAULTS, **stored}
 
 
 class NotificationSettingsUpdate(BaseModel):
     """Slack webhook URL must point at an official Slack webhook host so a
     misconfig or compromised dashboard cannot exfiltrate trade data to an
-    attacker-controlled URL. Empty string is allowed (disables Slack)."""
+    attacker-controlled URL. Empty string is allowed (disables Slack).
+
+    `slack_enabled` and `email_enabled` are master kill switches per channel.
+    When False, no notification of that type fires regardless of per-event
+    toggles (e.g. divergence_alerts_enabled).
+    """
     slack_webhook: str | None = None
     discord_webhook: str | None = None
     enabled: bool | None = None
+    slack_enabled: bool | None = None
+    email_enabled: bool | None = None
+    email_address: str | None = None
 
     @field_validator("slack_webhook")
     @classmethod
@@ -120,15 +138,29 @@ class NotificationSettingsUpdate(BaseModel):
             raise ValueError("discord_webhook must point at discord.com/api/webhooks/")
         return v
 
+    @field_validator("email_address")
+    @classmethod
+    def validate_email(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        # Cheap shape check; full RFC validation isn't needed for our use case.
+        if "@" not in v or "." not in v.split("@", 1)[1]:
+            raise ValueError("email_address must be a valid email")
+        return v
+
     model_config = {"extra": "ignore"}
 
 
 @router.put("/notifications")
 async def update_notification_settings(config: NotificationSettingsUpdate):
+    """Merge the provided fields onto whatever's already stored, so a partial
+    update (e.g. PUT {slack_enabled: false}) doesn't wipe webhook URLs."""
     sb = get_supabase()
-    payload = config.model_dump(exclude_unset=True)
-    sb.table("settings").upsert({"key": "notifications", "value": payload}).execute()
-    return payload
+    existing_row = sb.table("settings").select("value").eq("key", "notifications").execute()
+    existing = (existing_row.data[0].get("value") or {}) if existing_row.data else {}
+    merged = {**NOTIFICATION_DEFAULTS, **existing, **config.model_dump(exclude_unset=True)}
+    sb.table("settings").upsert({"key": "notifications", "value": merged}).execute()
+    return merged
 
 
 # --- Wallet/Profile Management ---

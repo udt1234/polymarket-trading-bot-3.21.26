@@ -10,14 +10,29 @@ async def send_slack(message: str, blocks: list[dict] | None = None):
     import os
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
 
+    # Read channel-level toggle + fallback webhook from Supabase.
+    notif_value: dict = {}
+    try:
+        sb = get_supabase()
+        notif_settings = sb.table("settings").select("value").eq("key", "notifications").execute()
+        if notif_settings.data:
+            notif_value = notif_settings.data[0].get("value") or {}
+    except Exception:
+        pass
+
+    # Master kill switch: if slack_enabled is explicitly False, don't send.
+    # Backward compat: the legacy `enabled` flag still respected — if either
+    # is False, skip. Default both to True (existing behavior preserved when
+    # the keys are missing).
+    if notif_value.get("slack_enabled", True) is False:
+        log.debug("Slack disabled via slack_enabled=False — skipping notification")
+        return False
+    if notif_value.get("enabled", True) is False:
+        log.debug("Notifications disabled via enabled=False — skipping notification")
+        return False
+
     if not webhook_url:
-        try:
-            sb = get_supabase()
-            notif_settings = sb.table("settings").select("value").eq("key", "notifications").single().execute()
-            if notif_settings.data:
-                webhook_url = notif_settings.data.get("value", {}).get("slack_webhook")
-        except Exception:
-            pass
+        webhook_url = notif_value.get("slack_webhook")
 
     if not webhook_url:
         log.debug("Slack webhook not configured — skipping notification")
@@ -35,6 +50,39 @@ async def send_slack(message: str, blocks: list[dict] | None = None):
         except Exception as e:
             log.error(f"Slack notification failed: {e}")
             return False
+
+
+async def send_email(subject: str, body: str):
+    """Email notification stub.
+
+    Email transport (SMTP/SendGrid) is not yet wired — this stub respects the
+    `email_enabled` master toggle so callers can be written today and wire-up
+    later flips the channel on without code changes elsewhere. Currently logs
+    a debug line and returns False until a real transport lands.
+
+    See FEATURES.md backlog: 'Email transport for notifications'.
+    """
+    notif_value: dict = {}
+    try:
+        sb = get_supabase()
+        res = sb.table("settings").select("value").eq("key", "notifications").execute()
+        if res.data:
+            notif_value = res.data[0].get("value") or {}
+    except Exception:
+        pass
+
+    if notif_value.get("email_enabled", False) is False:
+        log.debug("Email disabled via email_enabled=False — skipping notification")
+        return False
+    if notif_value.get("enabled", True) is False:
+        log.debug("Notifications disabled via enabled=False — skipping email")
+        return False
+
+    log.info(
+        f"send_email() called but transport not wired yet (subject='{subject}'). "
+        "Wire SMTP or SendGrid to actually deliver."
+    )
+    return False
 
 
 async def notify_trade_executed(side: str, bracket: str, size: float, price: float, executor: str):
