@@ -466,6 +466,38 @@ export default function SettingsPage() {
 
         <div className="rounded-lg border border-border bg-card p-6">
           <h2 className="mb-4 text-lg font-semibold">Notifications</h2>
+
+          {/* Channel-level master toggles. When OFF, no message of that type fires
+              regardless of per-event settings (e.g. divergence_alerts_enabled). */}
+          <div className="mb-5 grid gap-3 sm:grid-cols-2">
+            <label className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2" title="Master kill switch for all Slack notifications. When OFF, no Slack pings fire regardless of per-event toggles.">
+              <span className="text-sm">Slack Alerts</span>
+              <input
+                type="checkbox"
+                checked={notifications?.slack_enabled !== false}
+                onChange={async (e) => {
+                  await saveNotifications({ slack_enabled: e.target.checked })
+                  await refetchNotifications()
+                }}
+                className="h-4 w-4 rounded border-border"
+              />
+            </label>
+            <label className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2" title="Master kill switch for email notifications. Email transport is not yet wired — this toggle is reserved for a future SendGrid/SMTP integration.">
+              <span className="text-sm">
+                Email Alerts <span className="text-xs text-muted-foreground">(transport not wired yet)</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={notifications?.email_enabled === true}
+                onChange={async (e) => {
+                  await saveNotifications({ email_enabled: e.target.checked })
+                  await refetchNotifications()
+                }}
+                className="h-4 w-4 rounded border-border"
+              />
+            </label>
+          </div>
+
           <div className="space-y-3">
             <label className="block text-sm text-muted-foreground">Slack Webhook URL</label>
             <div className="flex gap-2">
@@ -488,6 +520,7 @@ export default function SettingsPage() {
               <span className={`h-2 w-2 rounded-full ${notifications?.slack_webhook ? "bg-green-500" : "bg-muted-foreground"}`} />
               <span className="text-xs text-muted-foreground">
                 {notifications?.slack_webhook ? "Connected" : "Not configured"}
+                {notifications?.slack_webhook && notifications?.slack_enabled === false && " · paused (toggle above)"}
               </span>
             </div>
           </div>
