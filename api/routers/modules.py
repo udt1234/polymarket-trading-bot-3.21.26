@@ -8,7 +8,7 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from api.dependencies import get_supabase
 from api.modules.truth_social.data import _fetch_trackings_raw
 from api.modules.truth_social.module_config import get_module_config, save_module_config
@@ -58,6 +58,52 @@ class ModuleUpdate(BaseModel):
     max_position_pct: float | None = None
     status: str | None = None
     auto_pause: bool | None = None
+
+
+class ModuleConfigUpdate(BaseModel):
+    """All fields optional. Bounds clamp dashboard input so a misclick or
+    malicious payload can't disable a risk check or push Kelly absurdly high.
+    Unknown fields are silently dropped via `extra='ignore'` so legacy
+    DEFAULT_CONFIG keys keep working without explicit allowlisting here.
+    """
+    historical_periods: int | None = Field(default=None, ge=1, le=52)
+    auto_optimize_periods: bool | None = None
+    recency_half_life: float | None = Field(default=None, ge=0.5, le=20)
+    use_regime_conditional: bool | None = None
+    regime_conditional: bool | None = None
+    use_parquet_model: bool | None = None
+    parquet_model: bool | None = None
+    confidence_band_top_n: int | None = Field(default=None, ge=1, le=11)
+    pacing_display_days_prior: int | None = Field(default=None, ge=0, le=60)
+    pacing_display_days_future: int | None = Field(default=None, ge=0, le=14)
+    dow_weights_source: str | None = None
+    enabled_models: list[str] | None = None
+    strategy_preset: str | None = None
+    weight_overrides: dict[str, float] | None = None
+    entry_gate_pct: float | None = Field(default=None, ge=0, le=1)
+    use_signal_modifier: bool | None = None
+    use_regime_modifier: bool | None = None
+    use_hawkes_modifier: bool | None = None
+    stop_loss_pct: float | None = Field(default=None, ge=0, le=1)
+    take_profit_pct: float | None = Field(default=None, ge=0, le=5)
+    trailing_stop_pct: float | None = Field(default=None, ge=0, le=1)
+    max_brackets_per_cycle: int | None = Field(default=None, ge=1, le=11)
+    min_edge_threshold: float | None = Field(default=None, ge=0, le=0.5)
+    floor_brackets_by_running_total: bool | None = None
+    auction_aggregate_price_ceiling: float | None = Field(default=None, ge=0, le=1)
+    historical_blend_weight: float | None = Field(default=None, ge=0, le=1)
+    historical_winner_half_life_weeks: float | None = Field(default=None, ge=2, le=26)
+    low_window_kelly_boost: float | None = Field(default=None, ge=1, le=2)
+    pre_auction_buying_enabled: bool | None = None
+    divergence_alerts_enabled: bool | None = None
+    divergence_market_price_min: float | None = Field(default=None, ge=0.05, le=0.5)
+    divergence_model_prob_max: float | None = Field(default=None, ge=0.005, le=0.20)
+    divergence_cooldown_hours: float | None = Field(default=None, ge=0.5, le=48)
+    wait_for_dip_enabled: bool | None = None
+    wait_min_drop_threshold: float | None = Field(default=None, ge=0, le=1)
+    wait_max_days: float | None = Field(default=None, ge=0, le=14)
+
+    model_config = {"extra": "ignore"}
 
 
 @router.get("/")
@@ -155,8 +201,11 @@ async def get_config(module_id: str):
 
 
 @router.put("/{module_id}/config")
-async def update_config(module_id: str, config: dict):
-    save_module_config(module_id, config)
+async def update_config(module_id: str, config: ModuleConfigUpdate):
+    # Pydantic enforces bounds; only fields explicitly set in the payload are
+    # forwarded so we don't overwrite stored values with None.
+    payload = config.model_dump(exclude_unset=True)
+    save_module_config(module_id, payload)
     return get_module_config(module_id)
 
 
