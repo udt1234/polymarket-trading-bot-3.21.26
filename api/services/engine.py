@@ -23,9 +23,28 @@ def _run_async(coro):
     Python 3.12+ stopped auto-creating a default event loop in non-main threads,
     so the previous `asyncio.get_event_loop().run_until_complete(coro)` raised
     RuntimeError and silently broke every snapshot job. Use asyncio.run() which
-    creates a fresh loop for this thread.
+    creates a fresh loop for this thread. BLOCKS the caller until coro finishes
+    — only use when you actually need the result.
     """
     return asyncio.run(coro)
+
+
+def _fire_and_forget_async(coro):
+    """Run an async coroutine in a background daemon thread without blocking.
+
+    Use this for notifications, alerts, and any side-effect-only async call
+    where the engine cycle MUST NOT stall waiting on the result. Caught a
+    real bug where a tripped circuit breaker fired notify_circuit_breaker
+    + notify_bot_paused via _run_async, blocking the engine for up to 20s
+    on slow Slack POSTs (each httpx call has a 10s timeout).
+    """
+    import threading
+    def _runner():
+        try:
+            asyncio.run(coro)
+        except Exception as e:
+            log.warning(f"fire-and-forget async task failed: {e}")
+    threading.Thread(target=_runner, daemon=True).start()
 
 
 class TradingEngine:
@@ -37,6 +56,12 @@ class TradingEngine:
         self._cycle_count = 0
         self._multi_mode = False
         self._stale_data = False
+        # Tracker state — initialized here so it always exists, even if a
+        # tracker method is called before _run_cycle has run once. Prior
+        # `if not hasattr(self, ...)` guards inside the methods could create
+        # ambiguous list identities if called from different code paths.
+        self._recent_rejections: list[dict] = []
+        self._recent_errors: list[tuple[float, str, str]] = []
 
     def start(self, interval: int = 300):
         if self._running:
@@ -153,17 +178,14 @@ class TradingEngine:
             # spam if it stays stale for hours.
             try:
                 from api.services.alerts import notify_stale_data
-                _run_async(notify_stale_data(handle="all", hours=STALE_DATA_THRESHOLD_HOURS, source="signals"))
+                _fire_and_forget_async(notify_stale_data(handle="all", hours=STALE_DATA_THRESHOLD_HOURS, source="signals"))
             except Exception:
                 pass
             return
 
         self._process_pending_signals()
 
-        # Track consecutive risk-rejected signals across modules for rejection_spike alert.
-        if not hasattr(self, "_recent_rejections"):
-            self._recent_rejections = []  # list of (module_id, module_name, reason)
-
+        # _recent_rejections / _recent_errors are now initialized in __init__.
         for module in self.registry.active_modules():
             try:
                 signals = module.evaluate()
@@ -186,7 +208,7 @@ class TradingEngine:
                         self._log_execution(signal, result)
                         try:
                             from api.services.notifications import notify_trade_executed
-                            _run_async(
+                            _fire_and_forget_async(
                                 notify_trade_executed(signal.side, signal.bracket, result.get("size", 0), result.get("price", 0), result.get("executor", "paper"))
                             )
                         except Exception:
@@ -581,7 +603,7 @@ class TradingEngine:
                 if not active and most_recent_end:
                     gap_hours = (now - most_recent_end).total_seconds() / 3600
                     if gap_hours > 2:
-                        _run_async(
+                        _fire_and_forget_async(
                             notify_auction_gap(handle, most_recent_end.strftime("%Y-%m-%d %H:%M"), gap_hours)
                         )
                         log.warning(f"Auction gap for {handle}: {gap_hours:.0f}h since last auction ended")
@@ -599,7 +621,7 @@ class TradingEngine:
                 for t in active:
                     tid = str(t.get("id") or t.get("trackingId") or "")
                     if tid and tid not in known_ids:
-                        _run_async(
+                        _fire_and_forget_async(
                             notify_new_auction(handle, t.get("title", ""), t.get("startDate", "")[:10], t.get("endDate", "")[:10])
                         )
                         sb.table("logs").insert({
@@ -691,8 +713,6 @@ class TradingEngine:
         """Append to in-memory rejection streak. Fires rejection_spike alert
         when 5+ rejections accumulate without an intervening approval. The
         alert dispatcher dedupes so we don't ping every additional rejection."""
-        if not hasattr(self, "_recent_rejections"):
-            self._recent_rejections = []
         self._recent_rejections.append({
             "module_name": module_name,
             "module_id": module_id,
@@ -707,7 +727,7 @@ class TradingEngine:
                 from collections import Counter
                 reasons = Counter(r["reason"] for r in self._recent_rejections[-10:]).most_common(3)
                 top = [f"{r} ({c}x)" for r, c in reasons]
-                _run_async(notify_rejection_spike(
+                _fire_and_forget_async(notify_rejection_spike(
                     module_id=module_id,
                     module_name=module_name,
                     count=len(self._recent_rejections),
@@ -718,8 +738,6 @@ class TradingEngine:
 
     def _track_error(self, module_name: str, error_msg: str):
         """Track repeated errors over a 15-min sliding window per signature."""
-        if not hasattr(self, "_recent_errors"):
-            self._recent_errors = []  # (timestamp, signature, sample)
         # Use first 80 chars of error as signature (drops timestamps, addresses, etc).
         sig = (error_msg or "")[:80].strip()
         now_ts = time.time()
@@ -732,7 +750,7 @@ class TradingEngine:
         if same_count >= 3:
             try:
                 from api.services.alerts import notify_repeated_errors
-                _run_async(notify_repeated_errors(
+                _fire_and_forget_async(notify_repeated_errors(
                     error_signature=f"[{module_name}] {sig}",
                     count=same_count,
                     time_window_minutes=15.0,
@@ -790,6 +808,24 @@ class TradingEngine:
                 "state": "paused",
                 "reason": "No active modules",
                 "details": {"action": "Resume modules from the dashboard"},
+            }
+        # Degraded state: if module evaluation has been throwing errors in the
+        # last 15 min, the bot isn't actually trading even though the engine
+        # is "running". Surface that explicitly so the operator can investigate
+        # rather than the badge silently saying "trading".
+        recent_errors = self._recent_errors
+        if recent_errors:
+            err_count = len(recent_errors)
+            # _recent_errors is (ts, signature, sample). Show the most-recent signature.
+            latest_sig = recent_errors[-1][1] if recent_errors else "unknown"
+            return {
+                "state": "paused",
+                "reason": f"Degraded — {err_count} recent error{'s' if err_count != 1 else ''} from module evaluation",
+                "details": {
+                    "latest_error": latest_sig[:100],
+                    "window_minutes": 15,
+                    "active_modules": len(active),
+                },
             }
         # Look at most recent module evaluation outcome to distinguish trading vs watching.
         # If every recent module is in TRANSITION and produced 0 signals, we're watching.

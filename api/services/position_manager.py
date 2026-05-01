@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from api.dependencies import get_supabase
 
 log = logging.getLogger(__name__)
@@ -121,6 +122,7 @@ def close_position(position_id: str, exit_price: float):
         "status": "closed",
         "exit_price": exit_price,
         "realized_pnl": total_realized,
+        "closed_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", position_id).execute()
 
     return total_realized
