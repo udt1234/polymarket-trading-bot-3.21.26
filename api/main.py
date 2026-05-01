@@ -79,6 +79,8 @@ async def engine_health():
 async def engine_stop():
     sb = get_supabase()
     engine.stop()
+    from datetime import datetime as _dt, timezone as _tz
+    now_iso = _dt.now(_tz.utc).isoformat()
     open_positions = sb.table("positions").select("id,module_id,bracket,size,avg_price").eq("status", "open").execute()
     closed_count = 0
     for pos in (open_positions.data or []):
@@ -86,6 +88,7 @@ async def engine_stop():
             "status": "closed",
             "exit_price": pos["avg_price"],
             "realized_pnl": 0,
+            "closed_at": now_iso,
         }).eq("id", pos["id"]).execute()
         closed_count += 1
     sb.table("logs").insert({

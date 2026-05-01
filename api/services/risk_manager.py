@@ -423,13 +423,16 @@ class RiskManager:
             self._cooldown_until = time.time() + settings.circuit_breaker_cooldown_minutes * 60
             log.warning(f"Circuit breaker TRIPPED after {self.consecutive_losses} consecutive losses")
             try:
-                from api.services.engine import _run_async
+                from api.services.engine import _fire_and_forget_async
                 from api.services.notifications import notify_circuit_breaker
                 from api.services.alerts import notify_bot_paused
-                _run_async(
+                # Fire-and-forget to avoid blocking the engine cycle for up
+                # to 20 seconds (two 10s httpx timeouts). Code review caught
+                # this as a real stall risk on slow Slack endpoints.
+                _fire_and_forget_async(
                     notify_circuit_breaker(self.consecutive_losses, settings.circuit_breaker_cooldown_minutes)
                 )
-                _run_async(notify_bot_paused(
+                _fire_and_forget_async(notify_bot_paused(
                     reason=f"Circuit breaker tripped after {self.consecutive_losses} consecutive losses",
                     scope="circuit_breaker",
                     details={
@@ -463,9 +466,9 @@ class RiskManager:
             }).execute()
             log.warning(f"AUTO-KILL: Module {module_id} paused after {self.consecutive_losses} consecutive losses")
             try:
-                from api.services.engine import _run_async
+                from api.services.engine import _fire_and_forget_async
                 from api.services.alerts import notify_module_status_change
-                _run_async(notify_module_status_change(
+                _fire_and_forget_async(notify_module_status_change(
                     module_id=module_id,
                     name=mod_name,
                     old_status=old_status,

@@ -197,12 +197,14 @@ async def kill_module(module_id: str):
         .eq("status", "open")
         .execute()
     )
+    now_iso = datetime.now(timezone.utc).isoformat()
     closed_count = 0
     for pos in open_positions.data:
         sb.table("positions").update({
             "status": "closed",
             "exit_price": pos["avg_price"],
             "realized_pnl": 0,
+            "closed_at": now_iso,
         }).eq("id", pos["id"]).execute()
         closed_count += 1
 
@@ -408,18 +410,33 @@ async def get_auction_history(module_id: str, limit: int = 20):
         net_pnl = sum(p.get("realized_pnl") or 0 for p in positions)
         bracket_picks = sorted({p.get("bracket") for p in positions if p.get("bracket")})
 
-        # Actual final post count: pull from xTracker stats if we have them cached.
+        # Actual final post count + bracket. The bracket layout differs per
+        # module (Trump uses 11 fixed buckets; Elon uses dynamic brackets from
+        # Gamma). Pull the live bracket list from this auction's market prices
+        # so we don't mis-bucket Elon totals against the Trump default.
         actual_total = None
         actual_bracket = None
         try:
-            from api.modules.truth_social.data import fetch_xtracker_stats, get_xtracker_summary
+            from api.modules.truth_social.data import fetch_xtracker_stats, get_xtracker_summary, fetch_market_prices
             tid = str(t.get("id") or t.get("trackingId") or "")
             if tid:
                 stats = await fetch_xtracker_stats(tid)
                 summary = get_xtracker_summary(stats)
                 actual_total = summary.get("total")
                 if isinstance(actual_total, (int, float)):
-                    actual_bracket = _bracket_for_total(int(actual_total))
+                    auction_brackets = None
+                    if slug:
+                        try:
+                            mp = await fetch_market_prices(slug)
+                            if mp:
+                                auction_brackets = sorted(
+                                    mp.keys(),
+                                    key=lambda b: int(b.split("-")[0].replace("<", "0").replace("+", ""))
+                                    if any(c.isdigit() for c in b) else 0,
+                                )
+                        except Exception:
+                            pass
+                    actual_bracket = _bracket_for_total(int(actual_total), brackets=auction_brackets)
         except Exception:
             pass
 
