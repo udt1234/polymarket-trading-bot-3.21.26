@@ -228,13 +228,38 @@ class TruthSocialModule(BaseModule):
         # disagree with the detector (e.g. detector stuck in TRANSITION but
         # user judges the trend has cleared). Editable from the dashboard
         # Pacing Configuration panel. Empty string / None = no override.
+        # If `manual_regime_override_expires_at` is set and in the past, the
+        # override has expired — clear it from the stored config and revert
+        # to the detector for this cycle.
         manual_regime = (mod_cfg.get("manual_regime_override") or "").strip().upper()
+        expires_at_str = (mod_cfg.get("manual_regime_override_expires_at") or "").strip()
+        if manual_regime and expires_at_str:
+            try:
+                expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+                if expires_at <= now:
+                    self._log(sb, module_id, "decision", "info",
+                              f"Manual regime override expired (was {manual_regime}) — reverting to detector")
+                    try:
+                        from api.modules.truth_social.module_config import save_module_config
+                        save_module_config(module_id, {
+                            "manual_regime_override": "",
+                            "manual_regime_override_expires_at": "",
+                        })
+                    except Exception as e:
+                        log.warning(f"Failed to clear expired override: {e}")
+                    manual_regime = ""
+            except (ValueError, TypeError):
+                # Bad timestamp — treat as no expiry (operator must clear manually)
+                pass
         if manual_regime and manual_regime != regime_label:
             old_label = regime_label
             regime_label = manual_regime
             regime["label"] = regime_label
+            expiry_note = ""
+            if expires_at_str:
+                expiry_note = f" (expires {expires_at_str[:16]} UTC)"
             self._log(sb, module_id, "decision", "info",
-                      f"Manual regime override: {old_label} → {regime_label} (operator)")
+                      f"Manual regime override: {old_label} → {regime_label} (operator){expiry_note}")
         daily_data_for_dow = parse_daily_totals(raw_data)
         daily_dow_data = [{"dow": datetime.fromisoformat(d["date"]).weekday(), "count": d["count"]} for d in daily_data_for_dow if d.get("date")]
         if daily_dow_data and mod_cfg.get("use_regime_conditional", True):
