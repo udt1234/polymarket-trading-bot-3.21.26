@@ -5,7 +5,6 @@ import { useState, useEffect, useCallback } from "react"
 import { useApi, useMutation } from "@/lib/hooks"
 import { apiFetch } from "@/lib/api"
 import { formatCurrency, formatDate, formatDateShort, cn } from "@/lib/utils"
-import { StatusBadge } from "@/components/shared/status-badge"
 import {
   ChevronDown, ChevronUp, RefreshCw, Pause, Play, Power,
   Save, Settings,
@@ -19,6 +18,7 @@ import { TradeHistory } from "./components/trade-history"
 import { AuctionDeepDive } from "./components/auction-deep-dive"
 import { PnlCurve } from "./components/pnl-curve"
 import { BotHealthBanner } from "./components/bot-health-banner"
+import { LiveStatusBadge } from "./components/live-status-badge"
 import { LastAuctionsPnl } from "./components/last-auctions-pnl"
 import { PendingSignalsCard } from "./components/pending-signals-card"
 import { PostTimingGrid } from "./components/post-timing-grid"
@@ -107,6 +107,8 @@ interface ModuleConfig {
   divergence_model_prob_max: number
   divergence_cooldown_hours: number
   manual_regime_override: string
+  manual_regime_override_expires_at: string
+  manual_regime_override_default_hours: number
 }
 
 interface AuctionTab {
@@ -221,6 +223,8 @@ export default function ModuleDetailPage() {
     divergence_model_prob_max: 0.05,
     divergence_cooldown_hours: 6.0,
     manual_regime_override: "",
+    manual_regime_override_expires_at: "",
+    manual_regime_override_default_hours: 24,
   })
 
   useEffect(() => {
@@ -328,7 +332,7 @@ export default function ModuleDetailPage() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">{module.name}</h1>
-          <StatusBadge status={module.status} />
+          <LiveStatusBadge moduleStatus={module.status} />
         </div>
         {auctions && auctions.length > 0 && (() => {
           const activeAuctions = auctions.filter((a) => a.status === "active" || a.status === "future")
@@ -744,11 +748,28 @@ export default function ModuleDetailPage() {
             <div className="mt-4 border-t border-border pt-4">
               <p className="text-xs text-muted-foreground font-semibold uppercase mb-2">Manual Regime Override</p>
               <div className="flex flex-wrap items-end gap-4">
-                <label className="space-y-1 min-w-[260px]" title="Forces the regime label when you disagree with the statistical detector. The bot uses this label for DOW weights, Kelly sizing, and the trading gate. Leave blank to use the detector's reading.">
+                <label className="space-y-1 min-w-[260px]" title="Forces the regime label when you disagree with the statistical detector. Auto-expires after Override Hours and reverts to the detector. Leave blank for no override.">
                   <span className="text-xs text-muted-foreground">Override regime</span>
                   <select
                     value={localConfig.manual_regime_override || ""}
-                    onChange={(e) => setLocalConfig({ ...localConfig, manual_regime_override: e.target.value })}
+                    onChange={(e) => {
+                      const newRegime = e.target.value
+                      // When the user picks an override, stamp an expiry
+                      // (now + default_hours). When they clear it, also clear
+                      // the expiry. This prevents stale "Force NORMAL" from
+                      // running for weeks and silently distorting the bot.
+                      let expiresAt = ""
+                      if (newRegime) {
+                        const hours = localConfig.manual_regime_override_default_hours || 24
+                        const t = new Date(Date.now() + hours * 3600 * 1000)
+                        expiresAt = t.toISOString()
+                      }
+                      setLocalConfig({
+                        ...localConfig,
+                        manual_regime_override: newRegime,
+                        manual_regime_override_expires_at: expiresAt,
+                      })
+                    }}
                     className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
                   >
                     <option value="">No override (use detector)</option>
@@ -760,9 +781,60 @@ export default function ModuleDetailPage() {
                     <option value="TRANSITION">Force TRANSITION (block trading)</option>
                   </select>
                   <span className="text-[10px] text-muted-foreground">
-                    Use sparingly — overrides the safety gate. Logged each cycle.
+                    Auto-expires after the duration below — bot reverts to detector.
                   </span>
                 </label>
+                <label className="space-y-1 min-w-[140px]" title="Hours an override stays active before auto-reverting to the detector. Picking 'Force NORMAL' now sets expiry to now + this many hours. Default 24h.">
+                  <span className="text-xs text-muted-foreground">Override Hours</span>
+                  <input
+                    type="number" min={1} max={720} step={1}
+                    value={localConfig.manual_regime_override_default_hours}
+                    onChange={(e) => {
+                      const newHours = +e.target.value
+                      // If an override is currently active, push out its expiry
+                      // to match the new duration so the visible countdown is
+                      // consistent with what they just typed.
+                      const updates: Partial<ModuleConfig> = {
+                        manual_regime_override_default_hours: newHours,
+                      }
+                      if (localConfig.manual_regime_override) {
+                        const t = new Date(Date.now() + newHours * 3600 * 1000)
+                        updates.manual_regime_override_expires_at = t.toISOString()
+                      }
+                      setLocalConfig({ ...localConfig, ...updates })
+                    }}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Default 24h, max 720 (30d)</span>
+                </label>
+                {localConfig.manual_regime_override && localConfig.manual_regime_override_expires_at && (
+                  <div className="flex items-center gap-2 text-[11px] pb-1.5">
+                    <span className="text-muted-foreground">Active until:</span>
+                    <span className="font-medium text-amber-500">
+                      {(() => {
+                        try {
+                          const d = new Date(localConfig.manual_regime_override_expires_at)
+                          const remainingMs = d.getTime() - Date.now()
+                          if (remainingMs <= 0) return "expired (will revert next cycle)"
+                          const hrs = Math.floor(remainingMs / 3600000)
+                          const mins = Math.floor((remainingMs % 3600000) / 60000)
+                          return `${hrs}h ${mins}m remaining (${d.toLocaleString()})`
+                        } catch { return "—" }
+                      })()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setLocalConfig({
+                        ...localConfig,
+                        manual_regime_override: "",
+                        manual_regime_override_expires_at: "",
+                      })}
+                      className="text-xs underline text-muted-foreground hover:text-destructive"
+                    >
+                      Clear now
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

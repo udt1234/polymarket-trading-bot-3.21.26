@@ -169,6 +169,24 @@ class ElonTweetsModule(BaseModule):
             handle="Elon Musk",
         )
         manual_regime = (mod_cfg.get("manual_regime_override") or "").strip().upper()
+        expires_at_str = (mod_cfg.get("manual_regime_override_expires_at") or "").strip()
+        if manual_regime and expires_at_str:
+            try:
+                expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+                if expires_at <= now:
+                    self._log(sb, module_id, "decision", "info",
+                              f"Manual regime override expired (was {manual_regime}) — reverting to detector")
+                    try:
+                        from api.modules.elon_tweets.module_config import save_module_config
+                        save_module_config(module_id, {
+                            "manual_regime_override": "",
+                            "manual_regime_override_expires_at": "",
+                        })
+                    except Exception:
+                        pass
+                    manual_regime = ""
+            except (ValueError, TypeError):
+                pass
         if manual_regime and manual_regime != regime_label:
             old_label = regime_label
             regime_label = manual_regime

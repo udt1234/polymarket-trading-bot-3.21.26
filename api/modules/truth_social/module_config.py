@@ -32,7 +32,14 @@ DEFAULT_CONFIG = {
     # Manual regime override — operator forces a regime when they disagree with
     # the statistical detector. Empty string = no override. Valid values:
     # "NORMAL", "QUIET", "LOW", "HIGH", "SURGE", "TRANSITION".
+    # `manual_regime_override_expires_at` is an ISO 8601 timestamp. When set
+    # and in the past, the override is considered expired and the bot reverts
+    # to the detector. The override row is also cleared so the dashboard
+    # reflects the auto-revert. Default override duration when set via dashboard
+    # is `manual_regime_override_default_hours` (24h by default).
     "manual_regime_override": "",
+    "manual_regime_override_expires_at": "",
+    "manual_regime_override_default_hours": 24,
     "wait_for_dip_enabled": True,
     "wait_min_drop_threshold": 0.05,
     "wait_max_days": 3.0,
