@@ -93,12 +93,26 @@ def bracket_probabilities(
         std = max(std * shrink, 5.0)
     else:
         std = max(std, 10.0)
+
+    # Late-auction (final ~30% of the window): drop the NegBin component and use
+    # a pure normal. NegBin is right-skewed, which when combined with shrinkage
+    # bleeds probability mass DOWNWARD — the highest-probability bracket can
+    # end up BELOW the bracket containing the mean (the "60-79 winner with
+    # ensemble_avg=81.5" bug). At small horizons posts-remaining is roughly
+    # Poisson, which is approximately normal, so pure-normal is more accurate
+    # AND symmetric (no surprise winner-below-the-mean).
+    use_negbin = time_remaining_frac is None or time_remaining_frac >= 0.30
+    norm_weight = 0.4 if use_negbin else 1.0
+
     norm = stats.norm(loc=mean, scale=std)
-    p_nb = mean / (std ** 2) if std ** 2 > mean else 0.99
-    p_nb = max(min(p_nb, 0.99), 0.01)
-    r_nb = mean * p_nb / (1 - p_nb)
-    r_nb = max(r_nb, 1.0)
-    nb = stats.nbinom(r_nb, p_nb)
+
+    nb = None
+    if use_negbin:
+        p_nb = mean / (std ** 2) if std ** 2 > mean else 0.99
+        p_nb = max(min(p_nb, 0.99), 0.01)
+        r_nb = mean * p_nb / (1 - p_nb)
+        r_nb = max(r_nb, 1.0)
+        nb = stats.nbinom(r_nb, p_nb)
 
     labels = bracket_labels or BRACKET_LABELS
     ranges = parse_bracket_labels(labels) if bracket_labels else BRACKETS
@@ -107,13 +121,33 @@ def bracket_probabilities(
     for (lo, hi), label in zip(ranges, labels):
         hi_cdf = min(hi, 9998)
         p_norm = norm.cdf(hi_cdf + 0.5) - norm.cdf(lo - 0.5)
-        p_nb_val = nb.cdf(hi_cdf) - nb.cdf(lo - 1) if lo > 0 else nb.cdf(hi_cdf)
-        probs[label] = 0.4 * max(p_norm, 0) + 0.6 * max(p_nb_val, 0)
+        if nb is not None:
+            p_nb_val = nb.cdf(hi_cdf) - nb.cdf(lo - 1) if lo > 0 else nb.cdf(hi_cdf)
+            probs[label] = norm_weight * max(p_norm, 0) + (1 - norm_weight) * max(p_nb_val, 0)
+        else:
+            probs[label] = max(p_norm, 0)
 
     total = sum(probs.values())
     if total > 0:
         probs = {k: v / total for k, v in probs.items()}
     return probs
+
+
+def expected_value_bracket(
+    mean: float, bracket_labels: list[str] | None = None,
+) -> str | None:
+    """Return the bracket whose range contains `mean`. This is what most users
+    intuit when they ask 'where is the model pointing?' — the bracket the
+    central-tendency value lands in. Distinct from argmax(bracket_probs) which
+    is the highest-probability single bracket and can disagree with this when
+    the distribution straddles a bracket boundary.
+    """
+    labels = bracket_labels or BRACKET_LABELS
+    ranges = parse_bracket_labels(labels) if bracket_labels else BRACKETS
+    for (lo, hi), label in zip(ranges, labels):
+        if lo <= mean <= hi:
+            return label
+    return None
 
 
 def calibration_adjusted_weights(

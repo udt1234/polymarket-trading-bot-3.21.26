@@ -18,6 +18,7 @@ import { SignalsTable } from "./components/signals-table"
 import { TradeHistory } from "./components/trade-history"
 import { AuctionDeepDive } from "./components/auction-deep-dive"
 import { PnlCurve } from "./components/pnl-curve"
+import { BotHealthBanner } from "./components/bot-health-banner"
 import { LastAuctionsPnl } from "./components/last-auctions-pnl"
 import { PendingSignalsCard } from "./components/pending-signals-card"
 import { PostTimingGrid } from "./components/post-timing-grid"
@@ -105,6 +106,7 @@ interface ModuleConfig {
   divergence_market_price_min: number
   divergence_model_prob_max: number
   divergence_cooldown_hours: number
+  manual_regime_override: string
 }
 
 interface AuctionTab {
@@ -166,6 +168,10 @@ export default function ModuleDetailPage() {
   const { data: priceHeatmaps } = useApi<any>(
     id ? `/api/modules/${id}/price-heatmaps` : null
   )
+  const { data: auctionHistory } = useApi<any[]>(
+    id ? `/api/modules/${id}/auction-history?limit=20` : null,
+    [id], 60000,
+  )
   const { data: riskSettings } = useApi<any>("/api/settings/risk")
   const { data: cbState, refetch: refetchCbState } = useApi<{ tripped: boolean; consecutive_losses: number; cooldown_remaining_s: number }>("/api/settings/circuit-breaker", [], 15000)
   const { data: decisionLog } = useApi<any[]>(
@@ -214,6 +220,7 @@ export default function ModuleDetailPage() {
     divergence_market_price_min: 0.20,
     divergence_model_prob_max: 0.05,
     divergence_cooldown_hours: 6.0,
+    manual_regime_override: "",
   })
 
   useEffect(() => {
@@ -381,6 +388,9 @@ export default function ModuleDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* Bot Health Banner — always visible, single-glance status */}
+      <BotHealthBanner />
 
       {/* Circuit Breaker Banner */}
       {cbState?.tripped && (
@@ -729,6 +739,33 @@ export default function ModuleDetailPage() {
                 </label>
               </div>
             </div>
+
+            {/* Manual Regime Override */}
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase mb-2">Manual Regime Override</p>
+              <div className="flex flex-wrap items-end gap-4">
+                <label className="space-y-1 min-w-[260px]" title="Forces the regime label when you disagree with the statistical detector. The bot uses this label for DOW weights, Kelly sizing, and the trading gate. Leave blank to use the detector's reading.">
+                  <span className="text-xs text-muted-foreground">Override regime</span>
+                  <select
+                    value={localConfig.manual_regime_override || ""}
+                    onChange={(e) => setLocalConfig({ ...localConfig, manual_regime_override: e.target.value })}
+                    className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
+                  >
+                    <option value="">No override (use detector)</option>
+                    <option value="NORMAL">Force NORMAL (allow trading)</option>
+                    <option value="QUIET">Force QUIET</option>
+                    <option value="LOW">Force LOW</option>
+                    <option value="HIGH">Force HIGH</option>
+                    <option value="SURGE">Force SURGE</option>
+                    <option value="TRANSITION">Force TRANSITION (block trading)</option>
+                  </select>
+                  <span className="text-[10px] text-muted-foreground">
+                    Use sparingly — overrides the safety gate. Logged each cycle.
+                  </span>
+                </label>
+              </div>
+            </div>
+
             <div className="mt-4 flex justify-end">
               <button
                 onClick={handleSaveConfig}
@@ -749,6 +786,87 @@ export default function ModuleDetailPage() {
       </CollapsibleCard>
 
       {/* Last 3 Auctions P&L */}
+      <CollapsibleCard id="auction-history" title="Auction History (Bot Performance)">
+        <div className="rounded-lg border border-border bg-card">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-muted-foreground">
+                  <th className="px-4 py-2 text-left">Period</th>
+                  <th className="px-4 py-2 text-left">Bot Held</th>
+                  <th className="px-4 py-2 text-right">Cost</th>
+                  <th className="px-4 py-2 text-left">Bot Pick</th>
+                  <th className="px-4 py-2 text-right">Actual Posts</th>
+                  <th className="px-4 py-2 text-left">Actual Bracket</th>
+                  <th className="px-4 py-2 text-center">Result</th>
+                  <th className="px-4 py-2 text-right">Net P&L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(auctionHistory || []).map((a: any, i: number) => (
+                  <tr key={i} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2 font-medium text-xs">{a.period}</td>
+                    <td className="px-4 py-2 text-xs">
+                      {a.no_bet ? <span className="text-muted-foreground italic">No bet</span>
+                        : (a.brackets_held || []).join(", ")}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {a.total_cost > 0 ? `$${a.total_cost.toFixed(2)}` : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-primary">{a.projected_winner || "—"}</td>
+                    <td className="px-4 py-2 text-right text-xs">{a.actual_total ?? "—"}</td>
+                    <td className="px-4 py-2 text-xs">{a.actual_winner || "—"}</td>
+                    <td className="px-4 py-2 text-center text-xs">
+                      {a.no_bet
+                        ? <span className="text-muted-foreground">—</span>
+                        : a.won
+                          ? <span className="text-success font-semibold">WON</span>
+                          : <span className="text-destructive font-semibold">LOST</span>}
+                    </td>
+                    <td className={cn(
+                      "px-4 py-2 text-right font-medium",
+                      a.no_bet ? "text-muted-foreground" :
+                      a.net_pnl > 0 ? "text-success" :
+                      a.net_pnl < 0 ? "text-destructive" : "text-muted-foreground",
+                    )}>
+                      {a.no_bet ? "—" :
+                       (a.net_pnl >= 0 ? "+" : "") + "$" + Math.abs(a.net_pnl).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+                {(auctionHistory || []).length === 0 && (
+                  <tr><td colSpan={8} className="px-4 py-6 text-center text-muted-foreground text-xs">
+                    No resolved auctions yet.
+                  </td></tr>
+                )}
+              </tbody>
+              {(auctionHistory || []).length > 0 && (
+                <tfoot>
+                  <tr className="bg-muted/30 font-medium">
+                    <td className="px-4 py-2 text-xs" colSpan={2}>
+                      Totals — {(auctionHistory || []).filter((a: any) => !a.no_bet).length} bet · {(auctionHistory || []).filter((a: any) => a.won).length} won
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      ${(auctionHistory || []).reduce((s: number, a: any) => s + (a.total_cost || 0), 0).toFixed(2)}
+                    </td>
+                    <td colSpan={4}></td>
+                    <td className={cn(
+                      "px-4 py-2 text-right",
+                      (auctionHistory || []).reduce((s: number, a: any) => s + (a.net_pnl || 0), 0) >= 0 ? "text-success" : "text-destructive",
+                    )}>
+                      {(() => {
+                        const t = (auctionHistory || []).reduce((s: number, a: any) => s + (a.net_pnl || 0), 0)
+                        return (t >= 0 ? "+" : "") + "$" + Math.abs(t).toFixed(2)
+                      })()}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+      </CollapsibleCard>
+
       <CollapsibleCard id="last-auctions-pnl" title="Recent Auctions P&L">
         <LastAuctionsPnl auctions={auctions || []} walletAuctions={relevantAuctions} />
       </CollapsibleCard>
@@ -988,18 +1106,24 @@ export default function ModuleDetailPage() {
                     </div>
                   </div>
 
-                  {data.truth_social_direct && data.truth_social_direct.count != null && !data.truth_social_direct.error && (
+                  {data.truth_social_direct && data.truth_social_direct.status !== "not_applicable" && (
                     <div className="pt-3">
                       <div
-                        className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-2"
+                        className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-2 flex items-center gap-2"
                         title="Live read of Trump's Truth Social posts directly from truthsocial.com/api/v1, used to cross-check the xTracker number."
                       >
-                        Truth Social (Direct)
+                        <span>Truth Social (Direct)</span>
+                        {data.truth_social_direct.status === "ok" && <span className="text-success normal-case font-normal">● live</span>}
+                        {data.truth_social_direct.status === "stale" && <span className="text-amber-500 normal-case font-normal">● using cached snapshot</span>}
+                        {data.truth_social_direct.status === "unavailable" && <span className="text-destructive normal-case font-normal">● unavailable</span>}
+                        {data.truth_social_direct.status === "no_data" && <span className="text-muted-foreground normal-case font-normal">● no data</span>}
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between border-b border-border pb-2">
                           <span className="text-muted-foreground">Direct Count</span>
-                          <span className="font-bold">{data.truth_social_direct.count}</span>
+                          <span className="font-bold">
+                            {data.truth_social_direct.count != null ? data.truth_social_direct.count : "—"}
+                          </span>
                         </div>
                         {data.truth_social_direct.diff_vs_xtracker != null && (
                           <div className="flex justify-between border-b border-border pb-2">
@@ -1020,7 +1144,20 @@ export default function ModuleDetailPage() {
                             <span className="text-xs">{new Date(data.truth_social_direct.latest_post_at).toLocaleString()}</span>
                           </div>
                         )}
-                        <div className="text-[10px] text-muted-foreground/60">Source: truthsocial.com/api/v1</div>
+                        {data.truth_social_direct.captured_at && data.truth_social_direct.status === "stale" && (
+                          <div className="flex justify-between border-b border-border pb-2">
+                            <span className="text-muted-foreground">Snapshot taken</span>
+                            <span className="text-xs">{new Date(data.truth_social_direct.captured_at).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {data.truth_social_direct.error && data.truth_social_direct.status !== "ok" && (
+                          <div className="text-[10px] text-amber-500/80 italic">
+                            {data.truth_social_direct.status === "stale"
+                              ? "truthsocial.com rate-limited — falling back to last snapshot. Snapshot job retries every 5 min."
+                              : "Live fetch and cached snapshot both failed. Snapshot job retries every 5 min."}
+                          </div>
+                        )}
+                        <div className="text-[10px] text-muted-foreground/60">Source: {data.truth_social_direct.source}</div>
                       </div>
                     </div>
                   )}

@@ -206,7 +206,7 @@ export function BotStatusTimeline({
             {logOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </button>
           {logOpen && (
-            <div className="mt-2 max-h-[180px] overflow-y-auto space-y-1">
+            <div className="mt-2 max-h-[260px] overflow-y-auto space-y-2">
               {decisionLog.slice(0, 30).map((log, i) => {
                 const time = log.created_at
                   ? new Date(log.created_at).toLocaleString([], {
@@ -216,24 +216,19 @@ export function BotStatusTimeline({
                       minute: "2-digit",
                     })
                   : ""
-                const isExec = log.log_type === "execution"
-                const isRisk = log.log_type === "risk"
-                const icon = isExec ? "✅" : isRisk ? "🛡️" : "🔍"
-                let msg = log.message || ""
-                if (msg.startsWith("Cycle:")) {
-                  const sigMatch = msg.match(/signals=(\d+)/)
-                  const regMatch = msg.match(/regime=(\w+)/)
-                  msg = `Scanned market — ${sigMatch?.[1] || 0} signals, regime ${regMatch?.[1] || "?"}`
-                } else if (msg.startsWith("Rejected")) {
-                  msg = msg.replace(/^Rejected /, "Skipped ")
-                } else if (msg.startsWith("Executed")) {
-                  msg = msg.replace(/^Executed /, "Bought ")
-                }
+                const { icon, msg, plain } = describeLogEntry(log)
                 return (
                   <div key={i} className="flex items-start gap-1.5 text-[11px]">
                     <span className="shrink-0 text-muted-foreground w-24">{time}</span>
-                    <span>{icon}</span>
-                    <span className="text-muted-foreground">{msg}</span>
+                    <span className="shrink-0">{icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-muted-foreground truncate">{msg}</div>
+                      {plain && (
+                        <div className="text-[10px] text-muted-foreground/70 italic mt-0.5">
+                          {plain}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               })}
@@ -266,6 +261,101 @@ function humanizeRejection(key: string): string {
     case "regime": return "regime not safe"
     default: return "various risk checks"
   }
+}
+
+// Map a decision-log row to {emoji, short message, plain-English explanation}.
+// Each activity type gets a distinct emoji so users can scan visually.
+function describeLogEntry(log: any): { icon: string; msg: string; plain: string | null } {
+  const raw = (log?.message || "") as string
+  const t = (log?.log_type || "") as string
+
+  if (t === "execution" || raw.startsWith("Executed")) {
+    const m = raw.replace(/^Executed /, "Bought ")
+    return { icon: "✅", msg: m, plain: "Trade placed on Polymarket." }
+  }
+  if (t === "exit") {
+    return {
+      icon: "🚪",
+      msg: raw,
+      plain: "Closed a position (stop loss, take profit, or trailing stop hit).",
+    }
+  }
+  if (t === "risk" || raw.startsWith("Rejected") || raw.startsWith("Skipped")) {
+    const m = raw.replace(/^Rejected /, "Skipped ")
+    return {
+      icon: "🛡️",
+      msg: m,
+      plain: "Risk check blocked this signal — bot won't trade unless every check passes.",
+    }
+  }
+  if (raw.startsWith("Cycle:")) {
+    const sigMatch = raw.match(/signals=(\d+)/)
+    const regMatch = raw.match(/regime=(\w+)/)
+    const sigs = parseInt(sigMatch?.[1] || "0", 10)
+    const regime = regMatch?.[1] || "?"
+    const msg = `Scanned market — ${sigs} signals, regime ${regime}`
+    let plain: string
+    if (sigs === 0 && regime === "TRANSITION") {
+      plain = "Bot looked at the market but didn't trade — regime is in flux (z-score in the grey zone). Waiting for the trend to clear."
+    } else if (sigs === 0) {
+      plain = "Bot looked at the market and decided not to trade this cycle. No bracket had a strong enough edge."
+    } else {
+      plain = `Bot looked at the market and generated ${sigs} buy signal${sigs === 1 ? "" : "s"} for the risk gate to evaluate.`
+    }
+    return { icon: "🔍", msg, plain }
+  }
+  if (raw.startsWith("Arbitrage:")) {
+    return {
+      icon: "📊",
+      msg: raw,
+      plain: "Mispricings vs the model. SELL = market priced too high, BUY = market priced too low. Observational only — bot doesn't auto-trade these.",
+    }
+  }
+  if (raw.startsWith("DOW deviation:")) {
+    const aheadMatch = raw.match(/ahead.*?\(([+\-\d.]+)%\)/)
+    const behindMatch = raw.match(/behind.*?\(([+\-\d.]+)%\)/)
+    const onPace = raw.includes("on_pace")
+    let plain: string
+    if (aheadMatch) {
+      plain = `Today's posting pace is ${aheadMatch[1]}% above the day-of-week historical average for this hour.`
+    } else if (behindMatch) {
+      plain = `Today's posting pace is ${behindMatch[1]}% below the day-of-week historical average for this hour.`
+    } else if (onPace) {
+      plain = "Posting pace is in line with the historical average for this day-of-week and hour."
+    } else {
+      plain = "Comparing today's hourly post count vs the day-of-week historical average."
+    }
+    return { icon: "📈", msg: raw, plain }
+  }
+  if (raw.startsWith("Regime override:")) {
+    return {
+      icon: "🎯",
+      msg: raw,
+      plain: "Claude AI looked at recent news and overrode the statistical regime classification.",
+    }
+  }
+  if (raw.startsWith("Entry gate:")) {
+    return {
+      icon: "⏸️",
+      msg: raw,
+      plain: "Auction is too young — bot waits until enough live data is in before generating signals.",
+    }
+  }
+  if (raw.startsWith("Updated market slug")) {
+    return {
+      icon: "🔗",
+      msg: raw,
+      plain: "Detected a new active auction and switched to its market.",
+    }
+  }
+  if (raw.startsWith("Arbitrage opp")) {
+    return { icon: "📊", msg: raw, plain: null }
+  }
+  if (t === "system") {
+    return { icon: "⚙️", msg: raw, plain: null }
+  }
+  // Default fallback — unknown log type
+  return { icon: "🔍", msg: raw, plain: null }
 }
 
 function relativeTime(then: Date): string {

@@ -31,6 +31,7 @@ DEFAULT_CONFIG = {
     "divergence_market_price_min": 0.20,
     "divergence_model_prob_max": 0.05,
     "divergence_cooldown_hours": 6.0,
+    "manual_regime_override": "",
     "wait_for_dip_enabled": True,
     "wait_min_drop_threshold": 0.05,
     "wait_max_days": 3.0,

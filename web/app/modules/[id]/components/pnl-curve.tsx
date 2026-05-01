@@ -1,17 +1,24 @@
 "use client"
 
-// Build-tag: pnl-curve-v2 (forces Railway to pick up new chunk hash)
+// Build-tag: pnl-curve-v3 (bar chart + range selector, replaces v2 area chart)
+import { useState, useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from "recharts"
 
 interface Trade { bracket: string; side: string; size: number; price: number; executed_at: string }
 interface Position { bracket: string; size: number; avg_price: number; realized_pnl: number; status: string; closed_at?: string | null }
+
+type RangeKey = "7d" | "30d" | "90d" | "all"
 
 function fmtMoney(n: number): string {
   const s = n < 0 ? "-" : n > 0 ? "+" : ""
   const abs = Math.abs(n)
   return `${s}$${abs >= 100 ? Math.round(abs).toLocaleString() : abs.toFixed(2)}`
+}
+
+function dayKey(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`
 }
 
 export function PnlCurve({ trades, openPositions, closedPositions, marketPrices }: {
@@ -20,49 +27,75 @@ export function PnlCurve({ trades, openPositions, closedPositions, marketPrices 
   closedPositions: Position[]
   marketPrices?: Record<string, number>
 }) {
-  if (!trades.length && !closedPositions.length && !openPositions.length) return null
+  const [range, setRange] = useState<RangeKey>("30d")
 
-  const sortedTrades = [...trades].sort((a, b) => a.executed_at.localeCompare(b.executed_at))
-
-  const totalCostBasis = sortedTrades
-    .filter((t) => (t.side || "").toUpperCase() === "BUY")
-    .reduce((s, t) => s + t.size * t.price, 0)
-
-  const realizedPnl = closedPositions.reduce((s, p) => s + (p.realized_pnl || 0), 0)
-  const unrealizedPnl = openPositions.reduce(
-    (s, p) => s + (p.size * (marketPrices?.[p.bracket] ?? p.avg_price)) - (p.size * p.avg_price),
-    0,
+  const totalCostBasis = useMemo(
+    () => trades.filter((t) => (t.side || "").toUpperCase() === "BUY").reduce((s, t) => s + t.size * t.price, 0),
+    [trades],
+  )
+  const realizedPnl = useMemo(
+    () => closedPositions.reduce((s, p) => s + (p.realized_pnl || 0), 0),
+    [closedPositions],
+  )
+  const unrealizedPnl = useMemo(
+    () => openPositions.reduce(
+      (s, p) => s + (p.size * (marketPrices?.[p.bracket] ?? p.avg_price)) - (p.size * p.avg_price),
+      0,
+    ),
+    [openPositions, marketPrices],
   )
   const totalPnl = realizedPnl + unrealizedPnl
 
-  const denominator = totalCostBasis > 0 ? totalCostBasis : (closedPositions.reduce((s, p) => s + p.size * p.avg_price, 0) + openPositions.reduce((s, p) => s + p.size * p.avg_price, 0))
+  const denominator = totalCostBasis > 0 ? totalCostBasis : (
+    closedPositions.reduce((s, p) => s + p.size * p.avg_price, 0) +
+    openPositions.reduce((s, p) => s + p.size * p.avg_price, 0)
+  )
   const totalReturnPct = denominator > 0 ? (totalPnl / denominator) * 100 : 0
 
-  // Bucket trades by date (UTC day key). Cost basis = cumulative end-of-day,
-  // P&L is back-loaded onto the most recent day to match prior behavior.
-  const byDay = new Map<string, { date: Date; cumCost: number }>()
-  let cumCostBasis = 0
-  for (const t of sortedTrades) {
-    const isBuy = (t.side || "").toUpperCase() === "BUY"
-    if (isBuy) cumCostBasis += t.size * t.price
-    const d = new Date(t.executed_at)
-    const dayKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`
-    byDay.set(dayKey, { date: d, cumCost: cumCostBasis })
-  }
-  const dayEntries = Array.from(byDay.entries()).sort(([a], [b]) => a.localeCompare(b))
-  const chartData = dayEntries.map(([_key, info], idx) => {
-    const pnlAtPoint = idx === dayEntries.length - 1 ? totalPnl : 0
-    return {
-      idx: idx + 1,
-      label: info.date.toLocaleString("en-US", { month: "short", day: "numeric" }),
-      costBasis: parseFloat(info.cumCost.toFixed(2)),
-      pnl: parseFloat(pnlAtPoint.toFixed(2)),
+  // Build per-day P&L bars from closed positions. Each closed position
+  // contributes its realized_pnl to its closed_at date (or created_at as fallback).
+  const allBars = useMemo(() => {
+    const byDay = new Map<string, { date: Date; pnl: number }>()
+    for (const p of closedPositions) {
+      const dateStr = p.closed_at || (p as any).created_at
+      if (!dateStr) continue
+      const d = new Date(dateStr)
+      if (isNaN(d.getTime())) continue
+      const key = dayKey(d)
+      const existing = byDay.get(key)
+      if (existing) existing.pnl += p.realized_pnl || 0
+      else byDay.set(key, { date: d, pnl: p.realized_pnl || 0 })
     }
-  })
+    return Array.from(byDay.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([_k, v]) => ({
+        label: v.date.toLocaleString("en-US", { month: "short", day: "numeric" }),
+        date: v.date,
+        pnl: parseFloat(v.pnl.toFixed(2)),
+      }))
+  }, [closedPositions])
+
+  // Filter by range. "all" returns everything; otherwise last N days from now.
+  const chartData = useMemo(() => {
+    if (range === "all") return allBars
+    const days = range === "7d" ? 7 : range === "30d" ? 30 : 90
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
+    return allBars.filter((b) => b.date >= cutoff)
+  }, [allBars, range])
+
+  if (!trades.length && !closedPositions.length && !openPositions.length) return null
 
   const sign = totalPnl > 0 ? "positive" : totalPnl < 0 ? "negative" : "flat"
   const trendClass = sign === "positive" ? "text-success" : sign === "negative" ? "text-destructive" : "text-muted-foreground"
   const TrendIcon = sign === "positive" ? TrendingUp : sign === "negative" ? TrendingDown : Minus
+
+  const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
+    { key: "7d", label: "7d" },
+    { key: "30d", label: "30d" },
+    { key: "90d", label: "90d" },
+    { key: "all", label: "All" },
+  ]
 
   return (
     <div className="rounded-lg border border-border bg-card p-6">
@@ -77,45 +110,61 @@ export function PnlCurve({ trades, openPositions, closedPositions, marketPrices 
             )}
           </div>
         </div>
-        <div className="flex gap-4 text-xs text-muted-foreground">
-          <span>Realized: <span className={cn("font-medium", realizedPnl >= 0 ? "text-success" : "text-destructive")}>{fmtMoney(realizedPnl)}</span></span>
-          <span>Unrealized: <span className={cn("font-medium", unrealizedPnl >= 0 ? "text-success" : "text-destructive")}>{fmtMoney(unrealizedPnl)}</span></span>
-          <span>Trades: <span className="font-medium text-foreground">{sortedTrades.length}</span></span>
-          <span>Cost Basis: <span className="font-medium text-foreground">${totalCostBasis.toFixed(2)}</span></span>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-4 text-xs text-muted-foreground">
+            <span>Realized: <span className={cn("font-medium", realizedPnl >= 0 ? "text-success" : "text-destructive")}>{fmtMoney(realizedPnl)}</span></span>
+            <span>Unrealized: <span className={cn("font-medium", unrealizedPnl >= 0 ? "text-success" : "text-destructive")}>{fmtMoney(unrealizedPnl)}</span></span>
+            <span>Trades: <span className="font-medium text-foreground">{trades.length}</span></span>
+          </div>
+          <div className="flex rounded-md border border-border overflow-hidden">
+            {RANGE_OPTIONS.map((r) => (
+              <button
+                key={r.key}
+                onClick={() => setRange(r.key)}
+                className={cn(
+                  "px-2.5 py-1 text-xs transition-colors",
+                  range === r.key
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background text-muted-foreground hover:bg-accent/50",
+                )}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-      {chartData.length > 1 ? (
+      {chartData.length > 0 ? (
         <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={chartData}>
-            <defs>
-              <linearGradient id="costBasisGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(215, 25%, 50%)" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="hsl(215, 25%, 50%)" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={sign === "negative" ? "hsl(0, 84%, 60%)" : "hsl(142, 71%, 45%)"} stopOpacity={0.3} />
-                <stop offset="95%" stopColor={sign === "negative" ? "hsl(0, 84%, 60%)" : "hsl(142, 71%, 45%)"} stopOpacity={0} />
-              </linearGradient>
-            </defs>
+          <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
             <XAxis
               dataKey="label"
               tick={{ fontSize: 10 }}
               stroke="hsl(215, 20%, 65%)"
-              minTickGap={40}
+              minTickGap={20}
               interval="preserveStartEnd"
             />
             <YAxis tick={{ fontSize: 11 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => `$${v}`} />
-            <ReferenceLine y={0} stroke="hsl(215, 20%, 35%)" strokeDasharray="3 3" />
+            <ReferenceLine y={0} stroke="hsl(215, 20%, 35%)" />
             <Tooltip
               contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }}
-              formatter={(v: number, name: string) => [`$${v.toFixed(2)}`, name === "costBasis" ? "Cost Basis" : "P&L"]}
+              formatter={(v: number) => [`${v >= 0 ? "+" : ""}$${v.toFixed(2)}`, "Realized P&L"]}
+              cursor={{ fill: "hsl(215, 20%, 25%)", opacity: 0.2 }}
             />
-            <Area type="stepAfter" dataKey="costBasis" name="costBasis" stroke="hsl(215, 25%, 50%)" fill="url(#costBasisGradient)" strokeWidth={1.5} />
-            <Area type="monotone" dataKey="pnl" name="pnl" stroke={sign === "negative" ? "hsl(0, 84%, 60%)" : "hsl(142, 71%, 45%)"} fill="url(#pnlGradient)" strokeWidth={2} />
-          </AreaChart>
+            <Bar dataKey="pnl" name="Daily P&L">
+              {chartData.map((d, idx) => (
+                <Cell
+                  key={idx}
+                  fill={d.pnl >= 0 ? "hsl(142, 71%, 45%)" : "hsl(0, 84%, 60%)"}
+                />
+              ))}
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
       ) : (
-        <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">More trades needed for chart</div>
+        <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
+          No closed trades in the last {range === "all" ? "all time" : range}.
+        </div>
       )}
     </div>
   )

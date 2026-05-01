@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from api.services.risk_manager import RiskManager
@@ -148,9 +149,20 @@ class TradingEngine:
 
         if not self._check_data_freshness():
             log.warning(f"Stale data detected (>{STALE_DATA_THRESHOLD_HOURS}h) — exits ran, skipping new entries this cycle")
+            # Fire stale-data alert. Cooldown inside notify_stale_data prevents
+            # spam if it stays stale for hours.
+            try:
+                from api.services.alerts import notify_stale_data
+                _run_async(notify_stale_data(handle="all", hours=STALE_DATA_THRESHOLD_HOURS, source="signals"))
+            except Exception:
+                pass
             return
 
         self._process_pending_signals()
+
+        # Track consecutive risk-rejected signals across modules for rejection_spike alert.
+        if not hasattr(self, "_recent_rejections"):
+            self._recent_rejections = []  # list of (module_id, module_name, reason)
 
         for module in self.registry.active_modules():
             try:
@@ -160,10 +172,13 @@ class TradingEngine:
                         continue
                     approved, reason = self.risk_manager.check(signal)
                     if approved:
+                        # Reset rejection streak on a successful approval
+                        self._recent_rejections = []
                         result = self.executor.execute(signal)
                         if result.get("status") == "rejected":
                             log.info(f"Executor rejected: {result.get('reason')}")
                             self._log_rejection(signal, result.get("reason", "executor_rejected"))
+                            self._track_rejection(module.name, getattr(signal, "module_id", ""), result.get("reason", "executor_rejected"))
                             continue
                         if self.shadow_executor:
                             self.shadow_executor.execute(signal)
@@ -179,9 +194,12 @@ class TradingEngine:
                     else:
                         log.info(f"Signal rejected: {reason}")
                         self._log_rejection(signal, reason)
+                        self._track_rejection(module.name, getattr(signal, "module_id", ""), reason)
             except Exception as e:
                 log.error(f"Module {module.name} error: {e}")
                 self._log_error(module.name, str(e))
+                # Repeated-error alert: track unique error signatures.
+                self._track_error(module.name, str(e))
 
     def _maybe_defer_signal(self, module, signal) -> bool:
         """Check if signal should be deferred based on historical price patterns."""
@@ -669,6 +687,60 @@ class TradingEngine:
         except Exception:
             pass
 
+    def _track_rejection(self, module_name: str, module_id: str, reason: str):
+        """Append to in-memory rejection streak. Fires rejection_spike alert
+        when 5+ rejections accumulate without an intervening approval. The
+        alert dispatcher dedupes so we don't ping every additional rejection."""
+        if not hasattr(self, "_recent_rejections"):
+            self._recent_rejections = []
+        self._recent_rejections.append({
+            "module_name": module_name,
+            "module_id": module_id,
+            "reason": reason,
+        })
+        # Keep at most last 20 to bound memory
+        if len(self._recent_rejections) > 20:
+            self._recent_rejections = self._recent_rejections[-20:]
+        if len(self._recent_rejections) >= 5:
+            try:
+                from api.services.alerts import notify_rejection_spike
+                from collections import Counter
+                reasons = Counter(r["reason"] for r in self._recent_rejections[-10:]).most_common(3)
+                top = [f"{r} ({c}x)" for r, c in reasons]
+                _run_async(notify_rejection_spike(
+                    module_id=module_id,
+                    module_name=module_name,
+                    count=len(self._recent_rejections),
+                    top_reasons=top,
+                ))
+            except Exception:
+                pass
+
+    def _track_error(self, module_name: str, error_msg: str):
+        """Track repeated errors over a 15-min sliding window per signature."""
+        if not hasattr(self, "_recent_errors"):
+            self._recent_errors = []  # (timestamp, signature, sample)
+        # Use first 80 chars of error as signature (drops timestamps, addresses, etc).
+        sig = (error_msg or "")[:80].strip()
+        now_ts = time.time()
+        self._recent_errors.append((now_ts, sig, error_msg or ""))
+        # Drop entries older than 15 min
+        cutoff = now_ts - 15 * 60
+        self._recent_errors = [(t, s, m) for (t, s, m) in self._recent_errors if t >= cutoff]
+        # Count occurrences of this signature
+        same_count = sum(1 for (_, s, _) in self._recent_errors if s == sig)
+        if same_count >= 3:
+            try:
+                from api.services.alerts import notify_repeated_errors
+                _run_async(notify_repeated_errors(
+                    error_signature=f"[{module_name}] {sig}",
+                    count=same_count,
+                    time_window_minutes=15.0,
+                    sample=error_msg,
+                ))
+            except Exception:
+                pass
+
     @property
     def status(self):
         s = {
@@ -682,6 +754,65 @@ class TradingEngine:
         if self._multi_mode and isinstance(self.executor, MultiExecutor):
             s["multi_profiles"] = self.executor.profile_names
         return s
+
+    @property
+    def health(self):
+        """Bot health snapshot for the dashboard banner.
+
+        Returns: { state: 'trading'|'watching'|'paused'|'killed',
+                   reason: str, details: {...} }
+        """
+        if not self._running:
+            return {
+                "state": "paused",
+                "reason": "Engine stopped",
+                "details": {"action": "Use /api/engine/start to resume"},
+            }
+        if self.risk_manager.circuit_breaker_tripped:
+            cooldown_remaining_s = max(0, int(self.risk_manager._cooldown_until - time.time()))
+            return {
+                "state": "paused",
+                "reason": "Circuit breaker tripped",
+                "details": {
+                    "consecutive_losses": self.risk_manager.consecutive_losses,
+                    "cooldown_remaining_min": round(cooldown_remaining_s / 60, 1),
+                },
+            }
+        if self._stale_data:
+            return {
+                "state": "paused",
+                "reason": "Stale data — xTracker hasn't refreshed",
+                "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS},
+            }
+        active = self.registry.active_modules()
+        if not active:
+            return {
+                "state": "paused",
+                "reason": "No active modules",
+                "details": {"action": "Resume modules from the dashboard"},
+            }
+        # Look at most recent module evaluation outcome to distinguish trading vs watching.
+        # If every recent module is in TRANSITION and produced 0 signals, we're watching.
+        try:
+            sb = get_supabase()
+            recent = sb.table("logs").select("message,created_at").eq("log_type", "decision").order("created_at", desc=True).limit(20).execute()
+            rows = recent.data or []
+            cycle_rows = [r for r in rows if (r.get("message") or "").startswith("Cycle:")]
+            in_transition = any("regime=TRANSITION" in (r.get("message") or "") for r in cycle_rows[:3])
+            zero_signals = all("signals=0" in (r.get("message") or "") for r in cycle_rows[:3])
+            if cycle_rows and in_transition and zero_signals:
+                return {
+                    "state": "watching",
+                    "reason": "Regime in transition — bot waiting for trend to clear",
+                    "details": {"active_modules": len(active)},
+                }
+        except Exception:
+            pass
+        return {
+            "state": "trading",
+            "reason": "Bot is actively scanning markets",
+            "details": {"active_modules": len(active), "cycle_count": self._cycle_count},
+        }
 
 
 engine = TradingEngine()
