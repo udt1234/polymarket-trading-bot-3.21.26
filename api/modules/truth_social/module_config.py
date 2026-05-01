@@ -29,6 +29,10 @@ DEFAULT_CONFIG = {
     "divergence_market_price_min": 0.20,
     "divergence_model_prob_max": 0.05,
     "divergence_cooldown_hours": 6.0,
+    # Manual regime override — operator forces a regime when they disagree with
+    # the statistical detector. Empty string = no override. Valid values:
+    # "NORMAL", "QUIET", "LOW", "HIGH", "SURGE", "TRANSITION".
+    "manual_regime_override": "",
     "wait_for_dip_enabled": True,
     "wait_min_drop_threshold": 0.05,
     "wait_max_days": 3.0,

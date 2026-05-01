@@ -67,6 +67,14 @@ async def engine_status():
     return engine.status
 
 
+@app.get("/api/engine/health", dependencies=[Depends(require_auth)])
+async def engine_health():
+    """Bot health snapshot for the dashboard banner.
+    Returns one of: trading | watching | paused | killed
+    """
+    return engine.health
+
+
 @app.post("/api/engine/stop", dependencies=[Depends(require_auth)])
 async def engine_stop():
     sb = get_supabase()
@@ -86,6 +94,15 @@ async def engine_stop():
         "message": f"GLOBAL KILL SWITCH: engine stopped, {closed_count} positions closed",
         "metadata": {"action": "global_kill", "positions_closed": closed_count},
     }).execute()
+    try:
+        from api.services.alerts import notify_bot_paused
+        await notify_bot_paused(
+            reason="Manual global kill switch",
+            scope="engine",
+            details={"positions_closed": closed_count},
+        )
+    except Exception:
+        pass
     return {"ok": True, "engine_stopped": True, "positions_closed": closed_count}
 
 

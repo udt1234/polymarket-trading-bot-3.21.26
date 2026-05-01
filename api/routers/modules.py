@@ -99,6 +99,7 @@ class ModuleConfigUpdate(BaseModel):
     divergence_market_price_min: float | None = Field(default=None, ge=0.05, le=0.5)
     divergence_model_prob_max: float | None = Field(default=None, ge=0.005, le=0.20)
     divergence_cooldown_hours: float | None = Field(default=None, ge=0.5, le=48)
+    manual_regime_override: str | None = Field(default=None, max_length=20)
     wait_for_dip_enabled: bool | None = None
     wait_min_drop_threshold: float | None = Field(default=None, ge=0, le=1)
     wait_max_days: float | None = Field(default=None, ge=0, le=14)
@@ -147,14 +148,30 @@ async def delete_module(module_id: str):
 @router.post("/{module_id}/pause")
 async def pause_module(module_id: str):
     sb = get_supabase()
+    mod_row = sb.table("modules").select("name,status").eq("id", module_id).single().execute()
+    old_status = (mod_row.data or {}).get("status", "active")
+    name = (mod_row.data or {}).get("name") or module_id
     sb.table("modules").update({"status": "paused"}).eq("id", module_id).execute()
+    try:
+        from api.services.alerts import notify_module_status_change
+        await notify_module_status_change(module_id, name, old_status, "paused", reason="Manual pause")
+    except Exception:
+        pass
     return {"ok": True}
 
 
 @router.post("/{module_id}/resume")
 async def resume_module(module_id: str):
     sb = get_supabase()
+    mod_row = sb.table("modules").select("name,status").eq("id", module_id).single().execute()
+    old_status = (mod_row.data or {}).get("status", "paused")
+    name = (mod_row.data or {}).get("name") or module_id
     sb.table("modules").update({"status": "active"}).eq("id", module_id).execute()
+    try:
+        from api.services.alerts import notify_module_status_change
+        await notify_module_status_change(module_id, name, old_status, "active", reason="Manual resume")
+    except Exception:
+        pass
     return {"ok": True}
 
 
@@ -165,6 +182,9 @@ async def kill_module(module_id: str):
     module = sb.table("modules").select("id,name,status").eq("id", module_id).single().execute()
     if not module.data:
         raise HTTPException(status_code=404, detail="Module not found")
+
+    old_status = module.data.get("status", "active")
+    name = module.data.get("name") or module_id
 
     sb.table("modules").update({"status": "killed"}).eq("id", module_id).execute()
 
@@ -188,9 +208,18 @@ async def kill_module(module_id: str):
         "log_type": "system",
         "severity": "warning",
         "module_id": module_id,
-        "message": f"KILL SWITCH: module '{module.data.get('name', module_id)}' killed, {closed_count} positions closed",
+        "message": f"KILL SWITCH: module '{name}' killed, {closed_count} positions closed",
         "metadata": {"action": "kill", "positions_closed": closed_count},
     }).execute()
+
+    try:
+        from api.services.alerts import notify_module_status_change
+        await notify_module_status_change(
+            module_id, name, old_status, "killed",
+            reason=f"Manual kill, {closed_count} positions closed",
+        )
+    except Exception:
+        pass
 
     return {"ok": True, "positions_closed": closed_count}
 
@@ -262,19 +291,161 @@ async def get_auctions(module_id: str, include_past: bool = True):
             "market_link": t.get("marketLink", ""),
         })
 
-    # Sort: active first (by start date), then future, then past (most recent first)
-    results.sort(key=lambda x: (
-        0 if x["status"] == "active" else (1 if x["status"] == "future" else 2),
-        x["start_date"] if x["status"] != "past" else "",
-        -x["elapsed_days"] if x["status"] == "past" else 0,
-    ))
+    # Active auction stays pinned at the top; everything else (future + past)
+    # is sorted reverse-chronologically by start_date so the latest auction
+    # appears immediately after the active one (per user request).
+    active = [r for r in results if r["status"] == "active"]
+    rest = sorted(
+        [r for r in results if r["status"] != "active"],
+        key=lambda x: x["start_date"],
+        reverse=True,
+    )
+    results = active + rest
 
     return results
 
 
+def _bracket_for_total(total: int, brackets: list[str] | None = None) -> str | None:
+    """Map a final post count to its bracket label. Defaults to the standard
+    11-bracket Trump auction layout."""
+    default = [
+        ("0-19", 0, 19), ("20-39", 20, 39), ("40-59", 40, 59),
+        ("60-79", 60, 79), ("80-99", 80, 99), ("100-119", 100, 119),
+        ("120-139", 120, 139), ("140-159", 140, 159), ("160-179", 160, 179),
+        ("180-199", 180, 199), ("200+", 200, 99999),
+    ]
+    if brackets:
+        ranges = []
+        for lab in brackets:
+            try:
+                if lab.endswith("+"):
+                    ranges.append((lab, int(lab[:-1]), 99999))
+                elif "-" in lab:
+                    lo, hi = lab.split("-", 1)
+                    ranges.append((lab, int(lo), int(hi)))
+            except Exception:
+                continue
+        default = ranges or default
+    for label, lo, hi in default:
+        if lo <= total <= hi:
+            return label
+    return None
+
+
+@router.get("/{module_id}/auction-history")
+async def get_auction_history(module_id: str, limit: int = 20):
+    """Per-resolved-auction summary: bot positions, total cost, projected vs
+    actual winner, won/lost, net P&L. Powers the dashboard auction history
+    table card. Past auctions only — active auction lives in the live panel.
+    """
+    sb = get_supabase()
+    module = sb.table("modules").select("*").eq("id", module_id).single().execute()
+    if not module.data:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    handle = _detect_handle(module.data)
+    name_filter = _detect_name_filter(handle)
+    now = datetime.now(timezone.utc)
+
+    all_trackings = await _fetch_trackings_raw(handle)
+    past_trackings = []
+    for t in all_trackings:
+        if name_filter not in t.get("title", "").lower():
+            continue
+        end_str = t.get("endDate", "")
+        if not end_str:
+            continue
+        try:
+            end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if end_dt < now:
+            past_trackings.append((t, end_dt))
+    past_trackings.sort(key=lambda x: x[1], reverse=True)
+    past_trackings = past_trackings[:limit]
+
+    # Fetch all closed positions for this module up-front and bucket by market_id.
+    pos_rows = (
+        sb.table("positions")
+        .select("market_id,bracket,size,avg_price,exit_price,realized_pnl,status,created_at")
+        .eq("module_id", module_id)
+        .eq("status", "closed")
+        .execute()
+    )
+    by_market: dict = {}
+    for p in (pos_rows.data or []):
+        by_market.setdefault(p["market_id"], []).append(p)
+
+    # Fetch latest signals to recover the bot's projected winner per auction.
+    sig_rows = (
+        sb.table("signals")
+        .select("market_id,bracket,model_prob,metadata,created_at")
+        .eq("module_id", module_id)
+        .eq("approved", True)
+        .order("created_at", desc=True)
+        .limit(500)
+        .execute()
+    )
+    proj_by_market: dict = {}
+    for s in (sig_rows.data or []):
+        m = s.get("market_id")
+        if m and m not in proj_by_market:
+            # Use the latest approved signal's bracket as the bot's pick for that auction.
+            proj_by_market[m] = s.get("bracket")
+
+    history = []
+    for t, end_dt in past_trackings:
+        slug = ""
+        try:
+            from api.modules.truth_social.data import extract_slug_from_tracking
+            slug = extract_slug_from_tracking(t) or ""
+        except Exception:
+            pass
+        positions = by_market.get(slug, [])
+        total_cost = sum((p.get("size") or 0) * (p.get("avg_price") or 0) for p in positions)
+        net_pnl = sum(p.get("realized_pnl") or 0 for p in positions)
+        bracket_picks = sorted({p.get("bracket") for p in positions if p.get("bracket")})
+
+        # Actual final post count: pull from xTracker stats if we have them cached.
+        actual_total = None
+        actual_bracket = None
+        try:
+            from api.modules.truth_social.data import fetch_xtracker_stats, get_xtracker_summary
+            tid = str(t.get("id") or t.get("trackingId") or "")
+            if tid:
+                stats = await fetch_xtracker_stats(tid)
+                summary = get_xtracker_summary(stats)
+                actual_total = summary.get("total")
+                if isinstance(actual_total, (int, float)):
+                    actual_bracket = _bracket_for_total(int(actual_total))
+        except Exception:
+            pass
+
+        won = (
+            actual_bracket is not None
+            and actual_bracket in bracket_picks
+        )
+        history.append({
+            "tracking_id": str(t.get("id") or t.get("trackingId") or ""),
+            "period": f"{t.get('startDate', '')[:10]} → {t.get('endDate', '')[:10]}",
+            "title": t.get("title", ""),
+            "brackets_held": bracket_picks,
+            "total_cost": round(total_cost, 2),
+            "net_pnl": round(net_pnl, 2),
+            "trades": len(positions),
+            "projected_winner": proj_by_market.get(slug),
+            "actual_total": actual_total,
+            "actual_winner": actual_bracket,
+            "won": won,
+            "no_bet": len(positions) == 0,
+        })
+
+    return history
+
+
 def _compute_pacing_models(running_total, elapsed_days, remaining_days, total_days, hist_mean, hist_std, hourly_counts, var, now, cfg, dynamic_brackets=None):
     from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
-    from api.modules.truth_social.projection import ensemble_weights as ew, ensemble_projection
+    from api.modules.truth_social.projection import ensemble_weights as ew, ensemble_projection, expected_value_bracket
 
     pace_val = regular_pace(running_total, elapsed_days, total_days) if elapsed_days > 0 else hist_mean
     bayes_val = bayesian_pace(running_total, elapsed_days, remaining_days, hist_mean, total_days)
@@ -435,6 +606,50 @@ def _build_hourly_heatmap(hourly_counts: list[dict]) -> list[dict]:
     ]
 
 
+async def _fallback_truth_social_from_snapshot(
+    module_id: str, running_total: int, error: str | None = None,
+) -> dict:
+    """When the live truthsocial.com fetch fails, fall back to the most recent
+    snapshot row written by the engine's _run_post_count_snapshot job. That
+    job runs every 5 min in the background and persists to post_count_snapshots,
+    so even if Cloudflare blocks the live fetch we still surface a reasonable
+    last-known count instead of going silent.
+    """
+    try:
+        sb = get_supabase()
+        res = (
+            sb.table("post_count_snapshots")
+            .select("count,latest_post_at,captured_at,error")
+            .eq("module_id", module_id)
+            .eq("source", "truthsocial_direct")
+            .not_.is_("count", "null")
+            .order("captured_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        if rows and rows[0].get("count") is not None:
+            row = rows[0]
+            ts_count = row["count"]
+            return {
+                "count": ts_count,
+                "status": "stale",
+                "captured_at": row.get("captured_at"),
+                "latest_post_at": row.get("latest_post_at"),
+                "diff_vs_xtracker": ts_count - running_total,
+                "source": "truthsocial.com/api/v1 (cached snapshot)",
+                "error": error or "live fetch unavailable",
+            }
+    except Exception as e:
+        log.warning(f"Truth Social snapshot fallback also failed: {e}")
+    return {
+        "count": None,
+        "status": "unavailable",
+        "source": "truthsocial.com/api/v1",
+        "error": error or "live fetch + snapshot fallback both failed",
+    }
+
+
 def _build_ensemble_breakdown(model_outputs, weights):
     return [
         {"model": name.replace("_", " ").title(),
@@ -548,9 +763,15 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
 
     ensemble_breakdown = _build_ensemble_breakdown(model_outputs, weights)
 
-    # Truth Social direct fetch is supplemental — must NEVER block the pacing endpoint.
-    # Wrap in a tight timeout; on timeout/failure we return None and the frontend renders gracefully.
-    truth_social_direct = None
+    # Truth Social direct fetch is supplemental — must NEVER block the pacing
+    # endpoint. Frontend ALWAYS renders this section now (with status row when
+    # count is missing) so the user can see the bot's TruthSocial connection
+    # status at a glance instead of the whole panel disappearing on timeout.
+    # Timeout bumped 3s -> 8s because Cloudflare anti-bot can stall briefly
+    # on first request after a quiet period; the post-count snapshot job
+    # (which runs every 5 min in the background and writes to post_count_snapshots)
+    # is still the source of truth — this just refreshes the live read.
+    truth_social_direct = {"count": None, "status": "not_applicable", "source": "truthsocial.com/api/v1"}
     if handle == "realDonaldTrump" and tracking:
         try:
             from api.modules.truth_social.truthsocial_direct import count_posts_in_window
@@ -562,21 +783,30 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
                 w_end_capped = min(w_end, now)
                 ts_result = await asyncio.wait_for(
                     count_posts_in_window(w_start, w_end_capped, handle=handle),
-                    timeout=3.0,
+                    timeout=8.0,
                 )
                 ts_count = ts_result.get("count")
                 truth_social_direct = {
                     "count": ts_count,
+                    "status": "ok" if isinstance(ts_count, int) else "no_data",
                     "latest_post_at": ts_result.get("latest_post_at"),
                     "diff_vs_xtracker": (ts_count - running_total) if isinstance(ts_count, int) else None,
                     "source": "truthsocial.com/api/v1",
                 }
         except asyncio.TimeoutError:
-            log.warning("Truth Social direct fetch timed out (>3s) — pacing continues without it")
-            truth_social_direct = {"count": None, "error": "timeout"}
+            log.warning("Truth Social direct fetch timed out (>8s) — falling back to last snapshot")
+            truth_social_direct = await _fallback_truth_social_from_snapshot(module.data["id"], running_total)
         except Exception as e:
             log.warning(f"Truth Social direct fetch failed: {e}")
-            truth_social_direct = {"count": None, "error": str(e)[:120]}
+            truth_social_direct = await _fallback_truth_social_from_snapshot(module.data["id"], running_total, error=str(e)[:120])
+
+    # `projected_winner` = highest-probability single bracket (argmax).
+    # `expected_value_winner` = bracket whose range contains ensemble_avg.
+    # These usually agree but can split when the distribution straddles a
+    # bracket boundary (mean=81.5 lands in 80-99 but adjacent bracket can
+    # have higher single-bracket probability). Both are surfaced so the
+    # dashboard can show the more intuitive metric next to the technical one.
+    ev_winner = expected_value_bracket(ensemble_avg, bracket_labels=dynamic_brackets)
 
     current_auction = {
         "period": f"{week_start_str} to {week_end_str}" if week_start_str else None,
@@ -587,6 +817,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         "pace": summary.get("pace", round(list(model_outputs.values())[0], 0)),
         "regime": regime,
         "projected_winner": conf_bands[0]["bracket"] if conf_bands else None,
+        "expected_value_winner": ev_winner,
         "market_implied_winner": market_implied,
         "ensemble_avg": round(ensemble_avg, 1),
         "truth_social_direct": truth_social_direct,

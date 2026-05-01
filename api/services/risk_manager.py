@@ -423,11 +423,20 @@ class RiskManager:
             self._cooldown_until = time.time() + settings.circuit_breaker_cooldown_minutes * 60
             log.warning(f"Circuit breaker TRIPPED after {self.consecutive_losses} consecutive losses")
             try:
-                import asyncio as _asyncio
+                from api.services.engine import _run_async
                 from api.services.notifications import notify_circuit_breaker
-                _asyncio.get_event_loop().run_until_complete(
+                from api.services.alerts import notify_bot_paused
+                _run_async(
                     notify_circuit_breaker(self.consecutive_losses, settings.circuit_breaker_cooldown_minutes)
                 )
+                _run_async(notify_bot_paused(
+                    reason=f"Circuit breaker tripped after {self.consecutive_losses} consecutive losses",
+                    scope="circuit_breaker",
+                    details={
+                        "cooldown_minutes": settings.circuit_breaker_cooldown_minutes,
+                        "consecutive_losses": self.consecutive_losses,
+                    },
+                ))
             except Exception:
                 pass
         auto_kill_threshold = getattr(settings, "auto_kill_consecutive_losses", 0)
@@ -442,6 +451,9 @@ class RiskManager:
     def _auto_pause_module(self, module_id: str):
         try:
             sb = get_supabase()
+            mod_row = sb.table("modules").select("name,status").eq("id", module_id).single().execute()
+            old_status = (mod_row.data or {}).get("status", "active")
+            mod_name = (mod_row.data or {}).get("name") or module_id
             sb.table("modules").update({"status": "paused"}).eq("id", module_id).execute()
             sb.table("logs").insert({
                 "level": "warning",
@@ -450,6 +462,18 @@ class RiskManager:
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }).execute()
             log.warning(f"AUTO-KILL: Module {module_id} paused after {self.consecutive_losses} consecutive losses")
+            try:
+                from api.services.engine import _run_async
+                from api.services.alerts import notify_module_status_change
+                _run_async(notify_module_status_change(
+                    module_id=module_id,
+                    name=mod_name,
+                    old_status=old_status,
+                    new_status="paused",
+                    reason=f"Auto-kill after {self.consecutive_losses} consecutive losses",
+                ))
+            except Exception:
+                pass
         except Exception as e:
             log.error(f"Failed to auto-pause module {module_id}: {e}")
 

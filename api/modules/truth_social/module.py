@@ -223,6 +223,18 @@ class TruthSocialModule(BaseModule):
             regime["label"] = regime_label
             self._log(sb, module_id, "decision", "info",
                       f"Regime override: {old_label} → {regime_label} ({news_override['reason']})")
+
+        # Manual operator override: lets user force a regime label when they
+        # disagree with the detector (e.g. detector stuck in TRANSITION but
+        # user judges the trend has cleared). Editable from the dashboard
+        # Pacing Configuration panel. Empty string / None = no override.
+        manual_regime = (mod_cfg.get("manual_regime_override") or "").strip().upper()
+        if manual_regime and manual_regime != regime_label:
+            old_label = regime_label
+            regime_label = manual_regime
+            regime["label"] = regime_label
+            self._log(sb, module_id, "decision", "info",
+                      f"Manual regime override: {old_label} → {regime_label} (operator)")
         daily_data_for_dow = parse_daily_totals(raw_data)
         daily_dow_data = [{"dow": datetime.fromisoformat(d["date"]).weekday(), "count": d["count"]} for d in daily_data_for_dow if d.get("date")]
         if daily_dow_data and mod_cfg.get("use_regime_conditional", True):

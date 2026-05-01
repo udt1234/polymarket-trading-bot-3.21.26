@@ -168,6 +168,13 @@ class ElonTweetsModule(BaseModule):
             schedule_events=news.get("schedule_events", []),
             handle="Elon Musk",
         )
+        manual_regime = (mod_cfg.get("manual_regime_override") or "").strip().upper()
+        if manual_regime and manual_regime != regime_label:
+            old_label = regime_label
+            regime_label = manual_regime
+            regime["label"] = regime_label
+            self._log(sb, module_id, "decision", "info",
+                      f"Manual regime override: {old_label} -> {regime_label} (operator)")
         if news_override.get("override") and news_override["override"] != regime_label:
             old_label = regime_label
             regime_label = news_override["override"]
