@@ -1189,10 +1189,15 @@ export default function ModuleDetailPage() {
                     <div className="pt-3">
                       <div
                         className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-2 flex items-center gap-2"
-                        title="Live read of Trump's Truth Social posts directly from truthsocial.com/api/v1, used to cross-check the xTracker number."
+                        title="Independent cross-check of Trump's Truth Social posts. Primary source is CNN's public archive (refreshed every 5 min); falls back to truthsocial.com/api/v1 if CNN is unavailable."
                       >
                         <span>Truth Social (Direct)</span>
-                        {data.truth_social_direct.status === "ok" && <span className="text-success normal-case font-normal">● live</span>}
+                        {data.truth_social_direct.status === "ok" && data.truth_social_direct.source?.includes("cnn") && (
+                          <span className="text-success normal-case font-normal">● live (CNN archive)</span>
+                        )}
+                        {data.truth_social_direct.status === "ok" && !data.truth_social_direct.source?.includes("cnn") && (
+                          <span className="text-success normal-case font-normal">● live</span>
+                        )}
                         {data.truth_social_direct.status === "stale" && <span className="text-amber-500 normal-case font-normal">● using cached snapshot</span>}
                         {data.truth_social_direct.status === "unavailable" && <span className="text-destructive normal-case font-normal">● unavailable</span>}
                         {data.truth_social_direct.status === "no_data" && <span className="text-muted-foreground normal-case font-normal">● no data</span>}
@@ -1233,8 +1238,8 @@ export default function ModuleDetailPage() {
                           <div className="space-y-1">
                             <div className="text-[10px] text-amber-500/80 italic">
                               {data.truth_social_direct.status === "stale"
-                                ? "truthsocial.com rate-limited — falling back to last snapshot. Snapshot job retries every 5 min."
-                                : "truthsocial.com is blocking requests from this server (Cloudflare). xTracker is unaffected. To restore the cross-check, set TS_PROXY env var on Railway to a residential proxy."}
+                                ? "Live source rate-limited — falling back to last snapshot. Snapshot job retries every 5 min."
+                                : "Both CNN archive and direct truthsocial.com fetches failed. Snapshot job will retry every 5 min. xTracker is unaffected."}
                             </div>
                             <div className="text-[10px] text-muted-foreground/60">
                               Last error: {data.truth_social_direct.error}

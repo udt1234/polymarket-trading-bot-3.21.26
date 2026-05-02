@@ -831,15 +831,18 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
                 w_end_capped = min(w_end, now)
                 ts_result = await asyncio.wait_for(
                     count_posts_in_window(w_start, w_end_capped, handle=handle),
-                    timeout=8.0,
+                    timeout=15.0,  # CNN archive is ~17MB JSON; allow extra time on cold cache
                 )
                 ts_count = ts_result.get("count")
+                # `source` flows from the underlying fetcher (cnn_archive | truthsocial.com/api/v1)
+                # so the dashboard shows the actual data origin instead of a hardcoded label.
+                resolved_source = ts_result.get("source") or "truthsocial.com/api/v1"
                 truth_social_direct = {
                     "count": ts_count,
                     "status": "ok" if isinstance(ts_count, int) else "no_data",
                     "latest_post_at": ts_result.get("latest_post_at"),
                     "diff_vs_xtracker": (ts_count - running_total) if isinstance(ts_count, int) else None,
-                    "source": "truthsocial.com/api/v1",
+                    "source": resolved_source,
                 }
         except asyncio.TimeoutError:
             log.warning("Truth Social direct fetch timed out (>8s) — falling back to last snapshot")
