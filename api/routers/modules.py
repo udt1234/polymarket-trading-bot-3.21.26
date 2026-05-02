@@ -630,12 +630,15 @@ async def _fallback_truth_social_from_snapshot(
 ) -> dict:
     """When the live truthsocial.com fetch fails, fall back to the most recent
     snapshot row written by the engine's _run_post_count_snapshot job. That
-    job runs every 5 min in the background and persists to post_count_snapshots,
-    so even if Cloudflare blocks the live fetch we still surface a reasonable
-    last-known count instead of going silent.
+    job runs every 5 min in the background and persists to post_count_snapshots.
+
+    If even the snapshot rows are all dead (Cloudflare block on the Railway IP
+    persisting), look up the most recent error reason so the dashboard can
+    show a clear "API blocked" status instead of an opaque "unavailable".
     """
+    sb = get_supabase()
     try:
-        sb = get_supabase()
+        # First try: most recent successful snapshot.
         res = (
             sb.table("post_count_snapshots")
             .select("count,latest_post_at,captured_at,error")
@@ -661,11 +664,37 @@ async def _fallback_truth_social_from_snapshot(
             }
     except Exception as e:
         log.warning(f"Truth Social snapshot fallback also failed: {e}")
+
+    # Second try: at least find out the latest known error reason from snapshot
+    # rows (even null-count ones) so the user sees "API blocked by Cloudflare"
+    # instead of an opaque generic failure.
+    last_error = error or "live fetch + snapshot fallback both failed"
+    last_attempt_at: str | None = None
+    try:
+        err_res = (
+            sb.table("post_count_snapshots")
+            .select("captured_at,error")
+            .eq("module_id", module_id)
+            .eq("source", "truthsocial_direct")
+            .order("captured_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        err_rows = err_res.data or []
+        if err_rows:
+            last_attempt_at = err_rows[0].get("captured_at")
+            row_err = err_rows[0].get("error")
+            if row_err:
+                last_error = f"{row_err} (last attempt {last_attempt_at})"
+    except Exception:
+        pass
+
     return {
         "count": None,
         "status": "unavailable",
         "source": "truthsocial.com/api/v1",
-        "error": error or "live fetch + snapshot fallback both failed",
+        "last_attempt_at": last_attempt_at,
+        "error": last_error,
     }
 
 
