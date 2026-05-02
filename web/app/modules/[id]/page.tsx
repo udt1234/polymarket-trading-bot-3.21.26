@@ -788,17 +788,24 @@ export default function ModuleDetailPage() {
                   <span className="text-xs text-muted-foreground">Override Hours</span>
                   <input
                     type="number" min={1} max={720} step={1}
-                    value={localConfig.manual_regime_override_default_hours}
+                    // Show 24 as a placeholder/fallback if the value is empty,
+                    // 0, or undefined so the user can never see a blank input
+                    // that would silently round to 0 hours and expire instantly.
+                    value={localConfig.manual_regime_override_default_hours || 24}
                     onChange={(e) => {
-                      const newHours = +e.target.value
-                      // If an override is currently active, push out its expiry
-                      // to match the new duration so the visible countdown is
-                      // consistent with what they just typed.
+                      // Clamp the typed value to [1, 720] before storing.
+                      // Empty / non-numeric / 0 falls back to 24 so we never
+                      // build an expires_at = now and silently expire the
+                      // override on the very next bot cycle.
+                      const raw = parseFloat(e.target.value)
+                      const clamped = (!Number.isFinite(raw) || raw < 1)
+                        ? 24
+                        : Math.min(raw, 720)
                       const updates: Partial<ModuleConfig> = {
-                        manual_regime_override_default_hours: newHours,
+                        manual_regime_override_default_hours: clamped,
                       }
                       if (localConfig.manual_regime_override) {
-                        const t = new Date(Date.now() + newHours * 3600 * 1000)
+                        const t = new Date(Date.now() + clamped * 3600 * 1000)
                         updates.manual_regime_override_expires_at = t.toISOString()
                       }
                       setLocalConfig({ ...localConfig, ...updates })
@@ -1223,10 +1230,20 @@ export default function ModuleDetailPage() {
                           </div>
                         )}
                         {data.truth_social_direct.error && data.truth_social_direct.status !== "ok" && (
-                          <div className="text-[10px] text-amber-500/80 italic">
-                            {data.truth_social_direct.status === "stale"
-                              ? "truthsocial.com rate-limited — falling back to last snapshot. Snapshot job retries every 5 min."
-                              : "Live fetch and cached snapshot both failed. Snapshot job retries every 5 min."}
+                          <div className="space-y-1">
+                            <div className="text-[10px] text-amber-500/80 italic">
+                              {data.truth_social_direct.status === "stale"
+                                ? "truthsocial.com rate-limited — falling back to last snapshot. Snapshot job retries every 5 min."
+                                : "truthsocial.com is blocking requests from this server (Cloudflare). xTracker is unaffected. To restore the cross-check, set TS_PROXY env var on Railway to a residential proxy."}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground/60">
+                              Last error: {data.truth_social_direct.error}
+                            </div>
+                            {data.truth_social_direct.last_attempt_at && (
+                              <div className="text-[10px] text-muted-foreground/60">
+                                Last attempt: {new Date(data.truth_social_direct.last_attempt_at).toLocaleString()}
+                              </div>
+                            )}
                           </div>
                         )}
                         <div className="text-[10px] text-muted-foreground/60">Source: {data.truth_social_direct.source}</div>
