@@ -243,13 +243,16 @@ async def fetch_statuses_in_window(
     return statuses
 
 
-async def count_posts_in_window(
+async def count_posts_in_window_direct(
     window_start: datetime,
     window_end: datetime,
     handle: str = DEFAULT_HANDLE,
     account_id: str | None = None,
     since_id: str | None = None,
 ) -> dict:
+    """Direct fetch path against truthsocial.com/api/v1. Reliable from
+    residential IPs, BLOCKED from datacenter IPs (Railway). Use as fallback
+    after the CNN archive path."""
     aid = account_id or DEFAULT_ACCOUNT_ID
     if handle != DEFAULT_HANDLE and account_id is None:
         looked_up = await lookup_account_id(handle)
@@ -257,7 +260,7 @@ async def count_posts_in_window(
             aid = looked_up
 
     if not aid:
-        return {"count": None, "latest_post_at": None, "account_id": None, "error": "no_account_id"}
+        return {"count": None, "latest_post_at": None, "account_id": None, "error": "no_account_id", "source": "truthsocial.com/api/v1"}
 
     statuses = await fetch_statuses_in_window(aid, window_start, window_end, since_id=since_id)
     latest = max((_parse_iso(s.get("created_at", "")) for s in statuses), default=None)
@@ -266,4 +269,41 @@ async def count_posts_in_window(
         "latest_post_at": latest.isoformat() if latest else None,
         "account_id": aid,
         "sample_ids": [s.get("id") for s in statuses[:5]],
+        "source": "truthsocial.com/api/v1",
     }
+
+
+async def count_posts_in_window(
+    window_start: datetime,
+    window_end: datetime,
+    handle: str = DEFAULT_HANDLE,
+    account_id: str | None = None,
+    since_id: str | None = None,
+) -> dict:
+    """Top-level Truth Social post counter — tries the most reliable source first.
+
+    Order:
+      1. CNN public archive (https://ix.cnn.io/data/truth-social/truth_archive.json)
+         — only covers @realDonaldTrump, refreshed every 5 min, no auth, no
+         Cloudflare challenge. Strict superset of what we need for Trump.
+      2. Direct truthsocial.com/api/v1 (works for any handle, blocked from
+         datacenter IPs).
+
+    Same return shape regardless of source — the `source` field tells the
+    caller which one served it.
+    """
+    if handle == DEFAULT_HANDLE:
+        try:
+            from api.modules.truth_social.truthsocial_via_cnn import count_posts_in_window_via_cnn
+            cnn_result = await count_posts_in_window_via_cnn(window_start, window_end, handle=handle)
+            if isinstance(cnn_result.get("count"), int):
+                return cnn_result
+            log.warning(f"CNN archive returned no count, falling back to direct: {cnn_result.get('error')}")
+        except Exception as e:
+            log.warning(f"CNN archive fetch failed, falling back to direct: {e}")
+
+    # Fallback: direct truthsocial.com (will likely fail from Railway, but try anyway).
+    return await count_posts_in_window_direct(
+        window_start, window_end, handle=handle,
+        account_id=account_id, since_id=since_id,
+    )
