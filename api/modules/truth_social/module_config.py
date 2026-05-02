@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
     # is `manual_regime_override_default_hours` (24h by default).
     "manual_regime_override": "",
     "manual_regime_override_expires_at": "",
-    "manual_regime_override_default_hours": 24,
+    "manual_regime_override_default_hours": 1,
     "wait_for_dip_enabled": True,
     "wait_min_drop_threshold": 0.05,
     "wait_max_days": 3.0,
@@ -69,14 +69,16 @@ def _normalize_regime_override(merged: dict) -> dict:
         merged["manual_regime_override"] = ""
         merged["manual_regime_override_expires_at"] = ""
         return merged
-    # Override is active. Clamp hours to [1, 720]. Treat 0 / None / non-numeric as 24.
+    # Override is active. Clamp hours to [1, 720]. Treat 0 / None / non-numeric as 1
+    # (the default). 1h gives the minimum-blast-radius safety net — if user
+    # forgets the override, the auto-revert kicks in within an hour.
     raw_hours = merged.get("manual_regime_override_default_hours")
     try:
-        hours = float(raw_hours) if raw_hours is not None else 24.0
+        hours = float(raw_hours) if raw_hours is not None else 1.0
     except (TypeError, ValueError):
-        hours = 24.0
+        hours = 1.0
     if hours < 1:
-        hours = 24.0
+        hours = 1.0
     if hours > 720:
         hours = 720.0
     merged["manual_regime_override_default_hours"] = hours

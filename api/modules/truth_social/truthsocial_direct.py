@@ -5,12 +5,20 @@ the source-of-truth raw archive for backfills.
 
 Truth Social forked Mastodon, so the v1 statuses API is public and unauthenticated.
 Cloudflare blocks Python httpx by TLS fingerprint, so we use curl_cffi which
-impersonates a real Chrome TLS handshake. Even then, datacenter IPs and high
-request volumes get rate-limited or 403'd; we rotate impersonate profiles and
-back off aggressively (up to 15 min) to recover.
+impersonates a real Chrome TLS handshake. Even then, datacenter IPs (e.g. Railway)
+get persistently blocked at the IP layer. Two recovery paths:
 
-Optional: set TS_PROXY env var to route through a residential proxy for unattended
-backfills. Format: "http://user:pass@host:port" or "socks5://host:port".
+1. TS_PROXY_URL — point at a Cloudflare Worker proxy that forwards to
+   truthsocial.com from a CF edge IP. Free, set up in ~5 min. See
+   infra/cloudflare-worker/. Requires TS_PROXY_KEY env var to match the
+   PROXY_KEY secret on the Worker. This is the recommended path for Railway.
+
+2. TS_PROXY — residential proxy URL (paid, e.g. BrightData). Format:
+   "http://user:pass@host:port" or "socks5://host:port".
+
+When TS_PROXY_URL is set, all requests are routed through it transparently
+(prefixed with TS_PROXY_URL instead of https://truthsocial.com). The Worker
+forwards the path + query verbatim and returns the upstream response.
 """
 import asyncio
 import logging
@@ -27,7 +35,20 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-TS_BASE = "https://truthsocial.com/api/v1"
+def _ts_base() -> str:
+    """Return the API base URL — TS_PROXY_URL when set (Cloudflare Worker
+    proxy), otherwise the direct truthsocial.com host. The proxy expects the
+    same /api/v1/* path layout as the upstream so callers don't need to change.
+    """
+    proxy_url = os.getenv("TS_PROXY_URL", "").strip().rstrip("/")
+    if proxy_url:
+        return f"{proxy_url}/api/v1"
+    return "https://truthsocial.com/api/v1"
+
+
+# NOTE: do NOT cache TS_BASE at module level — env var must be re-read
+# each call so flipping TS_PROXY_URL on Railway takes effect immediately.
+# Use _ts_base() at call sites instead.
 DEFAULT_HANDLE = "realDonaldTrump"
 DEFAULT_ACCOUNT_ID = "107780257626128497"
 PAGE_SIZE = 40
@@ -54,6 +75,18 @@ def _proxy_config() -> dict | None:
     return {"https": proxy, "http": proxy}
 
 
+def _proxy_auth_headers() -> dict:
+    """When TS_PROXY_URL is set, the Cloudflare Worker requires the x-proxy-key
+    header. Returns {} when no proxy URL is configured."""
+    if not os.getenv("TS_PROXY_URL", "").strip():
+        return {}
+    key = os.getenv("TS_PROXY_KEY", "").strip()
+    if not key:
+        log.warning("TS_PROXY_URL is set but TS_PROXY_KEY is missing — Worker will reject the request")
+        return {}
+    return {"x-proxy-key": key}
+
+
 async def _get_json(
     url: str,
     params: dict | None = None,
@@ -65,8 +98,11 @@ async def _get_json(
     Returns (data, last_status_code). data is None if all retries failed.
     `aggressive=True` uses _BACKOFF_SCHEDULE (up to 15 min waits) for unattended backfills.
     """
+    extra_headers = _proxy_auth_headers()
+
     if not HAS_CURL_CFFI:
-        async with httpx.AsyncClient(timeout=20, headers=BROWSER_HEADERS) as client:
+        merged_headers = {**BROWSER_HEADERS, **extra_headers}
+        async with httpx.AsyncClient(timeout=20, headers=merged_headers) as client:
             try:
                 res = await client.get(url, params=params)
                 res.raise_for_status()
@@ -87,7 +123,7 @@ async def _get_json(
                 session_kwargs["proxies"] = proxies
 
             async with AsyncSession(**session_kwargs) as s:
-                res = await s.get(url, params=params)
+                res = await s.get(url, params=params, headers=extra_headers or None)
                 last_status = res.status_code
 
                 if res.status_code == 200:
@@ -115,7 +151,7 @@ async def _get_json(
 
 async def lookup_account_id(handle: str = DEFAULT_HANDLE) -> str | None:
     try:
-        data, _ = await _get_json(f"{TS_BASE}/accounts/lookup", {"acct": handle})
+        data, _ = await _get_json(f"{_ts_base()}/accounts/lookup", {"acct": handle})
         if isinstance(data, dict):
             return data.get("id")
         return None
@@ -152,7 +188,7 @@ async def fetch_statuses_page(
         params["since_id"] = since_id
 
     page, code = await _get_json(
-        f"{TS_BASE}/accounts/{account_id}/statuses",
+        f"{_ts_base()}/accounts/{account_id}/statuses",
         params,
         aggressive=aggressive,
     )

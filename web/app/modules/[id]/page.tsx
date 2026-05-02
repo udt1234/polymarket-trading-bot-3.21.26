@@ -224,7 +224,7 @@ export default function ModuleDetailPage() {
     divergence_cooldown_hours: 6.0,
     manual_regime_override: "",
     manual_regime_override_expires_at: "",
-    manual_regime_override_default_hours: 24,
+    manual_regime_override_default_hours: 1,
   })
 
   useEffect(() => {
@@ -784,22 +784,22 @@ export default function ModuleDetailPage() {
                     Auto-expires after the duration below — bot reverts to detector.
                   </span>
                 </label>
-                <label className="space-y-1 min-w-[140px]" title="Hours an override stays active before auto-reverting to the detector. Picking 'Force NORMAL' now sets expiry to now + this many hours. Default 24h.">
+                <label className="space-y-1 min-w-[140px]" title="Hours an override stays active before auto-reverting to the detector. Picking 'Force NORMAL' now sets expiry to now + this many hours. Default 1h (minimum-blast-radius).">
                   <span className="text-xs text-muted-foreground">Override Hours</span>
                   <input
                     type="number" min={1} max={720} step={1}
-                    // Show 24 as a placeholder/fallback if the value is empty,
+                    // Show 1 as a placeholder/fallback if the value is empty,
                     // 0, or undefined so the user can never see a blank input
                     // that would silently round to 0 hours and expire instantly.
-                    value={localConfig.manual_regime_override_default_hours || 24}
+                    value={localConfig.manual_regime_override_default_hours || 1}
                     onChange={(e) => {
                       // Clamp the typed value to [1, 720] before storing.
-                      // Empty / non-numeric / 0 falls back to 24 so we never
+                      // Empty / non-numeric / 0 falls back to 1 so we never
                       // build an expires_at = now and silently expire the
                       // override on the very next bot cycle.
                       const raw = parseFloat(e.target.value)
                       const clamped = (!Number.isFinite(raw) || raw < 1)
-                        ? 24
+                        ? 1
                         : Math.min(raw, 720)
                       const updates: Partial<ModuleConfig> = {
                         manual_regime_override_default_hours: clamped,
@@ -812,7 +812,7 @@ export default function ModuleDetailPage() {
                     }}
                     className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm"
                   />
-                  <span className="text-[10px] text-muted-foreground">Default 24h, max 720 (30d)</span>
+                  <span className="text-[10px] text-muted-foreground">Default 1h, max 720 (30d)</span>
                 </label>
                 {localConfig.manual_regime_override && localConfig.manual_regime_override_expires_at && (
                   <div className="flex items-center gap-2 text-[11px] pb-1.5">
