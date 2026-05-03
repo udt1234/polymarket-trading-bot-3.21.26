@@ -70,6 +70,13 @@ Automated Polymarket trading bot deployed on Railway.
 ## After Every Bug Fix
 Update `_ImportantConfigFiles/lessons.md` with what went wrong and the rule to prevent it.
 
+## Daily Backfill Status Check (MANDATORY)
+**On EVERY first user prompt of the day in this project**, before answering, query Supabase `backfill_progress` table and report:
+- Trump backfill: total posts stored, oldest date fetched, is_complete status
+- If `is_complete = false`, remind user: "Trump backfill still running — X posts stored, oldest = YYYY-MM-DD"
+- Stop reminding once `is_complete = true` for all handles
+- Then proceed with user's actual request
+
 ## Documentation Rules
 - Update FEATURES.md after every feature addition or change
 - Update HANDOFF.md at end of major work sessions

@@ -13,6 +13,7 @@ import {
   FlaskConical,
   Settings,
   BookOpen,
+  Database,
 } from "lucide-react"
 
 const navItems = [
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/trades", label: "Trades", icon: ArrowLeftRight },
   { href: "/backtest", label: "Backtest", icon: FlaskConical },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/data-explorer", label: "Data Explorer", icon: Database },
   { href: "/notes", label: "Notes", icon: BookOpen },
   { href: "/logs", label: "Logs", icon: ScrollText },
   { href: "/settings", label: "Settings", icon: Settings },
