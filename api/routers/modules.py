@@ -19,6 +19,7 @@ from api.modules.truth_social.enhanced_pacing import (
 from api.modules.truth_social.parquet_history import (
     search_parquet_markets, download_and_cache_parquet, preview_parquet_data,
 )
+from api.modules.truth_social.projection import expected_value_bracket
 
 router = APIRouter()
 

@@ -1,7 +1,27 @@
 # PolyMarket Bot — Handoff
 
-## Current State (2026-05-02)
-Bot is LIVE. Data audit + new Data Explorer page. Trump backfill resumed (running locally → Nov 2022), Elon prices backfilling, IFTTT webhook ready for Elon X tweets.
+## Current State (2026-05-02 evening)
+Bot is LIVE & TRADING. Trump module's 4-day silence resolved (missing pending_signals table). Data Explorer + IFTTT webhook + dynamic-bracket support all shipped today.
+
+## Tonight's Critical Fix (2026-05-02 ~22:10 EDT)
+**Trump module had 0 trades for 4 days** — root cause was migration 006 (`pending_signals` table) never applied to prod Supabase. Wait-for-Dip feature was deferring every signal but failing to persist them — silent drop. Fixed by creating the table; 4 deferred entries appeared on the next cycle (2026-05-03 02:09 UTC).
+- Migration 006 applied directly via SQL Editor on prod
+- Lesson logged in `_ImportantConfigFiles/lessons.md` (2026-05-02 entry)
+- `expected_value_bracket` was also imported only inside `_compute_pacing_models` scope, causing NameError in `get_pacing` — moved to module-level import
+- Pending signals visible on module page: `Pending Entries (4)` section auto-renders when rows exist
+
+## Where to Watch Pending Trades
+- **Dashboard**: Modules → Truth Social Posts → "Pending Entries (N)" card near top
+- **Direct API**: `GET /api/modules/{id}/pending-signals?status=waiting`
+- **Cancel button**: red X on each row
+
+## Trump Module Status
+- Engine running 5-min cycles ✅
+- 4 pending entries waiting for price dips (40-59, 120-139, 140-159, 180-199)
+- All target prices 45-99% below current → bot expects significant drops
+- Auto-refreshes every 30s on dashboard
+
+## What's Done This Session
 
 ## What's Done This Session (May 2)
 - **Data audit**: verified storage for both modules, identified Elon raw-tweet gap
