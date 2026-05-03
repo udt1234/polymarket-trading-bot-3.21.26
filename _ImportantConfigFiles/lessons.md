@@ -12,6 +12,17 @@ Living mistake log. After every bug fix or correction, append a rule here.
 
 ---
 
+### 2026-05-02 — Trump Module Stopped Trading 4 Days (Missing pending_signals Table)
+**What happened**: Bot's Trump module ran 5-min cycles, logs showed "signals=4" per cycle, but no trades executed for 4 days. No risk-rejection logs, no execution logs — all silent.
+**Root cause**: Migration 006 (`pending_signals` table) was never applied to prod Supabase. The Wait-for-Dip feature (`wait_for_dip_enabled=true` in module config) calls `_insert_pending_signal()` which has its OWN inner try/except. That inner block swallowed the "relation pending_signals does not exist" error silently. The OUTER `_maybe_defer_signal` then returned `True` (deferred) for every signal — and the engine skipped them from risk_manager.execute(). The function was supposed to fail-closed (return False so signals continue) but instead failed-open (return True = deferred = dropped on the floor).
+**Rule**:
+1. **Apply ALL pending migrations** as part of the deploy checklist. Maintain a `migrations_applied` checklist in HANDOFF.md or run `supabase db push` from CI.
+2. **Don't nest try/except in skip-decision functions**. If a function returns bool (skip vs proceed), failures inside it must propagate to the outer logic so we can log + decide. Inner swallow → outer wrong-decision is an undebuggable failure mode.
+3. **Add a `signals_deferred=N` count to the Cycle log line** so deferred signals are visible alongside `signals=N` (rather than just lumped in with "generated").
+4. **Add a runtime self-check on engine boot** that pings each table the engine writes to (positions, trades, signals, pending_signals, logs, post_count_snapshots, daily_pnl) and refuses to start if any is missing. Fail loud at boot, not silent at runtime.
+
+---
+
 ### 2026-04-01 — Risk Auditor Found 6 Critical Issues
 **What happened**: First full risk audit revealed 3 UNSAFE checks and 3 partially safe.
 **Root cause**: Checks were scaffolded but never wired to live data or execution flow.
