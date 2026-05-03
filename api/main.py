@@ -12,7 +12,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 from api.config import get_settings
 from api.dependencies import get_supabase
 from api.middleware import require_auth
-from api.routers import auth, dashboard, modules, portfolio, trades, analytics, logs, settings as settings_router, data_explorer
+from api.routers import auth, dashboard, modules, portfolio, trades, analytics, logs, settings as settings_router, data_explorer, webhooks
 from api.routers.backtest import router as backtest_router
 from api.services.engine import engine
 from api.services.snapshots import start_snapshot_scheduler, stop_snapshot_scheduler
@@ -60,6 +60,8 @@ app.include_router(logs.router, prefix="/api/logs", tags=["logs"], dependencies=
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"], dependencies=[Depends(require_auth)])
 app.include_router(backtest_router, prefix="/api/backtest", tags=["backtest"], dependencies=[Depends(require_auth)])
 app.include_router(data_explorer.router, prefix="/api/data-explorer", tags=["data-explorer"], dependencies=[Depends(require_auth)])
+# Webhooks: NO auth middleware. Each endpoint authenticates via shared secret in URL.
+app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 app.include_router(ws_router)
 
 

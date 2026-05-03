@@ -36,24 +36,28 @@ async def get_posts(
     sb = get_supabase()
     if handle == "realDonaldTrump":
         q = sb.table("truth_social_posts").select("id,handle,created_at,is_reply,is_reblog", count="exact").eq("handle", handle)
-        if start:
-            q = q.gte("created_at", start)
-        if end:
-            q = q.lte("created_at", end)
-        res = q.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-        rows = res.data or []
-        if hour is not None or dow is not None:
-            filtered = []
-            for r in rows:
-                dt = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
-                if hour is not None and dt.hour != hour:
-                    continue
-                if dow is not None and dt.weekday() != dow:
-                    continue
-                filtered.append(r)
-            rows = filtered
-        return {"data": rows, "total": res.count or 0}
-    return {"data": [], "total": 0, "note": f"No raw post archive for {handle} yet"}
+    elif handle == "elonmusk":
+        q = sb.table("elon_tweets").select("id,handle,created_at,is_reply,is_retweet,url,text", count="exact").eq("handle", "elonmusk")
+    else:
+        return {"data": [], "total": 0, "note": f"No raw post archive for {handle}"}
+
+    if start:
+        q = q.gte("created_at", start)
+    if end:
+        q = q.lte("created_at", end)
+    res = q.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+    rows = res.data or []
+    if hour is not None or dow is not None:
+        filtered = []
+        for r in rows:
+            dt = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+            if hour is not None and dt.hour != hour:
+                continue
+            if dow is not None and dt.weekday() != dow:
+                continue
+            filtered.append(r)
+        rows = filtered
+    return {"data": rows, "total": res.count or 0}
 
 
 @router.get("/post-counts")
@@ -150,6 +154,16 @@ async def data_coverage(handle: str = "realDonaldTrump"):
 
         bf = sb.table("backfill_progress").select("*").eq("handle", handle).execute()
         out["backfill"] = bf.data[0] if bf.data else None
+
+    if handle == "elonmusk":
+        try:
+            res = sb.table("elon_tweets").select("created_at", count="exact").order("created_at").limit(1).execute()
+            oldest = res.data[0]["created_at"] if res.data else None
+            res2 = sb.table("elon_tweets").select("created_at").order("created_at", desc=True).limit(1).execute()
+            newest = res2.data[0]["created_at"] if res2.data else None
+            out["raw_posts"] = {"count": res.count or 0, "oldest": oldest, "newest": newest}
+        except Exception:
+            out["raw_posts"] = {"count": 0, "oldest": None, "newest": None, "note": "elon_tweets table not yet migrated"}
 
     if module_id:
         for src in ["xtracker", "truthsocial_direct"]:
