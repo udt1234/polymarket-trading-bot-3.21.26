@@ -45,3 +45,12 @@ Living mistake log. After every bug fix or correction, append a rule here.
 5. **ENV=production guard before any live execution** — Paper mode is default. Live executor must check `PAPER_MODE != true` before submitting to CLOB.
 6. **Rate limit all external APIs** — 300ms between xTracker, 500ms between Gamma, 1s between CLOB history. Bursting gets IP banned.
 7. **Google SA key was exposed in early session** — Rotated. Never put credentials in .md files, committed code, or .mcp.json.
+
+### 2026-05-02 — Healthcheck endpoint silently broken by auth requirement
+**What happened**: PR #18 added `Depends(require_auth)` to every /api/engine/* route. Railway's `healthcheckPath` in railway.toml was `/api/engine/status` — now returned 401 unauthenticated. Healthcheck failed every deploy from that PR forward. Railway kept the previous-good container running and refused to promote new deploys. **7 subsequent PRs (#21–#28) appeared to merge cleanly but never reached production for ~5 days.**
+**Root cause**: I checked Railway showed "Online" but didn't open the deploy history to confirm the latest commit was the active one. Bot continued running pre-#18 code, dashboard kept rendering, no user-visible smoking gun.
+**Rules going forward**:
+1. Healthcheck endpoints MUST remain unauthenticated. Dedicated `/api/healthz` (or similar), never gated behind auth.
+2. After EVERY merge, check Railway's deploy history — confirm the new commit shows ACTIVE (not just "Online"). The service can be Online while running stale code.
+3. Any PR touching `api/main.py` route definitions or `railway.toml` healthcheck config requires explicit verification that the healthcheck path returns 200 unauthenticated.
+4. If a healthcheck path needs sensitive data, split it: lightweight `/healthz` for the load balancer, full `/status` behind auth for humans.

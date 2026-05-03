@@ -62,6 +62,26 @@ app.include_router(backtest_router, prefix="/api/backtest", tags=["backtest"], d
 app.include_router(ws_router)
 
 
+@app.get("/api/healthz")
+async def healthz():
+    """Unauthenticated liveness probe for Railway/load-balancer healthchecks.
+
+    Returns 200 with minimal info as long as the FastAPI process is responding.
+    Does NOT touch Supabase or any downstream service so transient outages
+    don't cause Railway to bounce the container.
+
+    KNOWN ISSUE that prompted this endpoint: PR #18 (2026-04-27) added
+    `Depends(require_auth)` to /api/engine/status, which silently broke the
+    Railway healthcheck path defined in railway.toml. Every deploy from then
+    until 2026-05-02 failed the healthcheck with 401 and Railway kept the
+    pre-PR-#18 container running — so 7 merged PRs (CNN archive, exit fixes,
+    config validation, etc.) were not actually live. Lesson: healthcheck
+    endpoints must remain unauthenticated AND there must be an integration
+    test that hits the literal path Railway calls.
+    """
+    return {"status": "ok", "running": engine._running}
+
+
 @app.get("/api/engine/status", dependencies=[Depends(require_auth)])
 async def engine_status():
     return engine.status
