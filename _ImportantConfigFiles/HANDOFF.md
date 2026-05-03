@@ -1,6 +1,23 @@
 # PolyMarket Bot — Handoff
 
-## Current State (2026-04-16)
+## Current State (2026-05-02)
+Bot is LIVE. Data audit + new Data Explorer page. Trump backfill resumed (running locally → Nov 2022), Elon prices backfilling, IFTTT webhook ready for Elon X tweets.
+
+## What's Done This Session (May 2)
+- **Data audit**: verified storage for both modules, identified Elon raw-tweet gap
+- **CLAUDE.md daily reminder rule**: nag about Trump backfill until is_complete=true
+- **Trump backfill resumed**: was at 29,830 posts, currently ~30,349 walking back to Oct 30, 2022
+- **Elon price backfill running**: 109 historical Elon auctions being pulled from CLOB
+- **Data Explorer page** (/data-explorer) with full filters: handle, view (raw/counts/prices), date range, hour-of-day, day-of-week, source, bracket. Coverage cards + 3 result table views.
+- **IFTTT webhook** for Elon X: POST /api/webhooks/ifttt/{secret}/elon-tweet → elon_tweets table. Public endpoint, secret-authenticated. Migration 009 applied to prod.
+
+## Setup To Do (User Manual)
+1. Set `WEBHOOK_SECRET` env var on Railway (random ~32 chars)
+2. Create IFTTT applet: Twitter `New tweet by specific user (elonmusk)` → Webhooks POST
+3. Body format: see api/routers/webhooks.py docstring
+4. Optionally: leave Trump backfill running on Railway as one-shot (currently running on local machine and will stop when Claude Code closes)
+
+## Previous Session State
 Bot is LIVE (paper mode). 6 open positions on Trump, $289 invested. Major session: dashboard layout overhaul, paper executor realism, auto-kill switch, Slack notifications wired up, order TTL sweep added.
 
 ## What's Done This Session (9 commits)
