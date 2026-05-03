@@ -3,6 +3,13 @@
 ## Current State (2026-05-02 evening)
 Bot is LIVE & TRADING. Trump module's 4-day silence resolved (missing pending_signals table). Data Explorer + IFTTT webhook + dynamic-bracket support all shipped today.
 
+## Trump Backfill: ✅ COMPLETE (2026-05-03 00:10 EDT)
+- 32,880 total posts in `truth_social_posts` table
+- Walked back to Feb 14, 2022 (account creation)
+- Backfill ran 179 minutes locally, hit end-of-history (8 consecutive empty pages)
+- `backfill_progress.is_complete = true` for `realDonaldTrump`
+- CLAUDE.md daily reminder rule downgraded — no more daily nag
+
 ## Tonight's Critical Fix (2026-05-02 ~22:10 EDT)
 **Trump module had 0 trades for 4 days** — root cause was migration 006 (`pending_signals` table) never applied to prod Supabase. Wait-for-Dip feature was deferring every signal but failing to persist them — silent drop. Fixed by creating the table; 4 deferred entries appeared on the next cycle (2026-05-03 02:09 UTC).
 - Migration 006 applied directly via SQL Editor on prod
