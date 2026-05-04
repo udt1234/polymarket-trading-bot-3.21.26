@@ -252,12 +252,19 @@ def _resolve_config_io(module_id: str):
     Different strategies use different config schemas (truth_social/elon_tweets
     share one; spike_rider has its own). This dispatcher keeps the API URL stable
     while letting each module own its DEFAULT_CONFIG.
+
+    Raises HTTPException(404) when the module doesn't exist (instead of letting
+    .single() bubble a 500).
     """
     sb = get_supabase()
-    res = sb.table("modules").select("strategy,name").eq("id", module_id).single().execute()
-    strategy = ((res.data or {}).get("strategy") or "").lower()
-    name = ((res.data or {}).get("name") or "").lower()
-    if strategy == "spike_rider" or "spike" in name:
+    try:
+        res = sb.table("modules").select("strategy,name").eq("id", module_id).single().execute()
+    except Exception:
+        raise HTTPException(status_code=404, detail="Module not found")
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Module not found")
+    strategy = (res.data.get("strategy") or "").lower()
+    if strategy == "spike_rider":
         from api.modules.spike_rider.module_config import (
             get_module_config as g, save_module_config as s,
         )
@@ -271,19 +278,37 @@ async def get_config(module_id: str):
     return g(module_id)
 
 
+class SpikeRiderConfigUpdate(BaseModel):
+    """Bounds for Spike Rider config updates. Mirrors DEFAULT_CONFIG keys."""
+    entry_size_usd: float | None = Field(default=None, ge=0.01, le=10000)
+    entry_min_price: float | None = Field(default=None, ge=0, le=1)
+    entry_max_price: float | None = Field(default=None, ge=0, le=1)
+    max_open_positions: int | None = Field(default=None, ge=0, le=100)
+    max_open_per_auction: int | None = Field(default=None, ge=0, le=50)
+    elapsed_max_pct: float | None = Field(default=None, ge=0, le=1)
+    focus_brackets: list[str] | None = None
+    sell_rule_type: str | None = None
+    sell_multi_stage_targets: list[float] | None = None
+    sell_target_multiplier: float | None = Field(default=None, ge=1.01, le=50)
+    sell_trail_pct: float | None = Field(default=None, ge=0.01, le=0.99)
+    sell_min_gain_pct: float | None = Field(default=None, ge=0, le=10)
+    fee_pct: float | None = Field(default=None, ge=0, le=0.10)
+    slippage_pct: float | None = Field(default=None, ge=0, le=0.20)
+    enabled: bool | None = None
+    auto_pause_after_losses: int | None = Field(default=None, ge=0, le=100)
+    model_config = {"extra": "ignore"}
+
+
 @router.put("/{module_id}/config")
 async def update_config(module_id: str, config: dict):
     """Spike Rider has different fields than truth_social, so the endpoint
-    accepts an unstructured dict here and lets each module's save function
-    merge against its own DEFAULT_CONFIG. truth_social bounds are enforced
-    one layer up via ModuleConfigUpdate where it still applies."""
+    routes by strategy and applies the appropriate Pydantic validator."""
     g, s = _resolve_config_io(module_id)
     if g is get_module_config:
-        # Re-apply pydantic bounds for truth_social/elon_tweets configs
         validated = ModuleConfigUpdate(**(config or {}))
-        payload = validated.model_dump(exclude_unset=True)
     else:
-        payload = config or {}
+        validated = SpikeRiderConfigUpdate(**(config or {}))
+    payload = validated.model_dump(exclude_unset=True)
     s(module_id, payload)
     return g(module_id)
 

@@ -260,17 +260,19 @@ class TradingEngine:
             return False
 
     def _get_module_cfg(self, module, module_id: str) -> dict:
+        # Dispatch by the BaseModule.name field (canonical), not a name substring,
+        # so a module with "spike" in its display name doesn't get misrouted.
         try:
-            name = getattr(module, "name", "").lower()
-            if "spike_rider" in name or "spike" in name:
+            name = getattr(module, "name", "")
+            if name == "spike_rider":
                 from api.modules.spike_rider.module_config import get_module_config as get_spike_cfg
                 return get_spike_cfg(module_id)
-            if "trump" in name or "truth" in name:
-                from api.modules.truth_social.module_config import get_module_config
-                return get_module_config(module_id)
-            if "elon" in name:
+            if name == "elon_tweets":
                 from api.modules.elon_tweets.module_config import get_module_config as get_elon_cfg
                 return get_elon_cfg(module_id)
+            if name == "truth_social":
+                from api.modules.truth_social.module_config import get_module_config
+                return get_module_config(module_id)
         except Exception:
             pass
         return {}

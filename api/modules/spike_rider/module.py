@@ -155,6 +155,7 @@ class SpikeRiderModule(BaseModule):
                 market_price=price, kelly_pct=kelly_pct, confidence=0.5,
                 metadata={
                     "strategy": "spike_rider",
+                    "skip_edge_check": True,
                     "entry_size_usd": entry_size_usd,
                     "entry_price_band": [entry_min, entry_max],
                     "elapsed_pct": round(elapsed_pct, 3),
