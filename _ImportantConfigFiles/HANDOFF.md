@@ -1,6 +1,19 @@
 # PolyMarket Bot — Handoff
 
-## Current State (2026-05-02 evening)
+## Current State (2026-05-04)
+Spike Rider module shipped (paper-only). Trump + Elon modules still LIVE & TRADING. Sell-rule simulator validated `multi_stage_2x_3x_5x` as the winning exit on 211 historical Elon brackets (78% win rate, +155% median return).
+
+## Spike Rider Module (NEW — 2026-05-04)
+- New module `api/modules/spike_rider/` — buys cheap brackets early, rides spikes, exits per configurable sell rule
+- New tables: `auction_series` (handle/title_filter mapping), `position_exit_state` (multi-stage tranche tracking)
+- Migration: `supabase/migrations/010_spike_rider.sql` — **APPLY MANUALLY via Supabase SQL Editor before activation**
+- Default config: $10 per entry, entry price band [0.02, 0.40], multi_stage exits at 2x/3x/5x with 30% trailing-stop backup
+- Seeded "Spike Rider — Elon" module in `paper` status with `$100` bankroll
+- Settings UI: dedicated `SpikeRiderSettings` card on the module page (page.tsx detects `strategy === 'spike_rider'`)
+- Sell-rule simulator: `python scripts/simulate_sell_rules.py --module elon` — replays `price_snapshots`, outputs markdown report to `_ImportantConfigFiles/spike_rider_simulator_report.md`
+- After migration applied: flip module status to `active` to start paper-trading
+
+## Earlier State (2026-05-02 evening)
 Bot is LIVE & TRADING. Trump module's 4-day silence resolved (missing pending_signals table). Data Explorer + IFTTT webhook + dynamic-bracket support all shipped today.
 
 ## Trump Backfill: ✅ COMPLETE (2026-05-03 00:10 EDT)

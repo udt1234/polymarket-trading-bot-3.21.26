@@ -262,6 +262,9 @@ class TradingEngine:
     def _get_module_cfg(self, module, module_id: str) -> dict:
         try:
             name = getattr(module, "name", "").lower()
+            if "spike_rider" in name or "spike" in name:
+                from api.modules.spike_rider.module_config import get_module_config as get_spike_cfg
+                return get_spike_cfg(module_id)
             if "trump" in name or "truth" in name:
                 from api.modules.truth_social.module_config import get_module_config
                 return get_module_config(module_id)

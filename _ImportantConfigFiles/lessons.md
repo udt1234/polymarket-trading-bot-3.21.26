@@ -12,6 +12,16 @@ Living mistake log. After every bug fix or correction, append a rule here.
 
 ---
 
+### 2026-05-04 — Sell-rule simulator inflated by dust-priced brackets
+**What happened**: First run of `simulate_sell_rules.py` with no entry-price filter showed `target_5x` returning +88,476% on a single trade because some snapshots had brackets at near-0 prices. Average return looked ridiculous.
+**Root cause**: Polymarket markets ship illiquid brackets at 0.001¢ that you'd never realistically fill. Without a min-entry-price filter, those single trades dominated the report's average return and made `target_5x` look like the winner when the median return was actually -101%.
+**Rule**:
+1. Any backtest/simulator that operates on raw price snapshots needs a realistic **entry-price band** parameter. Default `entry_min=0.02` (2¢ — plausible fill) and `entry_max=0.40` (don't enter brackets that already spiked).
+2. Rank sell rules by **median return**, not total P&L or average return. A single outlier trade can dominate sums but not medians.
+3. Always include `buy_and_hold` as a baseline rule in any sell-rule simulator so the reader can sanity-check whether anything is actually beating "do nothing."
+
+---
+
 ### 2026-05-02 — Trump Module Stopped Trading 4 Days (Missing pending_signals Table)
 **What happened**: Bot's Trump module ran 5-min cycles, logs showed "signals=4" per cycle, but no trades executed for 4 days. No risk-rejection logs, no execution logs — all silent.
 **Root cause**: Migration 006 (`pending_signals` table) was never applied to prod Supabase. The Wait-for-Dip feature (`wait_for_dip_enabled=true` in module config) calls `_insert_pending_signal()` which has its OWN inner try/except. That inner block swallowed the "relation pending_signals does not exist" error silently. The OUTER `_maybe_defer_signal` then returned `True` (deferred) for every signal — and the engine skipped them from risk_manager.execute(). The function was supposed to fail-closed (return False so signals continue) but instead failed-open (return True = deferred = dropped on the floor).

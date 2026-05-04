@@ -27,11 +27,28 @@ DOW_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def _detect_handle(module_data: dict) -> str:
+    """For spike_rider modules, look up handle from auction_series. For
+    legacy modules, infer from name. Falls back to realDonaldTrump."""
+    strategy = (module_data.get("strategy", "") or "").lower()
+    if strategy == "spike_rider":
+        try:
+            sb = get_supabase()
+            res = (
+                sb.table("auction_series")
+                .select("handle")
+                .eq("module_id", module_data.get("id"))
+                .limit(1)
+                .execute()
+            )
+            if res.data and res.data[0].get("handle"):
+                return res.data[0]["handle"]
+        except Exception:
+            pass
     name = (module_data.get("name", "") or "").lower()
-    if "truth" in name or "trump" in name:
-        return "realDonaldTrump"
     if "elon" in name:
         return "elonmusk"
+    if "truth" in name or "trump" in name:
+        return "realDonaldTrump"
     return "realDonaldTrump"
 
 
@@ -229,18 +246,46 @@ async def kill_module(module_id: str):
     return {"ok": True, "positions_closed": closed_count}
 
 
+def _resolve_config_io(module_id: str):
+    """Pick the right (get, save) pair based on module.strategy.
+
+    Different strategies use different config schemas (truth_social/elon_tweets
+    share one; spike_rider has its own). This dispatcher keeps the API URL stable
+    while letting each module own its DEFAULT_CONFIG.
+    """
+    sb = get_supabase()
+    res = sb.table("modules").select("strategy,name").eq("id", module_id).single().execute()
+    strategy = ((res.data or {}).get("strategy") or "").lower()
+    name = ((res.data or {}).get("name") or "").lower()
+    if strategy == "spike_rider" or "spike" in name:
+        from api.modules.spike_rider.module_config import (
+            get_module_config as g, save_module_config as s,
+        )
+        return g, s
+    return get_module_config, save_module_config
+
+
 @router.get("/{module_id}/config")
 async def get_config(module_id: str):
-    return get_module_config(module_id)
+    g, _ = _resolve_config_io(module_id)
+    return g(module_id)
 
 
 @router.put("/{module_id}/config")
-async def update_config(module_id: str, config: ModuleConfigUpdate):
-    # Pydantic enforces bounds; only fields explicitly set in the payload are
-    # forwarded so we don't overwrite stored values with None.
-    payload = config.model_dump(exclude_unset=True)
-    save_module_config(module_id, payload)
-    return get_module_config(module_id)
+async def update_config(module_id: str, config: dict):
+    """Spike Rider has different fields than truth_social, so the endpoint
+    accepts an unstructured dict here and lets each module's save function
+    merge against its own DEFAULT_CONFIG. truth_social bounds are enforced
+    one layer up via ModuleConfigUpdate where it still applies."""
+    g, s = _resolve_config_io(module_id)
+    if g is get_module_config:
+        # Re-apply pydantic bounds for truth_social/elon_tweets configs
+        validated = ModuleConfigUpdate(**(config or {}))
+        payload = validated.model_dump(exclude_unset=True)
+    else:
+        payload = config or {}
+    s(module_id, payload)
+    return g(module_id)
 
 
 @router.get("/{module_id}/auctions")
