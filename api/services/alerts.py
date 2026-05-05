@@ -151,6 +151,63 @@ async def notify_stale_data(handle: str, hours: float, source: str = "xTracker")
     await send_slack(msg)
 
 
+async def notify_daily_module_status_digest():
+    """Daily Slack message listing every module that is NOT active, with the
+    most recent reason. Fires at most once per day (24h dedupe). Skipped
+    entirely if zero modules are down (all-clear days are silent).
+
+    Reason source: most recent log entry for the module where log_type IN
+    ('system','risk') with a non-empty message in the last 7 days. Falls back
+    to 'No recent reason logged' if nothing found.
+    """
+    # Has its own toggle (alert_daily_module_digest_enabled). Defaults ON, but
+    # if explicitly disabled, fall back to the module_status_change toggle so
+    # turning that off silences both.
+    cfg = _alert_settings()
+    if cfg.get("alert_daily_module_digest_enabled", True) is False:
+        return
+    if not _is_alert_enabled("module_status_change"):
+        return
+    key = "alert_daily_module_digest"
+    if not _dedupe_check_and_record(key, 24.0, {}):
+        return
+    try:
+        sb = get_supabase()
+        # All non-active modules (paused, killed, scaffold, paper)
+        mods = sb.table("modules").select("id,name,status").execute().data or []
+        down = [m for m in mods if (m.get("status") or "").lower() not in ("active",)]
+        if not down:
+            return  # Silence on all-clear days
+
+        lines = []
+        for m in down:
+            mid = m["id"]
+            reason = "No recent reason logged."
+            try:
+                logs = sb.table("logs").select("message,log_type,severity,created_at") \
+                    .eq("module_id", mid).in_("log_type", ["system", "risk"]) \
+                    .order("created_at", desc=True).limit(1).execute().data or []
+                if logs:
+                    reason = (logs[0].get("message") or reason)[:240]
+            except Exception:
+                pass
+            emoji = {
+                "killed": ":skull:",
+                "paused": ":pause_button:",
+                "paper":  ":page_facing_up:",
+                "scaffold": ":construction:",
+            }.get((m.get("status") or "").lower(), ":grey_question:")
+            lines.append(f"{emoji} *{m.get('name')}* — `{m.get('status')}`\n_{reason}_")
+
+        msg = (
+            f":bell: *Daily Module Status — {len(down)} not active*\n\n"
+            + "\n\n".join(lines)
+        )
+        await send_slack(msg)
+    except Exception as e:
+        log.warning(f"daily module digest failed: {e}")
+
+
 async def notify_rejection_spike(
     module_id: str, module_name: str, count: int, top_reasons: list[str],
 ):

@@ -1,14 +1,55 @@
 # PolyMarket Bot — Handoff
 
 ## Current State (2026-05-05)
-Bot LIVE on Trump + Elon (paper). Spike Rider work was merged then reverted (PR #30 → revert). Full rebuild spec in **`_ImportantConfigFiles/SPIKE_RIDER_SPEC.md`** — covers strategy, simulator results, architecture lessons, required platform changes, UI changes, DB schema, sell-rule logic, and test plan. Rebuild from there once core file cleanup is done.
+Bot LIVE on Trump + Elon (paper). Spike Rider v1 (PR #30) was reverted. **Spike Trading v2 (rebuild) shipped 2026-05-05** — see `spike_trading_module_spec.md` and the new `api/modules/spike_trading/` package. Module row inserted in `modules` table with `status='paper'` (id `4faba37c-906b-405f-ad49-737b12e75b16`). Migration `010_spike_positions.sql` applied to prod. Shadow mode default — no live trades until promoted.
 
-### Spike Rider revert checklist (done 2026-05-05)
+### Spike Rider v1 revert checklist (done 2026-05-05)
 - ✅ Module row deleted from `modules` table
 - ✅ `auction_series` and `position_exit_state` tables dropped
 - ✅ All `spike_rider` code reverted via revert commit on master
 - ✅ Trump + Elon modules untouched
-- See `SPIKE_RIDER_SPEC.md` for the rebuild plan
+- See `SPIKE_RIDER_SPEC.md` for the v1 rebuild plan (informed v2 architecture)
+
+## ⭐ NEW: Full 3.5-Year Polymarket History via Parquet (2026-05-05)
+We now have free streaming access to the **complete Polymarket trade history** (Nov 2022 → present, 766M trades, 1M markets) via the SII-WANGZJ HuggingFace dataset.
+
+**Tooling added** (in `_DataMetricPulls/`):
+- `duckdb_remote.py` — DuckDB connection helper. Streams Parquet files from HF over HTTPS, caches metadata locally, exposes `markets` / `quant` / `trades` SQL views.
+- `full_history_analysis.py` — strict-recurring classification + flip-pattern ranking using the full 3.5y dataset.
+- `duckdb_cache/polymarket_remote.duckdb` — persistent DuckDB cache (materialized tables live here, ~150MB).
+- HF token stored at `~/.credentials/shared.env` as `HF_TOKEN`.
+
+**vs the previous LuciferForge $9 buy** (which we kept):
+| Source | Cost | Time | Trades | Markets |
+|---|---|---|---|---|
+| LuciferForge SQLite | $9 | 30 days (Mar–Apr 2026) | 8M | 9.5K |
+| SII-WANGZJ Parquet | $0 | 3.5 years | **766M** | **1M** |
+
+Use `duckdb_remote` whenever you need historical context beyond the bot's own `price_snapshots` table (~3 months) or the LuciferForge sample (30 days).
+
+---
+
+## TODO — Update Trump + Elon Modules with Parquet Data
+**Added: 2026-05-05**
+
+We now have access to the **full SII-WANGZJ Polymarket dataset** via DuckDB+HuggingFace streaming (3.5 years of trade history, 766M trade events, 1M markets — see `_DataMetricPulls/duckdb_remote.py` and `_DataMetricPulls/full_history_analysis.py`).
+
+**Goal**: refit/recalibrate the existing Trump and Elon modules using this data instead of the 30-day LuciferForge sample we initially used.
+
+Specific tasks:
+1. **Re-run Elon `<40` flip analysis** on full 3.5-year history — confirm or refute the +194% median peak finding from the 19-auction sample.
+2. **Recalibrate sell rule thresholds** for Elon module — the Target 2× rule was tuned on 30 days; verify on 3.5 years.
+3. **Recompute Trump bracket-level priors** using the full historical price data — feed into ensemble model weights.
+4. **Build a "pacing-aware sell rule"** using the full per-trade timestamps (we couldn't do this with 15-min snapshots).
+5. **Backfill Trump+Elon `price_snapshots` table** with longer history (currently only Feb-May 2026 for Trump; Mar-May 2026 for Elon) — 3+ years of additional bracket prices available from parquet.
+
+Reference files:
+- `_DataMetricPulls/duckdb_remote.py` — DuckDB connection helper with HF token
+- `_DataMetricPulls/full_history_analysis.py` — strict-recurring classification + ranking
+- `_DataMetricPulls/full_history/STRICT_recurring_full_ranked.csv` — output (when run completes)
+- HF token: stored in `~/.credentials/shared.env` as `HF_TOKEN`
+
+---
 
 ## Earlier State (2026-05-02 evening)
 Bot is LIVE & TRADING. Trump module's 4-day silence resolved (missing pending_signals table). Data Explorer + IFTTT webhook + dynamic-bracket support all shipped today.

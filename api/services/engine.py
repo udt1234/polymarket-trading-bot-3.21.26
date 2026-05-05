@@ -96,6 +96,8 @@ class TradingEngine:
         self.scheduler.add_job(self._run_order_ttl_sweep, "interval", minutes=5, max_instances=1)
         self.scheduler.add_job(self._run_order_book_snapshot, "interval", minutes=5, max_instances=1)
         self.scheduler.add_job(self._run_post_count_snapshot, "interval", minutes=5, max_instances=1)
+        # Daily 9 AM ET digest of any non-active modules — silent if all clear
+        self.scheduler.add_job(self._run_daily_module_digest, "cron", hour=13, minute=0, max_instances=1)
         self.scheduler.start()
         self._running = True
         log.info(f"Engine started: interval={interval}s, paper={settings.paper_mode}, shadow={settings.shadow_mode}, multi={self._multi_mode}")
@@ -535,18 +537,43 @@ class TradingEngine:
             log.error(f"Post count snapshot error: {e}")
 
     def _run_order_ttl_sweep(self):
+        """Cancel stale unfilled orders.
+
+        Default TTL: 5 min (most strategies should fill near top-of-book quickly).
+        Spike trading orders (deep limits at 0.3-0.5¢) need a longer TTL — they
+        live up to 24h waiting for a price drop. We exempt them from the default
+        sweep and let the spike module's own buy_cancel_after_hours config govern.
+        """
         ORDER_TTL_MINUTES = 5
         try:
             sb = get_supabase()
             cutoff = datetime.now(timezone.utc).replace(microsecond=0)
             from datetime import timedelta
             cutoff = (cutoff - timedelta(minutes=ORDER_TTL_MINUTES)).isoformat()
-            stale = sb.table("orders").select("id").in_("status", ["submitted", "live"]).lt("created_at", cutoff).execute()
+
+            # Identify spike_trading module IDs to exempt
+            spike_modules = sb.table("modules").select("id").ilike("name", "%spike%").execute()
+            spike_ids = [m["id"] for m in (spike_modules.data or [])]
+
+            q = sb.table("orders").select("id").in_("status", ["submitted", "live"]).lt("created_at", cutoff)
+            if spike_ids:
+                q = q.not_.in_("module_id", spike_ids)
+            stale = q.execute()
             if stale.data:
                 ids = [o["id"] for o in stale.data]
                 for oid in ids:
                     sb.table("orders").update({"status": "cancelled"}).eq("id", oid).execute()
                 log.info(f"Order TTL sweep: cancelled {len(ids)} stale orders older than {ORDER_TTL_MINUTES}min")
+
+            # Spike-specific TTL: 24h on buy orders (config-driven later)
+            if spike_ids:
+                spike_cutoff = (datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=24)).isoformat()
+                spike_stale = sb.table("orders").select("id").in_("status", ["submitted", "live"]).in_("module_id", spike_ids).eq("side", "BUY").lt("created_at", spike_cutoff).execute()
+                if spike_stale.data:
+                    sids = [o["id"] for o in spike_stale.data]
+                    for oid in sids:
+                        sb.table("orders").update({"status": "cancelled"}).eq("id", oid).execute()
+                    log.info(f"Spike TTL sweep: cancelled {len(sids)} stale spike BUYs older than 24h")
         except Exception as e:
             log.error(f"Order TTL sweep error: {e}")
 
@@ -623,6 +650,16 @@ class TradingEngine:
 
         except Exception as e:
             log.error(f"Auction monitor error: {e}")
+
+    def _run_daily_module_digest(self):
+        """Once-daily Slack message listing modules that are not 'active'.
+        Silent on all-clear days. See alerts.notify_daily_module_status_digest.
+        """
+        try:
+            from api.services.alerts import notify_daily_module_status_digest
+            _fire_and_forget_async(notify_daily_module_status_digest())
+        except Exception as e:
+            log.warning(f"daily module digest failed: {e}")
 
     def _run_walk_forward(self):
         sb = get_supabase()
