@@ -42,6 +42,16 @@ class BaseModule(ABC):
         wire up the module's own module_config.get_module_config()."""
         return {}
 
+    def save_config(self, module_id: str, config: dict) -> None:
+        """Persist a partial config update for this module. Override to wire
+        up the module's own module_config.save_module_config()."""
+        raise NotImplementedError(f"{self.name} must implement save_config()")
+
+    def get_auction_title_filter(self) -> str:
+        """Substring used to filter xTracker auction titles for this module's
+        market type. Default returns empty string = no filter."""
+        return ""
+
     def supports_direct_post_count(self) -> bool:
         """True if this module can count posts directly (bypassing xTracker)."""
         return False

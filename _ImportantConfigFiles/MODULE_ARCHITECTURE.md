@@ -96,7 +96,9 @@ class MyModule(BaseModule):
     def get_handle(self) -> str: ...                  # "realDonaldTrump", "elonmusk"
     def get_platform(self) -> str: ...                # "truthsocial", "x"
     def get_display_keywords(self) -> list[str]: ...  # ["elon"] or ["truth", "trump"]
-    def get_config(self, module_id: str) -> dict: ... # delegates to module_config.py
+    def get_config(self, module_id: str) -> dict: ... # delegates to module_config.get_module_config
+    def save_config(self, module_id: str, config: dict): ... # delegates to module_config.save_module_config
+    def get_auction_title_filter(self) -> str: ...    # "tweets", "truth social"
 
     # OPTIONAL — override only if your module has a direct post counter
     def supports_direct_post_count(self) -> bool: return True

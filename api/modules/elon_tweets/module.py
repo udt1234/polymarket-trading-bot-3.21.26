@@ -34,18 +34,26 @@ class ElonTweetsModule(BaseModule):
     name = "elon_tweets"
     enabled = True
     HANDLE = "elonmusk"
+    PLATFORM = "x"
 
     def get_handle(self) -> str:
         return self.HANDLE
 
     def get_platform(self) -> str:
-        return "x"
+        return self.PLATFORM
 
     def get_display_keywords(self) -> list[str]:
         return ["elon"]
 
     def get_config(self, module_id: str) -> dict:
         return get_module_config(module_id)
+
+    def save_config(self, module_id: str, config: dict) -> None:
+        from api.modules.elon_tweets.module_config import save_module_config
+        save_module_config(module_id, config)
+
+    def get_auction_title_filter(self) -> str:
+        return "tweets"
 
     def evaluate(self) -> list[Signal]:
         try:
@@ -68,7 +76,7 @@ class ElonTweetsModule(BaseModule):
         module_config = module_row.data
         module_id = module_config["id"]
 
-        tracking = await fetch_active_tracking(self.HANDLE)
+        tracking = await fetch_active_tracking(self.HANDLE, self.PLATFORM)
         if not tracking:
             self._log(sb, module_id, "decision", "warning", "No active xTracker tracking found")
             return []
@@ -81,7 +89,7 @@ class ElonTweetsModule(BaseModule):
         if slug != module_config.get("market_slug"):
             sb.table("modules").update({"market_slug": slug}).eq("id", module_id).execute()
 
-        raw_data = await fetch_xtracker_posts(self.HANDLE)
+        raw_data = await fetch_xtracker_posts(self.HANDLE, self.PLATFORM)
         hourly_counts = parse_hourly_counts(raw_data)
 
         market_prices = await fetch_market_prices(slug)
@@ -94,7 +102,7 @@ class ElonTweetsModule(BaseModule):
             dynamic_brackets = list(market_prices.keys())
 
         # Data sources: history + news + social intelligence
-        weekly_history = await fetch_historical_weekly_totals(self.HANDLE, weeks=12)
+        weekly_history = await fetch_historical_weekly_totals(self.HANDLE, weeks=12, platform=self.PLATFORM)
         news = await fetch_google_news("Elon Musk")
         lunar_sentiment = await fetch_social_sentiment("elon musk")
         lunar_creator = await fetch_creator_metrics("elonmusk", network="x")
@@ -329,24 +337,10 @@ class ElonTweetsModule(BaseModule):
                 )
                 signals.append(signal)
 
-        # Stop-loss check (backtest: required for Elon, 30% threshold)
-        stop_loss_pct = mod_cfg.get("stop_loss_pct", 0.30)
-        if stop_loss_pct > 0:
-            open_positions = sb.table("positions").select("*").eq("module_id", module_id).eq("status", "open").execute()
-            for pos in (open_positions.data or []):
-                bracket = pos.get("bracket", "")
-                entry_price = pos.get("avg_price", 0)
-                current_price = market_prices.get(bracket, 0)
-                if entry_price > 0 and current_price > 0 and current_price <= entry_price * (1 - stop_loss_pct):
-                    self._log(sb, module_id, "decision", "warning",
-                              f"Stop-loss triggered: {bracket} dropped {((entry_price - current_price) / entry_price * 100):.1f}% "
-                              f"(entry={entry_price:.4f}, now={current_price:.4f})")
-                    signals.append(Signal(
-                        module_id=module_id, market_id=slug, bracket=bracket,
-                        side="SELL", edge=0, model_prob=0, market_price=current_price,
-                        kelly_pct=1.0, confidence=1.0,
-                        metadata={"reason": "stop_loss", "entry_price": entry_price, "current_price": current_price},
-                    ))
+        # Stop-loss / take-profit / trailing-stop are handled by exit_manager,
+        # which loads stop_loss_pct from module config via the BaseModule API
+        # and runs every cycle. Don't append SELL signals here — they would
+        # be rejected by _check_edge_threshold (edge=0 < min_edge_threshold).
 
         self._log(sb, module_id, "decision", "info",
                   f"Cycle: slug={slug}, total={running_total}, elapsed={elapsed_days:.1f}/{total_days:.1f}d, "

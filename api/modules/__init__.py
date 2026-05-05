@@ -8,16 +8,26 @@ log = logging.getLogger(__name__)
 _registry: dict[str, BaseModule] = {}
 
 
+_NON_MODULE_DIRS = {"base", "shared"}
+
+
 class ModuleRegistry:
     def discover(self):
+        """Idempotent — names already in the registry are kept (not replaced).
+        Skips `base` and `shared` packages explicitly; they are infrastructure,
+        not trading modules."""
         import api.modules as pkg
         for importer, name, ispkg in pkgutil.iter_modules(pkg.__path__):
-            if not ispkg or name == "base":
+            if not ispkg or name in _NON_MODULE_DIRS:
                 continue
             try:
                 mod = importlib.import_module(f"api.modules.{name}")
                 if hasattr(mod, "Module"):
                     instance = mod.Module()
+                    if instance.name in _registry:
+                        # Keep the existing instance so any in-flight cycles
+                        # holding a reference to it stay valid across restarts.
+                        continue
                     _registry[instance.name] = instance
                     log.info(f"Discovered module: {instance.name}")
             except Exception as e:
