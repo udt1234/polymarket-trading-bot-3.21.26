@@ -62,20 +62,20 @@ def normalize_bracket(raw: str) -> str:
     return BRACKET_ALIASES.get(raw, raw)
 
 
-async def _fetch_trackings_raw(handle: str = "realDonaldTrump") -> list:
+async def _fetch_trackings_raw(handle: str = "realDonaldTrump", platform: str = "truthsocial") -> list:
     async with httpx.AsyncClient(timeout=15) as client:
         data = await _xtracker_get(
             client,
             f"{XTRACKER_BASE}/users/{handle}/trackings",
-            {"platform": "truthsocial"},
-            cache_key=f"trackings:{handle}",
+            {"platform": platform},
+            cache_key=f"trackings:{platform}:{handle}",
         )
         trackings = data.get("data", []) if isinstance(data, dict) else data
         return trackings if isinstance(trackings, list) else []
 
 
-async def fetch_active_tracking(handle: str = "realDonaldTrump") -> dict | None:
-    trackings = await _fetch_trackings_raw(handle)
+async def fetch_active_tracking(handle: str = "realDonaldTrump", platform: str = "truthsocial") -> dict | None:
+    trackings = await _fetch_trackings_raw(handle, platform)
     if not trackings:
         return None
 
@@ -100,11 +100,12 @@ async def fetch_active_tracking(handle: str = "realDonaldTrump") -> dict | None:
 
 async def fetch_active_or_upcoming_tracking(
     handle: str = "realDonaldTrump", allow_upcoming: bool = False,
+    platform: str = "truthsocial",
 ) -> dict | None:
     """Prefer the currently active tracking; if none and allow_upcoming, return
     the nearest future tracking. Used by modules with pre_auction_buying_enabled.
     """
-    trackings = await _fetch_trackings_raw(handle)
+    trackings = await _fetch_trackings_raw(handle, platform)
     if not trackings:
         return None
 
@@ -135,8 +136,8 @@ async def fetch_active_or_upcoming_tracking(
     return None
 
 
-async def fetch_all_active_trackings(handle: str = "realDonaldTrump") -> list[dict]:
-    trackings = await _fetch_trackings_raw(handle)
+async def fetch_all_active_trackings(handle: str = "realDonaldTrump", platform: str = "truthsocial") -> list[dict]:
+    trackings = await _fetch_trackings_raw(handle, platform)
     now = datetime.now(timezone.utc)
     active = []
     for t in trackings:
@@ -154,8 +155,8 @@ async def fetch_all_active_trackings(handle: str = "realDonaldTrump") -> list[di
     return active
 
 
-async def fetch_tracking_by_id(handle: str, tracking_id: str) -> dict | None:
-    trackings = await _fetch_trackings_raw(handle)
+async def fetch_tracking_by_id(handle: str, tracking_id: str, platform: str = "truthsocial") -> dict | None:
+    trackings = await _fetch_trackings_raw(handle, platform)
     for t in trackings:
         tid = t.get("id") or t.get("trackingId")
         if str(tid) == str(tracking_id):
@@ -185,8 +186,8 @@ async def fetch_xtracker_stats(tracking_id: str) -> dict:
         return data.get("data", data) if isinstance(data, dict) else data
 
 
-async def fetch_xtracker_posts(handle: str = "realDonaldTrump") -> dict:
-    tracking = await fetch_active_tracking(handle)
+async def fetch_xtracker_posts(handle: str = "realDonaldTrump", platform: str = "truthsocial") -> dict:
+    tracking = await fetch_active_tracking(handle, platform)
     if not tracking:
         return {}
     tracking_id = tracking.get("id") or tracking.get("trackingId")
@@ -364,8 +365,8 @@ async def fetch_market_volumes(slug: str) -> dict[str, float]:
         return volumes
 
 
-async def fetch_market_prices_auto(handle: str = "realDonaldTrump") -> tuple[dict[str, float], str]:
-    tracking = await fetch_active_tracking(handle)
+async def fetch_market_prices_auto(handle: str = "realDonaldTrump", platform: str = "truthsocial") -> tuple[dict[str, float], str]:
+    tracking = await fetch_active_tracking(handle, platform)
     if not tracking:
         return {}, ""
     slug = extract_slug_from_tracking(tracking)
@@ -375,21 +376,14 @@ async def fetch_market_prices_auto(handle: str = "realDonaldTrump") -> tuple[dic
     return prices, slug
 
 
-async def fetch_historical_weekly_totals(handle: str = "realDonaldTrump", weeks: int = 12) -> list[float]:
+async def fetch_historical_weekly_totals(handle: str = "realDonaldTrump", weeks: int = 12, platform: str = "truthsocial") -> list[float]:
     # Try local historical data first (from import scripts — more complete)
     local = _load_local_weekly_totals(handle, weeks)
     if local:
         return local
 
-    # Fallback: fetch live from xTracker API
-    async with httpx.AsyncClient(timeout=15) as client:
-        res = await client.get(
-            f"{XTRACKER_BASE}/users/{handle}/trackings",
-            params={"platform": "truthsocial"},
-        )
-        res.raise_for_status()
-        data = res.json()
-        trackings = data.get("data", []) if isinstance(data, dict) else data
+    # Fallback: fetch live from xTracker API (uses retry+cache)
+    trackings = await _fetch_trackings_raw(handle, platform)
 
     weekly_totals = []
     for t in trackings[:weeks]:
@@ -461,3 +455,28 @@ async def fetch_wallet_history(address: str) -> list[dict]:
         except Exception as e:
             log.warning(f"Wallet history fetch failed: {e}")
             return []
+
+
+def _bracket_sort_key(bracket: str) -> int:
+    cleaned = bracket.replace("+", "").replace("<", "").replace("≥", "")
+    first = cleaned.split("-")[0]
+    try:
+        return int(first)
+    except ValueError:
+        return 9999
+
+
+async def fetch_market_brackets(slug: str) -> list[str]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        res = await client.get(f"{GAMMA_BASE}/events", params={"slug": slug})
+        res.raise_for_status()
+        events = res.json()
+        if not isinstance(events, list) or not events:
+            return []
+        markets = events[0].get("markets", [])
+        brackets = []
+        for m in markets:
+            raw = m.get("groupItemTitle", m.get("question", ""))
+            if raw:
+                brackets.append(raw.strip())
+        return sorted(brackets, key=_bracket_sort_key)

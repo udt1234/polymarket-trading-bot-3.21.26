@@ -19,7 +19,7 @@ def take_price_snapshot():
 def _take_price_snapshot_sync():
     import json as _json
     import httpx as _httpx
-    from api.modules.truth_social.data import normalize_bracket, extract_slug_from_tracking
+    from api.modules.shared.polymarket import normalize_bracket, extract_slug_from_tracking
 
     GAMMA = "https://gamma-api.polymarket.com"
     XTRACKER = "https://xtracker.polymarket.com/api"

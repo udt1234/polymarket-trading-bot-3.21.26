@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from api.modules.base import BaseModule
 from api.services.risk_manager import Signal
-from api.modules.truth_social.data import (
+from api.modules.shared.polymarket import (
     fetch_xtracker_posts, fetch_active_tracking, fetch_active_or_upcoming_tracking,
     extract_slug_from_tracking,
     parse_hourly_counts, parse_daily_totals, compute_running_total,

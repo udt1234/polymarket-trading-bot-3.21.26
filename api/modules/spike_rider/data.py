@@ -1,17 +1,16 @@
 """Data layer for Spike Rider.
 
 Resolves the module's auction_series row to find handle/title_filter, then
-fetches the active xTracker tracking + market prices via the existing helpers
-in truth_social.data. This indirection lets one Spike Rider module per series
-share infrastructure with the existing modules without hardcoding handles.
+fetches the active xTracker tracking + market prices via shared.polymarket.
+One Spike Rider module per series shares the same Polymarket data layer.
 """
 from api.dependencies import get_supabase
-from api.modules.truth_social.data import (
+from api.modules.shared.polymarket import (
     fetch_active_tracking as _fetch_active_tracking,
     extract_slug_from_tracking,
     fetch_market_prices,
+    fetch_market_brackets,
 )
-from api.modules.elon_tweets.data import fetch_market_brackets
 
 
 def get_series_for_module(module_id: str) -> dict | None:

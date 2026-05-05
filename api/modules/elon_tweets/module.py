@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from api.modules.base import BaseModule
 from api.services.risk_manager import Signal
-from api.modules.elon_tweets.data import (
+from api.modules.shared.polymarket import (
     fetch_xtracker_posts, fetch_active_tracking, fetch_market_brackets,
     parse_hourly_counts, compute_running_total,
     compute_elapsed_days, fetch_market_prices, fetch_historical_weekly_totals,
@@ -17,7 +17,7 @@ from api.modules.shared.signals import (
     compute_signal_modifier, kelly_sizing, rank_brackets,
     cross_bracket_arbitrage, depth_adjusted_size,
 )
-from api.modules.truth_social.data import fetch_order_books_for_brackets
+from api.modules.shared.polymarket import fetch_order_books_for_brackets
 from api.modules.elon_tweets.module_config import get_module_config
 from api.modules.shared.hawkes import hawkes_pace, fit_hawkes_params
 from api.modules.shared.news_classifier import classify_news_regime

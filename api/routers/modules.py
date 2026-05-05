@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from api.dependencies import get_supabase
-from api.modules.truth_social.data import _fetch_trackings_raw
+from api.modules.shared.polymarket import _fetch_trackings_raw
 from api.modules.truth_social.module_config import get_module_config, save_module_config
 from api.modules.shared.enhanced_pacing import (
     recency_weighted_averages, dow_variance, pace_acceleration,
@@ -472,7 +472,7 @@ async def get_auction_history(module_id: str, limit: int = 20):
     for t, end_dt in past_trackings:
         slug = ""
         try:
-            from api.modules.truth_social.data import extract_slug_from_tracking
+            from api.modules.shared.polymarket import extract_slug_from_tracking
             slug = extract_slug_from_tracking(t) or ""
         except Exception:
             pass
@@ -488,7 +488,7 @@ async def get_auction_history(module_id: str, limit: int = 20):
         actual_total = None
         actual_bracket = None
         try:
-            from api.modules.truth_social.data import fetch_xtracker_stats, get_xtracker_summary, fetch_market_prices
+            from api.modules.shared.polymarket import fetch_xtracker_stats, get_xtracker_summary, fetch_market_prices
             tid = str(t.get("id") or t.get("trackingId") or "")
             if tid:
                 stats = await fetch_xtracker_stats(tid)
@@ -786,7 +786,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     if not module.data:
         raise HTTPException(status_code=404, detail="Module not found")
 
-    from api.modules.truth_social.data import (
+    from api.modules.shared.polymarket import (
         fetch_active_tracking, fetch_tracking_by_id, fetch_xtracker_stats,
         parse_hourly_counts, parse_daily_totals, get_xtracker_summary,
         compute_elapsed_days, fetch_historical_weekly_totals,
@@ -1290,7 +1290,7 @@ async def post_count_history(
     if tracking_id:
         q = q.eq("tracking_id", tracking_id)
     else:
-        from api.modules.truth_social.data import fetch_active_tracking
+        from api.modules.shared.polymarket import fetch_active_tracking
         handle = _detect_handle({"name": (sb.table("modules").select("name").eq("id", module_id).single().execute().data or {}).get("name", "")})
         try:
             tracking = await fetch_active_tracking(handle)

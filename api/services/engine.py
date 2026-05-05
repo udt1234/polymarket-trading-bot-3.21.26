@@ -311,7 +311,7 @@ class TradingEngine:
             if not pending:
                 return
 
-            from api.modules.truth_social.data import fetch_market_prices
+            from api.modules.shared.polymarket import fetch_market_prices
             from api.services.risk_manager import Signal
 
             now = datetime.now(timezone.utc)
@@ -390,7 +390,7 @@ class TradingEngine:
     def _run_order_book_snapshot(self):
         try:
             import asyncio as _asyncio
-            from api.modules.truth_social.data import fetch_order_books_for_brackets
+            from api.modules.shared.polymarket import fetch_order_books_for_brackets
             sb = get_supabase()
             modules = sb.table("modules").select("id,market_slug").in_("status", ["active", "paused"]).execute()
             now = datetime.now(timezone.utc).isoformat()
@@ -450,7 +450,7 @@ class TradingEngine:
         try:
             import asyncio as _asyncio
             from datetime import datetime as _dt
-            from api.modules.truth_social.data import fetch_active_tracking, fetch_xtracker_stats, get_xtracker_summary, parse_hourly_counts, compute_running_total
+            from api.modules.shared.polymarket import fetch_active_tracking, fetch_xtracker_stats, get_xtracker_summary, parse_hourly_counts, compute_running_total
             from api.modules.truth_social.truthsocial_direct import count_posts_in_window
 
             sb = get_supabase()
@@ -572,7 +572,7 @@ class TradingEngine:
     def _run_auction_monitor(self):
         try:
             import asyncio
-            from api.modules.truth_social.data import _fetch_trackings_raw
+            from api.modules.shared.polymarket import _fetch_trackings_raw
             from api.services.notifications import notify_auction_gap, notify_new_auction
 
             sb = get_supabase()
