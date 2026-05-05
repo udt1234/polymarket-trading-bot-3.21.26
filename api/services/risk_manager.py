@@ -105,11 +105,6 @@ class RiskManager:
         return True, ""
 
     def _check_edge_threshold(self, signal: Signal, settings) -> tuple[bool, str]:
-        # Strategies that don't compute a probability-vs-price edge (e.g. spike_rider
-        # which buys-cheap-sells-spike) opt out via signal.metadata['skip_edge_check'].
-        # This bypasses BOTH the global floor and the meta override.
-        if (signal.metadata or {}).get("skip_edge_check"):
-            return True, ""
         # Modules can RAISE the bar via signal metadata, but never lower it below the global floor
         meta_threshold = (signal.metadata or {}).get("min_edge_threshold")
         if meta_threshold is None:
@@ -200,11 +195,6 @@ class RiskManager:
 
         EV = sum over brackets of [ P(bracket wins) × shares_in_bracket × $1 ] - total_cost
         """
-        # Strategies that skip the edge check (e.g. spike_rider) don't compute model_prob
-        # for brackets, so EV math against P(win) is meaningless. The strategy's own peak/exit
-        # logic enforces aggregate risk via fixed dollar entries + position caps.
-        if (signal.metadata or {}).get("skip_edge_check"):
-            return True, ""
         try:
             sb = get_supabase()
             existing = sb.table("positions").select("bracket,size,avg_price").eq("status", "open").eq("market_id", signal.market_id).eq("side", "BUY").execute()
