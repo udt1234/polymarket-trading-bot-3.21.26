@@ -27,17 +27,11 @@ DOW_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def _detect_handle(module_data: dict) -> str:
-    """Resolve handle via the BaseModule API (no name-string branching here).
-    Spike Rider modules use their auction_series row when available."""
+    """Resolve handle via the BaseModule API (no name-string branching here)."""
     from api.services.engine import engine
     module = engine.registry.for_db_row(module_data)
     if module is None:
         return "realDonaldTrump"
-    if hasattr(module, "get_handle_for_module_id"):
-        try:
-            return module.get_handle_for_module_id(module_data.get("id"))
-        except Exception:
-            pass
     return module.get_handle()
 
 
@@ -235,71 +229,18 @@ async def kill_module(module_id: str):
     return {"ok": True, "positions_closed": closed_count}
 
 
-def _resolve_config_io(module_id: str):
-    """Pick the right (get, save) pair based on module.strategy.
-
-    Different strategies use different config schemas (truth_social/elon_tweets
-    share one; spike_rider has its own). This dispatcher keeps the API URL stable
-    while letting each module own its DEFAULT_CONFIG.
-
-    Raises HTTPException(404) when the module doesn't exist (instead of letting
-    .single() bubble a 500).
-    """
-    sb = get_supabase()
-    try:
-        res = sb.table("modules").select("strategy,name").eq("id", module_id).single().execute()
-    except Exception:
-        raise HTTPException(status_code=404, detail="Module not found")
-    if not res.data:
-        raise HTTPException(status_code=404, detail="Module not found")
-    strategy = (res.data.get("strategy") or "").lower()
-    if strategy == "spike_rider":
-        from api.modules.spike_rider.module_config import (
-            get_module_config as g, save_module_config as s,
-        )
-        return g, s
-    return get_module_config, save_module_config
-
-
 @router.get("/{module_id}/config")
 async def get_config(module_id: str):
-    g, _ = _resolve_config_io(module_id)
-    return g(module_id)
-
-
-class SpikeRiderConfigUpdate(BaseModel):
-    """Bounds for Spike Rider config updates. Mirrors DEFAULT_CONFIG keys."""
-    entry_size_usd: float | None = Field(default=None, ge=0.01, le=10000)
-    entry_min_price: float | None = Field(default=None, ge=0, le=1)
-    entry_max_price: float | None = Field(default=None, ge=0, le=1)
-    max_open_positions: int | None = Field(default=None, ge=0, le=100)
-    max_open_per_auction: int | None = Field(default=None, ge=0, le=50)
-    elapsed_max_pct: float | None = Field(default=None, ge=0, le=1)
-    focus_brackets: list[str] | None = None
-    sell_rule_type: str | None = None
-    sell_multi_stage_targets: list[float] | None = None
-    sell_target_multiplier: float | None = Field(default=None, ge=1.01, le=50)
-    sell_trail_pct: float | None = Field(default=None, ge=0.01, le=0.99)
-    sell_min_gain_pct: float | None = Field(default=None, ge=0, le=10)
-    fee_pct: float | None = Field(default=None, ge=0, le=0.10)
-    slippage_pct: float | None = Field(default=None, ge=0, le=0.20)
-    enabled: bool | None = None
-    auto_pause_after_losses: int | None = Field(default=None, ge=0, le=100)
-    model_config = {"extra": "ignore"}
+    return get_module_config(module_id)
 
 
 @router.put("/{module_id}/config")
-async def update_config(module_id: str, config: dict):
-    """Spike Rider has different fields than truth_social, so the endpoint
-    routes by strategy and applies the appropriate Pydantic validator."""
-    g, s = _resolve_config_io(module_id)
-    if g is get_module_config:
-        validated = ModuleConfigUpdate(**(config or {}))
-    else:
-        validated = SpikeRiderConfigUpdate(**(config or {}))
-    payload = validated.model_dump(exclude_unset=True)
-    s(module_id, payload)
-    return g(module_id)
+async def update_config(module_id: str, config: ModuleConfigUpdate):
+    # Pydantic enforces bounds; only fields explicitly set in the payload are
+    # forwarded so we don't overwrite stored values with None.
+    payload = config.model_dump(exclude_unset=True)
+    save_module_config(module_id, payload)
+    return get_module_config(module_id)
 
 
 @router.get("/{module_id}/auctions")
