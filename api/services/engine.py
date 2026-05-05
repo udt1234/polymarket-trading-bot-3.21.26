@@ -263,22 +263,12 @@ class TradingEngine:
             return False
 
     def _get_module_cfg(self, module, module_id: str) -> dict:
-        # Dispatch by the BaseModule.name field (canonical), not a name substring,
-        # so a module with "spike" in its display name doesn't get misrouted.
+        """Delegates to the module's own get_config(). The engine no longer
+        knows which config loader to call — each module owns that decision."""
         try:
-            name = getattr(module, "name", "")
-            if name == "spike_rider":
-                from api.modules.spike_rider.module_config import get_module_config as get_spike_cfg
-                return get_spike_cfg(module_id)
-            if name == "elon_tweets":
-                from api.modules.elon_tweets.module_config import get_module_config as get_elon_cfg
-                return get_elon_cfg(module_id)
-            if name == "truth_social":
-                from api.modules.truth_social.module_config import get_module_config
-                return get_module_config(module_id)
+            return module.get_config(module_id)
         except Exception:
-            pass
-        return {}
+            return {}
 
     def _insert_pending_signal(self, signal, defer: dict):
         try:
@@ -451,24 +441,21 @@ class TradingEngine:
             import asyncio as _asyncio
             from datetime import datetime as _dt
             from api.modules.shared.polymarket import fetch_active_tracking, fetch_xtracker_stats, get_xtracker_summary, parse_hourly_counts, compute_running_total
-            from api.modules.truth_social.truthsocial_direct import count_posts_in_window
 
             sb = get_supabase()
-            modules = sb.table("modules").select("id,name").in_("status", ["active", "paused", "paper"]).execute()
+            modules = sb.table("modules").select("id,name,strategy").in_("status", ["active", "paused", "paper"]).execute()
             now_iso = datetime.now(timezone.utc).isoformat()
             rows = []
 
             for m in modules.data or []:
-                name = (m.get("name") or "").lower()
-                if "trump" in name or "truth" in name:
-                    handle = "realDonaldTrump"
-                elif "elon" in name:
-                    handle = "elonmusk"
-                else:
+                module = self.registry.for_db_row(m)
+                if not module:
                     continue
+                handle = module.get_handle()
+                platform = module.get_platform()
 
                 try:
-                    tracking = _run_async(fetch_active_tracking(handle))
+                    tracking = _run_async(fetch_active_tracking(handle, platform))
                 except Exception as e:
                     log.warning(f"Post count snapshot: tracking fetch failed for {handle}: {e}")
                     continue
@@ -502,7 +489,7 @@ class TradingEngine:
                         "count": None, "error": str(e)[:200], "captured_at": now_iso,
                     })
 
-                if handle == "realDonaldTrump" and ws and we:
+                if module.supports_direct_post_count() and ws and we:
                     try:
                         w_start = _dt.fromisoformat(ws.replace("Z", "+00:00"))
                         w_end = _dt.fromisoformat(we.replace("Z", "+00:00"))
@@ -511,7 +498,7 @@ class TradingEngine:
                         # Insert a row even on timeout so the divergence chart shows the gap explicitly.
                         ts_result = _run_async(
                             _asyncio.wait_for(
-                                count_posts_in_window(w_start, w_end_capped, handle=handle),
+                                module.count_posts_in_window(w_start, w_end_capped),
                                 timeout=15.0,
                             )
                         )
@@ -576,20 +563,16 @@ class TradingEngine:
             from api.services.notifications import notify_auction_gap, notify_new_auction
 
             sb = get_supabase()
-            modules = sb.table("modules").select("id,name,market_slug").in_("status", ["active", "paused", "paper"]).execute()
-            handles = {"Truth Social": "realDonaldTrump", "Elon": "elonmusk"}
+            modules = sb.table("modules").select("id,name,strategy,market_slug").in_("status", ["active", "paused", "paper"]).execute()
 
             for mod in (modules.data or []):
-                name = mod.get("name", "")
-                handle = None
-                for key, h in handles.items():
-                    if key.lower() in name.lower():
-                        handle = h
-                        break
-                if not handle:
+                module = self.registry.for_db_row(mod)
+                if not module:
                     continue
+                handle = module.get_handle()
+                platform = module.get_platform()
 
-                trackings = _run_async(_fetch_trackings_raw(handle))
+                trackings = _run_async(_fetch_trackings_raw(handle, platform))
                 if not trackings:
                     continue
 

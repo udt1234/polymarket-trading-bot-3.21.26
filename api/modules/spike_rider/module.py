@@ -31,6 +31,32 @@ class SpikeRiderModule(BaseModule):
     name = "spike_rider"
     enabled = True
 
+    def get_handle(self) -> str:
+        # Spike Rider handle is dynamic per auction_series row. The legacy
+        # "default to Trump" was a safety net before per-series wiring; keep
+        # it for compatibility when a Spike Rider module has no active series.
+        return "realDonaldTrump"
+
+    def get_platform(self) -> str:
+        return "truthsocial"
+
+    def get_display_keywords(self) -> list[str]:
+        return ["spike"]
+
+    def get_config(self, module_id: str) -> dict:
+        return get_module_config(module_id)
+
+    def get_handle_for_module_id(self, module_id: str) -> str:
+        """Spike Rider's actual handle comes from the linked auction_series row."""
+        try:
+            sb = get_supabase()
+            res = sb.table("auction_series").select("handle").eq("module_id", module_id).limit(1).execute()
+            if res.data and res.data[0].get("handle"):
+                return res.data[0]["handle"]
+        except Exception:
+            pass
+        return self.get_handle()
+
     def evaluate(self) -> list[Signal]:
         try:
             loop = asyncio.get_event_loop()

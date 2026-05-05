@@ -70,6 +70,25 @@ class TruthSocialModule(BaseModule):
     ]
     HANDLE = "realDonaldTrump"
 
+    def get_handle(self) -> str:
+        return self.HANDLE
+
+    def get_platform(self) -> str:
+        return "truthsocial"
+
+    def get_display_keywords(self) -> list[str]:
+        return ["truth", "trump"]
+
+    def get_config(self, module_id: str) -> dict:
+        return get_module_config(module_id)
+
+    def supports_direct_post_count(self) -> bool:
+        return True
+
+    async def count_posts_in_window(self, window_start, window_end) -> dict:
+        from api.modules.truth_social.truthsocial_direct import count_posts_in_window
+        return await count_posts_in_window(window_start, window_end, handle=self.HANDLE)
+
     def evaluate(self) -> list[Signal]:
         try:
             loop = asyncio.get_event_loop()

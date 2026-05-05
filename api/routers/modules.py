@@ -27,29 +27,18 @@ DOW_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def _detect_handle(module_data: dict) -> str:
-    """For spike_rider modules, look up handle from auction_series. For
-    legacy modules, infer from name. Falls back to realDonaldTrump."""
-    strategy = (module_data.get("strategy", "") or "").lower()
-    if strategy == "spike_rider":
+    """Resolve handle via the BaseModule API (no name-string branching here).
+    Spike Rider modules use their auction_series row when available."""
+    from api.services.engine import engine
+    module = engine.registry.for_db_row(module_data)
+    if module is None:
+        return "realDonaldTrump"
+    if hasattr(module, "get_handle_for_module_id"):
         try:
-            sb = get_supabase()
-            res = (
-                sb.table("auction_series")
-                .select("handle")
-                .eq("module_id", module_data.get("id"))
-                .limit(1)
-                .execute()
-            )
-            if res.data and res.data[0].get("handle"):
-                return res.data[0]["handle"]
+            return module.get_handle_for_module_id(module_data.get("id"))
         except Exception:
             pass
-    name = (module_data.get("name", "") or "").lower()
-    if "elon" in name:
-        return "elonmusk"
-    if "truth" in name or "trump" in name:
-        return "realDonaldTrump"
-    return "realDonaldTrump"
+    return module.get_handle()
 
 
 def _detect_name_filter(handle: str) -> str:

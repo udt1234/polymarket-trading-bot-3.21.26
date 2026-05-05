@@ -35,6 +35,18 @@ class ElonTweetsModule(BaseModule):
     enabled = True
     HANDLE = "elonmusk"
 
+    def get_handle(self) -> str:
+        return self.HANDLE
+
+    def get_platform(self) -> str:
+        return "x"
+
+    def get_display_keywords(self) -> list[str]:
+        return ["elon"]
+
+    def get_config(self, module_id: str) -> dict:
+        return get_module_config(module_id)
+
     def evaluate(self) -> list[Signal]:
         try:
             loop = asyncio.get_event_loop()

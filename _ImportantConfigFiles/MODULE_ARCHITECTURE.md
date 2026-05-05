@@ -78,9 +78,32 @@ Use `@module-scaffolder`. It enforces the structure. If you go manual, the new f
 
 ## Phase Plan (Module Separation Roadmap)
 
-- **Phase A** ✅ DONE — Move pure-math files to `shared/`
-- **Phase B** — Extract Polymarket data client (xTracker/Gamma/CLOB) from `truth_social/data.py` to `shared/polymarket.py`
-- **Phase C** — Replace hardcoded `if "trump" in name` branches in `engine.py` and routers with `BaseModule` API methods (`get_handle`, `get_search_term`, `get_config_loader`)
+- **Phase A** ✅ DONE — Pure-math files in `shared/`
+- **Phase B** ✅ DONE — Polymarket data client (xTracker/Gamma/CLOB) in `shared/polymarket.py`
+- **Phase C** ✅ DONE — `BaseModule` API methods (`get_handle`, `get_platform`, `get_display_keywords`, `get_config`, `supports_direct_post_count`, `count_posts_in_window`); engine + routers use `registry.for_db_row()` instead of name-string branches.
+
+## BaseModule API (what every module must provide)
+
+```python
+class MyModule(BaseModule):
+    name = "my_module"               # MUST match the directory name
+
+    # REQUIRED
+    def evaluate(self) -> list[Signal]: ...
+    def get_status(self) -> dict: ...
+
+    # REQUIRED if your module trades a Polymarket auction tied to a handle
+    def get_handle(self) -> str: ...                  # "realDonaldTrump", "elonmusk"
+    def get_platform(self) -> str: ...                # "truthsocial", "x"
+    def get_display_keywords(self) -> list[str]: ...  # ["elon"] or ["truth", "trump"]
+    def get_config(self, module_id: str) -> dict: ... # delegates to module_config.py
+
+    # OPTIONAL — override only if your module has a direct post counter
+    def supports_direct_post_count(self) -> bool: return True
+    async def count_posts_in_window(self, start, end) -> dict: ...
+```
+
+The engine resolves modules from Supabase rows via `engine.registry.for_db_row(row)` — never by inspecting `row["name"]` for substrings.
 
 ## Tests
 
