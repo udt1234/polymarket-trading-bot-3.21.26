@@ -241,8 +241,11 @@ def _fetch_analogs_from_snapshots(
 
 def _fetch_analogs_from_parquet(slug: str, bracket: str, elapsed_pct: float) -> list[dict]:
     try:
-        from api.modules.truth_social.parquet_history import PARQUET_CACHE_DIR
-        cache_path = PARQUET_CACHE_DIR / f"{slug}.parquet"
+        # Resolve cache dir directly from the repo layout — don't import from
+        # any specific module (price_timing is shared infrastructure).
+        from pathlib import Path
+        _cache_dir = Path(__file__).resolve().parent.parent.parent.parent / "data" / "parquet"
+        cache_path = _cache_dir / f"{slug}.parquet"
         if not cache_path.exists():
             return []
         import pandas as pd

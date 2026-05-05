@@ -73,8 +73,16 @@ def _resolve_thresholds(module_id: str, cfg_cache: dict) -> tuple[float, float, 
     cfg = {}
     if module_id:
         try:
-            from api.modules.truth_social.module_config import get_module_config
-            cfg = get_module_config(module_id)
+            # Resolve config via the module's own loader (BaseModule.get_config),
+            # never hardcoded to truth_social. Uses the modules table to find
+            # which module owns this module_id.
+            from api.dependencies import get_supabase
+            from api.services.engine import engine
+            sb = get_supabase()
+            row = sb.table("modules").select("id,name,strategy").eq("id", module_id).single().execute()
+            module = engine.registry.for_db_row(row.data or {})
+            if module is not None:
+                cfg = module.get_config(module_id)
         except Exception as e:
             log.warning(f"exit_manager: module config load failed for {module_id} ({e}); using defaults")
 

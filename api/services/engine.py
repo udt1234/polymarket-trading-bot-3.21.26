@@ -858,14 +858,15 @@ class TradingEngine:
             return {"state": "paused", "reason": "Stale data — xTracker hasn't refreshed",
                     "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS}}
 
-        # Match errors by module name — registry uses the module's `name` attr
-        # but the dashboard sometimes passes the human-friendly DB name. Match
-        # on case-insensitive substring in either direction so both work.
-        key = (module_name or "").lower().strip()
-        my_errors = [
-            e for e in self._recent_errors
-            if key and (key in (e[1] or "").lower() or (e[1] or "").lower() in key)
-        ]
+        # Resolve the human-friendly DB name (e.g. "Elon Tweets") to the
+        # canonical registry name ("elon_tweets") via the registry's keyword
+        # match. Errors are stored under the canonical name, so we compare
+        # exactly once we have it.
+        canonical = (module_name or "").lower().strip()
+        resolved = self.registry.for_db_row({"name": module_name or ""})
+        if resolved is not None:
+            canonical = resolved.name
+        my_errors = [e for e in self._recent_errors if (e[1] or "").lower() == canonical]
         if my_errors:
             err_count = len(my_errors)
             latest_sig = my_errors[-1][2]

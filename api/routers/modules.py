@@ -11,7 +11,6 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from api.dependencies import get_supabase
 from api.modules.shared.polymarket import _fetch_trackings_raw
-from api.modules.truth_social.module_config import get_module_config, save_module_config
 from api.modules.shared.enhanced_pacing import (
     recency_weighted_averages, dow_variance, pace_acceleration,
     dow_deviation, ensemble_confidence_bands, floor_bracket_probs,
@@ -35,10 +34,51 @@ def _detect_handle(module_data: dict) -> str:
     return module.get_handle()
 
 
-def _detect_name_filter(handle: str) -> str:
-    if handle == "elonmusk":
-        return "tweets"
-    return "truth social"
+def _resolve_module(module_id: str):
+    """Look up a module by id and return its BaseModule instance via registry.
+    Returns None if not found / unknown strategy. Used by config endpoints so
+    each module's own config loader runs (no hardcoded truth_social import)."""
+    from api.services.engine import engine
+    sb = get_supabase()
+    try:
+        row = sb.table("modules").select("id,name,strategy").eq("id", module_id).single().execute()
+    except Exception:
+        return None
+    return engine.registry.for_db_row(row.data or {})
+
+
+def _get_module_config_dispatch(module_id: str) -> dict:
+    module = _resolve_module(module_id)
+    if module is None:
+        return {}
+    return module.get_config(module_id)
+
+
+def _save_module_config_dispatch(module_id: str, config: dict) -> dict:
+    module = _resolve_module(module_id)
+    if module is None:
+        return {}
+    module.save_config(module_id, config)
+    return module.get_config(module_id)
+
+
+def _detect_platform(module_data: dict) -> str:
+    """xTracker platform identifier ('truthsocial', 'x') for this module."""
+    from api.services.engine import engine
+    module = engine.registry.for_db_row(module_data)
+    if module is None:
+        return "truthsocial"
+    return module.get_platform()
+
+
+def _detect_name_filter(module_data: dict) -> str:
+    """Title-substring filter for xTracker auctions. Comes from the module's
+    BaseModule.get_auction_title_filter()."""
+    from api.services.engine import engine
+    module = engine.registry.for_db_row(module_data)
+    if module is None:
+        return ""
+    return module.get_auction_title_filter()
 
 
 class ModuleCreate(BaseModel):
@@ -231,7 +271,7 @@ async def kill_module(module_id: str):
 
 @router.get("/{module_id}/config")
 async def get_config(module_id: str):
-    return get_module_config(module_id)
+    return _get_module_config_dispatch(module_id)
 
 
 @router.put("/{module_id}/config")
@@ -239,8 +279,7 @@ async def update_config(module_id: str, config: ModuleConfigUpdate):
     # Pydantic enforces bounds; only fields explicitly set in the payload are
     # forwarded so we don't overwrite stored values with None.
     payload = config.model_dump(exclude_unset=True)
-    save_module_config(module_id, payload)
-    return get_module_config(module_id)
+    return _save_module_config_dispatch(module_id, payload)
 
 
 @router.get("/{module_id}/auctions")
@@ -251,10 +290,10 @@ async def get_auctions(module_id: str, include_past: bool = True):
         raise HTTPException(status_code=404, detail="Module not found")
 
     handle = _detect_handle(module.data)
-    name_filter = _detect_name_filter(handle)
+    name_filter = _detect_name_filter(module.data)
     now = datetime.now(timezone.utc)
 
-    all_trackings = await _fetch_trackings_raw(handle)
+    all_trackings = await _fetch_trackings_raw(handle, _detect_platform(module.data))
 
     module_trackings = [
         t for t in all_trackings
@@ -349,10 +388,10 @@ async def get_auction_history(module_id: str, limit: int = 20):
         raise HTTPException(status_code=404, detail="Module not found")
 
     handle = _detect_handle(module.data)
-    name_filter = _detect_name_filter(handle)
+    name_filter = _detect_name_filter(module.data)
     now = datetime.now(timezone.utc)
 
-    all_trackings = await _fetch_trackings_raw(handle)
+    all_trackings = await _fetch_trackings_raw(handle, _detect_platform(module.data))
     past_trackings = []
     for t in all_trackings:
         if name_filter not in t.get("title", "").lower():
@@ -724,14 +763,14 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     )
     from api.modules.shared.regime import detect_regime
 
-    cfg = get_module_config(module_id)
+    cfg = _get_module_config_dispatch(module_id)
     handle = _detect_handle(module.data)
     now = datetime.now(timezone.utc)
 
     if tracking_id:
-        tracking = await fetch_tracking_by_id(handle, tracking_id)
+        tracking = await fetch_tracking_by_id(handle, tracking_id, _detect_platform(module.data))
     else:
-        tracking = await fetch_active_tracking(handle)
+        tracking = await fetch_active_tracking(handle, _detect_platform(module.data))
 
     if tracking:
         tid = tracking.get("id") or tracking.get("trackingId")
@@ -821,9 +860,9 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     # (which runs every 5 min in the background and writes to post_count_snapshots)
     # is still the source of truth — this just refreshes the live read.
     truth_social_direct = {"count": None, "status": "not_applicable", "source": "truthsocial.com/api/v1"}
-    if handle == "realDonaldTrump" and tracking:
+    _resolved_module = _resolve_module(module_id)
+    if _resolved_module and _resolved_module.supports_direct_post_count() and tracking:
         try:
-            from api.modules.truth_social.truthsocial_direct import count_posts_in_window
             ws = (tracking or {}).get("startDate", "")
             we = (tracking or {}).get("endDate", "")
             if ws and we:
@@ -831,7 +870,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
                 w_end = datetime.fromisoformat(we.replace("Z", "+00:00"))
                 w_end_capped = min(w_end, now)
                 ts_result = await asyncio.wait_for(
-                    count_posts_in_window(w_start, w_end_capped, handle=handle),
+                    _resolved_module.count_posts_in_window(w_start, w_end_capped),
                     timeout=15.0,  # CNN archive is ~17MB JSON; allow extra time on cold cache
                 )
                 ts_count = ts_result.get("count")
@@ -877,8 +916,8 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
 
     next_auction = None
     try:
-        name_filter = _detect_name_filter(handle)
-        all_trackings = await _fetch_trackings_raw(handle)
+        name_filter = _detect_name_filter(module.data)
+        all_trackings = await _fetch_trackings_raw(handle, _detect_platform(module.data))
         future_trackings = [t for t in all_trackings
                         if name_filter in t.get("title", "").lower()
                         and t.get("startDate", "") > (tracking or {}).get("startDate", "")]
@@ -1221,9 +1260,10 @@ async def post_count_history(
         q = q.eq("tracking_id", tracking_id)
     else:
         from api.modules.shared.polymarket import fetch_active_tracking
-        handle = _detect_handle({"name": (sb.table("modules").select("name").eq("id", module_id).single().execute().data or {}).get("name", "")})
+        _mod_row = (sb.table("modules").select("id,name,strategy").eq("id", module_id).single().execute().data or {})
+        handle = _detect_handle(_mod_row)
         try:
-            tracking = await fetch_active_tracking(handle)
+            tracking = await fetch_active_tracking(handle, _detect_platform(_mod_row))
             if tracking:
                 tid = str(tracking.get("id") or tracking.get("trackingId") or "")
                 if tid:

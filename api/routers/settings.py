@@ -247,26 +247,37 @@ async def reset_paper_trades():
 
 @router.get("/module-configs")
 async def get_all_module_configs():
+    """Each module's config is loaded via its own BaseModule.get_config() —
+    no hardcoded dispatch to truth_social.module_config."""
+    from api.services.engine import engine
     sb = get_supabase()
-    modules = sb.table("modules").select("id,name,status").in_("status", ["active", "paused", "paper"]).execute()
-    from api.modules.truth_social.module_config import get_module_config
+    modules = sb.table("modules").select("id,name,status,strategy").in_("status", ["active", "paused", "paper"]).execute()
     result = []
     for m in modules.data or []:
-        cfg = get_module_config(m["id"])
+        module = engine.registry.for_db_row(m)
+        cfg = module.get_config(m["id"]) if module else {}
         result.append({"module_id": m["id"], "name": m["name"], "status": m["status"], "config": cfg})
     return result
 
 
 @router.get("/module-configs/{module_id}")
 async def get_module_config_endpoint(module_id: str):
-    from api.modules.truth_social.module_config import get_module_config
-    return get_module_config(module_id)
+    from api.services.engine import engine
+    sb = get_supabase()
+    row = sb.table("modules").select("id,name,strategy").eq("id", module_id).single().execute()
+    module = engine.registry.for_db_row(row.data or {})
+    return module.get_config(module_id) if module else {}
 
 
 @router.put("/module-configs/{module_id}")
 async def update_module_config(module_id: str, config: "ModuleConfigUpdate"):
-    from api.modules.truth_social.module_config import save_module_config
+    from api.services.engine import engine
+    sb = get_supabase()
+    row = sb.table("modules").select("id,name,strategy").eq("id", module_id).single().execute()
+    module = engine.registry.for_db_row(row.data or {})
+    if module is None:
+        return {"ok": False, "error": "module not resolved"}
     payload = config.model_dump(exclude_unset=True)
-    save_module_config(module_id, payload)
+    module.save_config(module_id, payload)
     return {"ok": True}
 

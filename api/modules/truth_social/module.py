@@ -82,6 +82,13 @@ class TruthSocialModule(BaseModule):
     def get_config(self, module_id: str) -> dict:
         return get_module_config(module_id)
 
+    def save_config(self, module_id: str, config: dict) -> None:
+        from api.modules.truth_social.module_config import save_module_config
+        save_module_config(module_id, config)
+
+    def get_auction_title_filter(self) -> str:
+        return "truth social"
+
     def supports_direct_post_count(self) -> bool:
         return True
 
