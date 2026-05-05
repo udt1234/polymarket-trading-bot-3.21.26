@@ -1,5 +1,5 @@
 import pytest
-from api.modules.truth_social.pacing import (
+from api.modules.shared.pacing import (
     regular_pace,
     bayesian_pace,
     dow_hourly_bayesian_pace,

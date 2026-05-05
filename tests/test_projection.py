@@ -1,5 +1,5 @@
 import pytest
-from api.modules.truth_social.projection import (
+from api.modules.shared.projection import (
     ensemble_weights,
     bracket_probabilities,
     ensemble_projection,

@@ -12,14 +12,14 @@ from pydantic import BaseModel, Field
 from api.dependencies import get_supabase
 from api.modules.truth_social.data import _fetch_trackings_raw
 from api.modules.truth_social.module_config import get_module_config, save_module_config
-from api.modules.truth_social.enhanced_pacing import (
+from api.modules.shared.enhanced_pacing import (
     recency_weighted_averages, dow_variance, pace_acceleration,
     dow_deviation, ensemble_confidence_bands, floor_bracket_probs,
 )
 from api.modules.truth_social.parquet_history import (
     search_parquet_markets, download_and_cache_parquet, preview_parquet_data,
 )
-from api.modules.truth_social.projection import expected_value_bracket
+from api.modules.shared.projection import expected_value_bracket
 
 router = APIRouter()
 
@@ -534,8 +534,8 @@ async def get_auction_history(module_id: str, limit: int = 20):
 
 
 def _compute_pacing_models(running_total, elapsed_days, remaining_days, total_days, hist_mean, hist_std, hourly_counts, var, now, cfg, dynamic_brackets=None):
-    from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
-    from api.modules.truth_social.projection import ensemble_weights as ew, ensemble_projection, expected_value_bracket
+    from api.modules.shared.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
+    from api.modules.shared.projection import ensemble_weights as ew, ensemble_projection, expected_value_bracket
 
     pace_val = regular_pace(running_total, elapsed_days, total_days) if elapsed_days > 0 else hist_mean
     bayes_val = bayesian_pace(running_total, elapsed_days, remaining_days, hist_mean, total_days)
@@ -792,7 +792,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         compute_elapsed_days, fetch_historical_weekly_totals,
         fetch_market_prices, extract_slug_from_tracking,
     )
-    from api.modules.truth_social.regime import detect_regime
+    from api.modules.shared.regime import detect_regime
 
     cfg = get_module_config(module_id)
     handle = _detect_handle(module.data)
@@ -861,7 +861,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     market_prices = await fetch_market_prices(slug) if slug else {}
     market_implied = max(market_prices, key=market_prices.get) if market_prices else None
 
-    from api.modules.truth_social.enhanced_pacing import optimal_entry_timing
+    from api.modules.shared.enhanced_pacing import optimal_entry_timing
     entry_timing = {}
     if conf_bands:
         top_bracket = conf_bands[0]["bracket"]
@@ -875,7 +875,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     hourly_heatmap = _build_hourly_heatmap(hourly_counts)
     dow_hour_heatmap = _build_dow_hour_heatmap(handle)
 
-    from api.modules.truth_social.enhanced_pacing import historical_hourly_averages
+    from api.modules.shared.enhanced_pacing import historical_hourly_averages
     hist_dir = str(Path(__file__).resolve().parent.parent.parent / "_DataMetricPulls" / "historical")
     hist_hourly = historical_hourly_averages(hist_dir, handle)
     historical_hourly_heatmap = _build_historical_hourly_heatmap(hist_hourly)

@@ -3,7 +3,7 @@ import random
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Query
 from api.dependencies import get_supabase
-from api.modules.truth_social.regime import detect_regime
+from api.modules.shared.regime import detect_regime
 from api.services.walk_forward import run_walk_forward_check
 
 router = APIRouter()
