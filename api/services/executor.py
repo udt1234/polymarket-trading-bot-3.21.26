@@ -138,8 +138,12 @@ class PaperExecutor:
                 "metadata": signal.metadata if signal.metadata else {},
                 "post_detected_at": signal.post_detected_at or now,
             }).execute()
-        except Exception:
-            pass
+        except Exception as e:
+            # Was a silent pass — masked schema/serialization failures that
+            # caused the dashboard's stale-data check to fire even though the
+            # engine was running fine. Log the failure so the next break is
+            # visible in Railway logs.
+            log.warning(f"signals insert failed (PaperExecutor) module={signal.module_id} bracket={signal.bracket}: {e}")
 
         fill_note = f" (partial: {size:.2f}/{raw_size:.2f})" if partial else ""
         log.info(f"PAPER {signal.side} {signal.bracket} size={size:.2f} @ {fill_price:.4f}{fill_note}")

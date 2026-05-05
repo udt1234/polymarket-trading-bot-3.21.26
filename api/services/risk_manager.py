@@ -530,5 +530,9 @@ class RiskManager:
                 "metadata": signal.metadata if signal.metadata else {},
                 "post_detected_at": signal.post_detected_at or now,
             }).execute()
-        except Exception:
-            pass
+        except Exception as e:
+            # Was a silent pass — log the cause so it is visible in Railway.
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                f"signals insert failed (rejection log) module={signal.module_id} bracket={signal.bracket}: {e}"
+            )
