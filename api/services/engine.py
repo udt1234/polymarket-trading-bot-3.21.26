@@ -129,19 +129,32 @@ class TradingEngine:
             log.info("Reloaded single-account executor")
 
     def _check_data_freshness(self) -> bool:
+        """Detect whether the engine cycle is actually running. Looks at the
+        decision-log (logs.log_type='decision') because that fires every
+        cycle from every module — vs the signals table which only writes when
+        a tradeable signal emerges. A signal-only check would falsely flip to
+        'stale' during quiet markets where no trades are warranted.
+        """
         try:
             sb = get_supabase()
-            result = sb.table("signals").select("created_at").order("created_at", desc=True).limit(1).execute()
+            result = (
+                sb.table("logs")
+                .select("created_at")
+                .eq("log_type", "decision")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
             if not result.data:
                 self._stale_data = False
-                log.info("No signals yet — allowing cycle to bootstrap")
+                log.info("No decision logs yet — allowing cycle to bootstrap")
                 return True
             last_ts = result.data[0]["created_at"]
             last_dt = datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
             age_hours = (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600
             self._stale_data = age_hours > STALE_DATA_THRESHOLD_HOURS
             if self._stale_data:
-                log.info(f"Last signal {age_hours:.1f}h old — allowing cycle (stale flag set for dashboard)")
+                log.info(f"Last decision {age_hours:.1f}h old — engine cycle may have stalled")
             return True
         except Exception:
             self._stale_data = True
@@ -830,8 +843,8 @@ class TradingEngine:
         if self._stale_data:
             return {
                 "state": "paused",
-                "reason": "Stale data — xTracker hasn't refreshed",
-                "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS},
+                "reason": f"Engine cycle stalled — no decision logs in over {STALE_DATA_THRESHOLD_HOURS}h",
+                "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS, "action": "Check Railway deploy logs for module evaluation errors"},
             }
         active = self.registry.active_modules()
         if not active:
@@ -895,7 +908,8 @@ class TradingEngine:
                     "details": {"consecutive_losses": self.risk_manager.consecutive_losses,
                                 "cooldown_remaining_min": round(cooldown_remaining_s / 60, 1)}}
         if self._stale_data:
-            return {"state": "paused", "reason": "Stale data — xTracker hasn't refreshed",
+            return {"state": "paused",
+                    "reason": f"Engine cycle stalled — no decision logs in over {STALE_DATA_THRESHOLD_HOURS}h",
                     "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS}}
 
         # Resolve the human-friendly DB name (e.g. "Elon Tweets") to the
