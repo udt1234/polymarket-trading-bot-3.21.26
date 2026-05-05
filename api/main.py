@@ -91,10 +91,23 @@ async def engine_status():
 
 
 @app.get("/api/engine/health", dependencies=[Depends(require_auth)])
-async def engine_health():
+async def engine_health(module_id: str | None = None):
     """Bot health snapshot for the dashboard banner.
-    Returns one of: trading | watching | paused | killed
+    Returns one of: trading | watching | paused | killed.
+
+    When `module_id` is supplied, returns per-module health: global states
+    (engine stopped, circuit breaker, stale data) still apply, but recent
+    error noise is filtered to that module so one feed's hiccup doesn't
+    paint every module page red.
     """
+    if module_id:
+        try:
+            sb = get_supabase()
+            row = sb.table("modules").select("name").eq("id", module_id).single().execute()
+            module_name = (row.data or {}).get("name") or module_id
+        except Exception:
+            module_name = module_id
+        return engine.health_for_module(module_name)
     return engine.health
 
 

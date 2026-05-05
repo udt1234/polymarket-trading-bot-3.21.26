@@ -61,7 +61,10 @@ class TradingEngine:
         # `if not hasattr(self, ...)` guards inside the methods could create
         # ambiguous list identities if called from different code paths.
         self._recent_rejections: list[dict] = []
-        self._recent_errors: list[tuple[float, str, str]] = []
+        # (timestamp, module_name, signature, sample) — module_name lets the
+        # dashboard show per-module health instead of painting every page red
+        # when only one module's data feed is sick.
+        self._recent_errors: list[tuple[float, str, str, str]] = []
 
     def start(self, interval: int = 300):
         if self._running:
@@ -746,12 +749,12 @@ class TradingEngine:
         # Use first 80 chars of error as signature (drops timestamps, addresses, etc).
         sig = (error_msg or "")[:80].strip()
         now_ts = time.time()
-        self._recent_errors.append((now_ts, sig, error_msg or ""))
+        self._recent_errors.append((now_ts, module_name, sig, error_msg or ""))
         # Drop entries older than 15 min
         cutoff = now_ts - 15 * 60
-        self._recent_errors = [(t, s, m) for (t, s, m) in self._recent_errors if t >= cutoff]
-        # Count occurrences of this signature
-        same_count = sum(1 for (_, s, _) in self._recent_errors if s == sig)
+        self._recent_errors = [e for e in self._recent_errors if e[0] >= cutoff]
+        # Count occurrences of this signature (across modules — alert dedupe is global)
+        same_count = sum(1 for e in self._recent_errors if e[2] == sig)
         if same_count >= 3:
             try:
                 from api.services.alerts import notify_repeated_errors
@@ -821,8 +824,8 @@ class TradingEngine:
         recent_errors = self._recent_errors
         if recent_errors:
             err_count = len(recent_errors)
-            # _recent_errors is (ts, signature, sample). Show the most-recent signature.
-            latest_sig = recent_errors[-1][1] if recent_errors else "unknown"
+            # _recent_errors is (ts, module_name, signature, sample). Show the most-recent signature.
+            latest_sig = recent_errors[-1][2] if recent_errors else "unknown"
             return {
                 "state": "paused",
                 "reason": f"Degraded — {err_count} recent error{'s' if err_count != 1 else ''} from module evaluation",
@@ -853,6 +856,46 @@ class TradingEngine:
             "state": "trading",
             "reason": "Bot is actively scanning markets",
             "details": {"active_modules": len(active), "cycle_count": self._cycle_count},
+        }
+
+    def health_for_module(self, module_name: str) -> dict:
+        """Per-module health. Global engine state (stopped, circuit breaker,
+        stale data) still applies to every module — but recent errors are
+        scoped so one module's hiccup doesn't paint every page red.
+        """
+        if not self._running:
+            return {"state": "paused", "reason": "Engine stopped",
+                    "details": {"action": "Use /api/engine/start to resume"}}
+        if self.risk_manager.circuit_breaker_tripped:
+            cooldown_remaining_s = max(0, int(self.risk_manager._cooldown_until - time.time()))
+            return {"state": "paused", "reason": "Circuit breaker tripped",
+                    "details": {"consecutive_losses": self.risk_manager.consecutive_losses,
+                                "cooldown_remaining_min": round(cooldown_remaining_s / 60, 1)}}
+        if self._stale_data:
+            return {"state": "paused", "reason": "Stale data — xTracker hasn't refreshed",
+                    "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS}}
+
+        # Match errors by module name — registry uses the module's `name` attr
+        # but the dashboard sometimes passes the human-friendly DB name. Match
+        # on case-insensitive substring in either direction so both work.
+        key = (module_name or "").lower().strip()
+        my_errors = [
+            e for e in self._recent_errors
+            if key and (key in (e[1] or "").lower() or (e[1] or "").lower() in key)
+        ]
+        if my_errors:
+            err_count = len(my_errors)
+            latest_sig = my_errors[-1][2]
+            return {
+                "state": "paused",
+                "reason": f"Degraded — {err_count} recent error{'s' if err_count != 1 else ''} from this module",
+                "details": {"latest_error": latest_sig[:100], "window_minutes": 15, "module": module_name},
+            }
+
+        return {
+            "state": "trading",
+            "reason": "Module is actively evaluating",
+            "details": {"module": module_name, "cycle_count": self._cycle_count},
         }
 
 

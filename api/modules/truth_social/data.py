@@ -2,6 +2,7 @@ import httpx
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -12,6 +13,41 @@ GAMMA_BASE = "https://gamma-api.polymarket.com"
 CLOB_BASE = "https://clob.polymarket.com"
 
 RATE_LIMITS = {"xtracker": 0.3, "gamma": 0.5, "clob": 1.0}
+
+# xTracker resilience: retry transient 5xx/timeouts and serve last good payload
+# from a 60s cache when retries also fail. xTracker returns intermittent 500s
+# and one bad call should not flag the whole bot as "Paused — Degraded".
+_XTRACKER_RETRY_STATUSES = {500, 502, 503, 504}
+_XTRACKER_CACHE_TTL_S = 60.0
+_XTRACKER_CACHE: dict[str, tuple[float, object]] = {}
+
+
+async def _xtracker_get(client: httpx.AsyncClient, url: str, params: dict | None, cache_key: str):
+    """GET with 3 attempts on 5xx/timeout, exponential backoff, and stale-cache fallback.
+
+    Raises only when both retries AND cache miss — i.e. the call is unrecoverable.
+    On success, refreshes the cache. The caller still receives parsed JSON.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            res = await client.get(url, params=params)
+            if res.status_code in _XTRACKER_RETRY_STATUSES:
+                raise httpx.HTTPStatusError(f"xtracker {res.status_code}", request=res.request, response=res)
+            res.raise_for_status()
+            data = res.json()
+            _XTRACKER_CACHE[cache_key] = (time.time(), data)
+            return data
+        except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.TransportError) as e:
+            last_exc = e
+            if attempt < 2:
+                await asyncio.sleep(0.5 * (2 ** attempt))
+    cached = _XTRACKER_CACHE.get(cache_key)
+    if cached and (time.time() - cached[0]) < _XTRACKER_CACHE_TTL_S:
+        log.warning(f"xtracker {cache_key} failed after retries — serving {time.time() - cached[0]:.1f}s-old cache")
+        return cached[1]
+    assert last_exc is not None
+    raise last_exc
 
 BRACKET_ALIASES = {
     "<20": "0-19", "20-39": "20-39", "40-59": "40-59", "60-79": "60-79",
@@ -28,12 +64,12 @@ def normalize_bracket(raw: str) -> str:
 
 async def _fetch_trackings_raw(handle: str = "realDonaldTrump") -> list:
     async with httpx.AsyncClient(timeout=15) as client:
-        res = await client.get(
+        data = await _xtracker_get(
+            client,
             f"{XTRACKER_BASE}/users/{handle}/trackings",
-            params={"platform": "truthsocial"},
+            {"platform": "truthsocial"},
+            cache_key=f"trackings:{handle}",
         )
-        res.raise_for_status()
-        data = res.json()
         trackings = data.get("data", []) if isinstance(data, dict) else data
         return trackings if isinstance(trackings, list) else []
 
@@ -140,12 +176,12 @@ def extract_slug_from_tracking(tracking: dict) -> str | None:
 
 async def fetch_xtracker_stats(tracking_id: str) -> dict:
     async with httpx.AsyncClient(timeout=15) as client:
-        res = await client.get(
+        data = await _xtracker_get(
+            client,
             f"{XTRACKER_BASE}/trackings/{tracking_id}",
-            params={"includeStats": "true"},
+            {"includeStats": "true"},
+            cache_key=f"stats:{tracking_id}",
         )
-        res.raise_for_status()
-        data = res.json()
         return data.get("data", data) if isinstance(data, dict) else data
 
 
