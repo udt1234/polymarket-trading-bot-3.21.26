@@ -1,5 +1,5 @@
 import pytest
-from api.modules.truth_social.signals import (
+from api.modules.shared.signals import (
     compute_signal_modifier,
     kelly_sizing,
     rank_brackets,

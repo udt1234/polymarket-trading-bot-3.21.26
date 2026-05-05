@@ -4,22 +4,22 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from api.modules.base import BaseModule
 from api.services.risk_manager import Signal
-from api.modules.truth_social.data import (
+from api.modules.shared.polymarket import (
     fetch_xtracker_posts, fetch_active_tracking, fetch_active_or_upcoming_tracking,
     extract_slug_from_tracking,
     parse_hourly_counts, parse_daily_totals, compute_running_total,
     compute_elapsed_days, fetch_market_prices, fetch_historical_weekly_totals,
     fetch_order_books_for_brackets,
 )
-from api.modules.truth_social.news import fetch_google_news
-from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
-from api.modules.truth_social.projection import ensemble_weights, ensemble_projection
-from api.modules.truth_social.regime import detect_regime
-from api.modules.truth_social.signals import (
+from api.modules.shared.news import fetch_google_news
+from api.modules.shared.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
+from api.modules.shared.projection import ensemble_weights, ensemble_projection
+from api.modules.shared.regime import detect_regime
+from api.modules.shared.signals import (
     compute_signal_modifier, kelly_sizing, rank_brackets,
     cross_bracket_arbitrage, depth_adjusted_size,
 )
-from api.modules.truth_social.enhanced_pacing import (
+from api.modules.shared.enhanced_pacing import (
     recency_weighted_averages, regime_conditional_dow_averages,
     pace_acceleration, dow_deviation, ensemble_confidence_bands,
     historical_hourly_averages, floor_bracket_probs,
@@ -27,8 +27,8 @@ from api.modules.truth_social.enhanced_pacing import (
 from api.modules.truth_social.historical_winners import (
     bracket_winner_frequencies, blend_with_historical, bracket_in_low_window,
 )
-from api.modules.truth_social.hawkes import hawkes_pace, fit_hawkes_params
-from api.modules.truth_social.news_classifier import classify_news_regime
+from api.modules.shared.hawkes import hawkes_pace, fit_hawkes_params
+from api.modules.shared.news_classifier import classify_news_regime
 from api.modules.truth_social.schedule import fetch_presidential_schedule, compute_schedule_modifier
 from api.modules.truth_social.trends import fetch_google_trends, compute_trends_modifier
 from api.modules.truth_social.parquet_history import (
@@ -69,6 +69,25 @@ class TruthSocialModule(BaseModule):
         "100-119", "120-139", "140-159", "160-179", "180-199", "200+"
     ]
     HANDLE = "realDonaldTrump"
+
+    def get_handle(self) -> str:
+        return self.HANDLE
+
+    def get_platform(self) -> str:
+        return "truthsocial"
+
+    def get_display_keywords(self) -> list[str]:
+        return ["truth", "trump"]
+
+    def get_config(self, module_id: str) -> dict:
+        return get_module_config(module_id)
+
+    def supports_direct_post_count(self) -> bool:
+        return True
+
+    async def count_posts_in_window(self, window_start, window_end) -> dict:
+        from api.modules.truth_social.truthsocial_direct import count_posts_in_window
+        return await count_posts_in_window(window_start, window_end, handle=self.HANDLE)
 
     def evaluate(self) -> list[Signal]:
         try:
@@ -399,7 +418,7 @@ class TruthSocialModule(BaseModule):
         top_bracket_names_for_books = [b["bracket"] for b in top_brackets_for_books]
         order_books = await fetch_order_books_for_brackets(slug, top_bracket_names_for_books)
 
-        from api.modules.truth_social.signals import contrarian_signal
+        from api.modules.shared.signals import contrarian_signal
         contrarian_adj = contrarian_signal(market_prices, order_books) if order_books else {}
 
         # Apply contrarian adjustments to bracket probs

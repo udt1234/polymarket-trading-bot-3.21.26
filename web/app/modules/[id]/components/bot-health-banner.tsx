@@ -17,8 +17,9 @@ const STYLES: Record<Health["state"], { bg: string; border: string; text: string
   killed:   { bg: "bg-muted",           border: "border-muted-foreground", text: "text-muted-foreground", iconClass: "text-muted-foreground", Icon: Skull,    label: "Killed" },
 }
 
-export function BotHealthBanner() {
-  const { data: health } = useApi<Health>("/api/engine/health", [], 15000)
+export function BotHealthBanner({ moduleId }: { moduleId?: string } = {}) {
+  const url = moduleId ? `/api/engine/health?module_id=${moduleId}` : "/api/engine/health"
+  const { data: health } = useApi<Health>(url, [moduleId], 15000)
   if (!health) return null
 
   const style = STYLES[health.state] || STYLES.paused

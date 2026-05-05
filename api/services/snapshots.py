@@ -19,13 +19,15 @@ def take_price_snapshot():
 def _take_price_snapshot_sync():
     import json as _json
     import httpx as _httpx
-    from api.modules.truth_social.data import normalize_bracket, extract_slug_from_tracking
+    from api.modules.shared.polymarket import normalize_bracket, extract_slug_from_tracking
 
     GAMMA = "https://gamma-api.polymarket.com"
     XTRACKER = "https://xtracker.polymarket.com/api"
 
+    from api.services.engine import engine
+
     sb = get_supabase()
-    modules = sb.table("modules").select("id,name,market_slug,status").in_("status", ["active", "paper", "scaffold"]).execute()
+    modules = sb.table("modules").select("id,name,strategy,market_slug,status").in_("status", ["active", "paper", "scaffold"]).execute()
     if not modules.data:
         return
 
@@ -38,12 +40,15 @@ def _take_price_snapshot_sync():
 
     for mod in modules.data:
         module_id = mod["id"]
-        handle = "realDonaldTrump" if "truth" in mod["name"].lower() or "trump" in mod["name"].lower() else "elonmusk"
+        module = engine.registry.for_db_row(mod)
+        if module is None:
+            continue
+        handle = module.get_handle()
+        platform = module.get_platform()
         slug = None
         active_tracking = None
 
         try:
-            platform = "x" if handle == "elonmusk" else "truthsocial"
             res = client.get(f"{XTRACKER}/users/{handle}/trackings", params={"platform": platform})
             data = res.json()
             trackings = data.get("data", data) if isinstance(data, dict) else data

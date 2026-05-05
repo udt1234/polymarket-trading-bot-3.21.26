@@ -61,7 +61,10 @@ class TradingEngine:
         # `if not hasattr(self, ...)` guards inside the methods could create
         # ambiguous list identities if called from different code paths.
         self._recent_rejections: list[dict] = []
-        self._recent_errors: list[tuple[float, str, str]] = []
+        # (timestamp, module_name, signature, sample) — module_name lets the
+        # dashboard show per-module health instead of painting every page red
+        # when only one module's data feed is sick.
+        self._recent_errors: list[tuple[float, str, str, str]] = []
 
     def start(self, interval: int = 300):
         if self._running:
@@ -260,17 +263,12 @@ class TradingEngine:
             return False
 
     def _get_module_cfg(self, module, module_id: str) -> dict:
+        """Delegates to the module's own get_config(). The engine no longer
+        knows which config loader to call — each module owns that decision."""
         try:
-            name = getattr(module, "name", "").lower()
-            if "trump" in name or "truth" in name:
-                from api.modules.truth_social.module_config import get_module_config
-                return get_module_config(module_id)
-            if "elon" in name:
-                from api.modules.elon_tweets.module_config import get_module_config as get_elon_cfg
-                return get_elon_cfg(module_id)
+            return module.get_config(module_id)
         except Exception:
-            pass
-        return {}
+            return {}
 
     def _insert_pending_signal(self, signal, defer: dict):
         try:
@@ -303,7 +301,7 @@ class TradingEngine:
             if not pending:
                 return
 
-            from api.modules.truth_social.data import fetch_market_prices
+            from api.modules.shared.polymarket import fetch_market_prices
             from api.services.risk_manager import Signal
 
             now = datetime.now(timezone.utc)
@@ -382,7 +380,7 @@ class TradingEngine:
     def _run_order_book_snapshot(self):
         try:
             import asyncio as _asyncio
-            from api.modules.truth_social.data import fetch_order_books_for_brackets
+            from api.modules.shared.polymarket import fetch_order_books_for_brackets
             sb = get_supabase()
             modules = sb.table("modules").select("id,market_slug").in_("status", ["active", "paused"]).execute()
             now = datetime.now(timezone.utc).isoformat()
@@ -442,25 +440,22 @@ class TradingEngine:
         try:
             import asyncio as _asyncio
             from datetime import datetime as _dt
-            from api.modules.truth_social.data import fetch_active_tracking, fetch_xtracker_stats, get_xtracker_summary, parse_hourly_counts, compute_running_total
-            from api.modules.truth_social.truthsocial_direct import count_posts_in_window
+            from api.modules.shared.polymarket import fetch_active_tracking, fetch_xtracker_stats, get_xtracker_summary, parse_hourly_counts, compute_running_total
 
             sb = get_supabase()
-            modules = sb.table("modules").select("id,name").in_("status", ["active", "paused", "paper"]).execute()
+            modules = sb.table("modules").select("id,name,strategy").in_("status", ["active", "paused", "paper"]).execute()
             now_iso = datetime.now(timezone.utc).isoformat()
             rows = []
 
             for m in modules.data or []:
-                name = (m.get("name") or "").lower()
-                if "trump" in name or "truth" in name:
-                    handle = "realDonaldTrump"
-                elif "elon" in name:
-                    handle = "elonmusk"
-                else:
+                module = self.registry.for_db_row(m)
+                if not module:
                     continue
+                handle = module.get_handle()
+                platform = module.get_platform()
 
                 try:
-                    tracking = _run_async(fetch_active_tracking(handle))
+                    tracking = _run_async(fetch_active_tracking(handle, platform))
                 except Exception as e:
                     log.warning(f"Post count snapshot: tracking fetch failed for {handle}: {e}")
                     continue
@@ -494,7 +489,7 @@ class TradingEngine:
                         "count": None, "error": str(e)[:200], "captured_at": now_iso,
                     })
 
-                if handle == "realDonaldTrump" and ws and we:
+                if module.supports_direct_post_count() and ws and we:
                     try:
                         w_start = _dt.fromisoformat(ws.replace("Z", "+00:00"))
                         w_end = _dt.fromisoformat(we.replace("Z", "+00:00"))
@@ -503,7 +498,7 @@ class TradingEngine:
                         # Insert a row even on timeout so the divergence chart shows the gap explicitly.
                         ts_result = _run_async(
                             _asyncio.wait_for(
-                                count_posts_in_window(w_start, w_end_capped, handle=handle),
+                                module.count_posts_in_window(w_start, w_end_capped),
                                 timeout=15.0,
                             )
                         )
@@ -564,24 +559,20 @@ class TradingEngine:
     def _run_auction_monitor(self):
         try:
             import asyncio
-            from api.modules.truth_social.data import _fetch_trackings_raw
+            from api.modules.shared.polymarket import _fetch_trackings_raw
             from api.services.notifications import notify_auction_gap, notify_new_auction
 
             sb = get_supabase()
-            modules = sb.table("modules").select("id,name,market_slug").in_("status", ["active", "paused", "paper"]).execute()
-            handles = {"Truth Social": "realDonaldTrump", "Elon": "elonmusk"}
+            modules = sb.table("modules").select("id,name,strategy,market_slug").in_("status", ["active", "paused", "paper"]).execute()
 
             for mod in (modules.data or []):
-                name = mod.get("name", "")
-                handle = None
-                for key, h in handles.items():
-                    if key.lower() in name.lower():
-                        handle = h
-                        break
-                if not handle:
+                module = self.registry.for_db_row(mod)
+                if not module:
                     continue
+                handle = module.get_handle()
+                platform = module.get_platform()
 
-                trackings = _run_async(_fetch_trackings_raw(handle))
+                trackings = _run_async(_fetch_trackings_raw(handle, platform))
                 if not trackings:
                     continue
 
@@ -741,12 +732,12 @@ class TradingEngine:
         # Use first 80 chars of error as signature (drops timestamps, addresses, etc).
         sig = (error_msg or "")[:80].strip()
         now_ts = time.time()
-        self._recent_errors.append((now_ts, sig, error_msg or ""))
+        self._recent_errors.append((now_ts, module_name, sig, error_msg or ""))
         # Drop entries older than 15 min
         cutoff = now_ts - 15 * 60
-        self._recent_errors = [(t, s, m) for (t, s, m) in self._recent_errors if t >= cutoff]
-        # Count occurrences of this signature
-        same_count = sum(1 for (_, s, _) in self._recent_errors if s == sig)
+        self._recent_errors = [e for e in self._recent_errors if e[0] >= cutoff]
+        # Count occurrences of this signature (across modules — alert dedupe is global)
+        same_count = sum(1 for e in self._recent_errors if e[2] == sig)
         if same_count >= 3:
             try:
                 from api.services.alerts import notify_repeated_errors
@@ -816,8 +807,8 @@ class TradingEngine:
         recent_errors = self._recent_errors
         if recent_errors:
             err_count = len(recent_errors)
-            # _recent_errors is (ts, signature, sample). Show the most-recent signature.
-            latest_sig = recent_errors[-1][1] if recent_errors else "unknown"
+            # _recent_errors is (ts, module_name, signature, sample). Show the most-recent signature.
+            latest_sig = recent_errors[-1][2] if recent_errors else "unknown"
             return {
                 "state": "paused",
                 "reason": f"Degraded — {err_count} recent error{'s' if err_count != 1 else ''} from module evaluation",
@@ -848,6 +839,46 @@ class TradingEngine:
             "state": "trading",
             "reason": "Bot is actively scanning markets",
             "details": {"active_modules": len(active), "cycle_count": self._cycle_count},
+        }
+
+    def health_for_module(self, module_name: str) -> dict:
+        """Per-module health. Global engine state (stopped, circuit breaker,
+        stale data) still applies to every module — but recent errors are
+        scoped so one module's hiccup doesn't paint every page red.
+        """
+        if not self._running:
+            return {"state": "paused", "reason": "Engine stopped",
+                    "details": {"action": "Use /api/engine/start to resume"}}
+        if self.risk_manager.circuit_breaker_tripped:
+            cooldown_remaining_s = max(0, int(self.risk_manager._cooldown_until - time.time()))
+            return {"state": "paused", "reason": "Circuit breaker tripped",
+                    "details": {"consecutive_losses": self.risk_manager.consecutive_losses,
+                                "cooldown_remaining_min": round(cooldown_remaining_s / 60, 1)}}
+        if self._stale_data:
+            return {"state": "paused", "reason": "Stale data — xTracker hasn't refreshed",
+                    "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS}}
+
+        # Match errors by module name — registry uses the module's `name` attr
+        # but the dashboard sometimes passes the human-friendly DB name. Match
+        # on case-insensitive substring in either direction so both work.
+        key = (module_name or "").lower().strip()
+        my_errors = [
+            e for e in self._recent_errors
+            if key and (key in (e[1] or "").lower() or (e[1] or "").lower() in key)
+        ]
+        if my_errors:
+            err_count = len(my_errors)
+            latest_sig = my_errors[-1][2]
+            return {
+                "state": "paused",
+                "reason": f"Degraded — {err_count} recent error{'s' if err_count != 1 else ''} from this module",
+                "details": {"latest_error": latest_sig[:100], "window_minutes": 15, "module": module_name},
+            }
+
+        return {
+            "state": "trading",
+            "reason": "Module is actively evaluating",
+            "details": {"module": module_name, "cycle_count": self._cycle_count},
         }
 
 

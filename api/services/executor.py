@@ -141,7 +141,7 @@ class PaperExecutor:
 
     def _check_liquidity(self, signal: Signal) -> tuple:
         try:
-            from api.modules.truth_social.data import fetch_order_books_for_brackets
+            from api.modules.shared.polymarket import fetch_order_books_for_brackets
             books = _run_async(fetch_order_books_for_brackets(signal.market_id, [signal.bracket]))
             book = books.get(signal.bracket)
             if not book:

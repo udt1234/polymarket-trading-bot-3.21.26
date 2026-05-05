@@ -394,7 +394,7 @@ export default function ModuleDetailPage() {
       </div>
 
       {/* Bot Health Banner — always visible, single-glance status */}
-      <BotHealthBanner />
+      <BotHealthBanner moduleId={module.id} />
 
       {/* Circuit Breaker Banner */}
       {cbState?.tripped && (

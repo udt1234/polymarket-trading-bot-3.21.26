@@ -10,16 +10,16 @@ log = logging.getLogger(__name__)
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from api.dependencies import get_supabase
-from api.modules.truth_social.data import _fetch_trackings_raw
+from api.modules.shared.polymarket import _fetch_trackings_raw
 from api.modules.truth_social.module_config import get_module_config, save_module_config
-from api.modules.truth_social.enhanced_pacing import (
+from api.modules.shared.enhanced_pacing import (
     recency_weighted_averages, dow_variance, pace_acceleration,
     dow_deviation, ensemble_confidence_bands, floor_bracket_probs,
 )
 from api.modules.truth_social.parquet_history import (
     search_parquet_markets, download_and_cache_parquet, preview_parquet_data,
 )
-from api.modules.truth_social.projection import expected_value_bracket
+from api.modules.shared.projection import expected_value_bracket
 
 router = APIRouter()
 
@@ -27,12 +27,12 @@ DOW_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def _detect_handle(module_data: dict) -> str:
-    name = (module_data.get("name", "") or "").lower()
-    if "truth" in name or "trump" in name:
+    """Resolve handle via the BaseModule API (no name-string branching here)."""
+    from api.services.engine import engine
+    module = engine.registry.for_db_row(module_data)
+    if module is None:
         return "realDonaldTrump"
-    if "elon" in name:
-        return "elonmusk"
-    return "realDonaldTrump"
+    return module.get_handle()
 
 
 def _detect_name_filter(handle: str) -> str:
@@ -402,7 +402,7 @@ async def get_auction_history(module_id: str, limit: int = 20):
     for t, end_dt in past_trackings:
         slug = ""
         try:
-            from api.modules.truth_social.data import extract_slug_from_tracking
+            from api.modules.shared.polymarket import extract_slug_from_tracking
             slug = extract_slug_from_tracking(t) or ""
         except Exception:
             pass
@@ -418,7 +418,7 @@ async def get_auction_history(module_id: str, limit: int = 20):
         actual_total = None
         actual_bracket = None
         try:
-            from api.modules.truth_social.data import fetch_xtracker_stats, get_xtracker_summary, fetch_market_prices
+            from api.modules.shared.polymarket import fetch_xtracker_stats, get_xtracker_summary, fetch_market_prices
             tid = str(t.get("id") or t.get("trackingId") or "")
             if tid:
                 stats = await fetch_xtracker_stats(tid)
@@ -464,8 +464,8 @@ async def get_auction_history(module_id: str, limit: int = 20):
 
 
 def _compute_pacing_models(running_total, elapsed_days, remaining_days, total_days, hist_mean, hist_std, hourly_counts, var, now, cfg, dynamic_brackets=None):
-    from api.modules.truth_social.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
-    from api.modules.truth_social.projection import ensemble_weights as ew, ensemble_projection, expected_value_bracket
+    from api.modules.shared.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
+    from api.modules.shared.projection import ensemble_weights as ew, ensemble_projection, expected_value_bracket
 
     pace_val = regular_pace(running_total, elapsed_days, total_days) if elapsed_days > 0 else hist_mean
     bayes_val = bayesian_pace(running_total, elapsed_days, remaining_days, hist_mean, total_days)
@@ -716,13 +716,13 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     if not module.data:
         raise HTTPException(status_code=404, detail="Module not found")
 
-    from api.modules.truth_social.data import (
+    from api.modules.shared.polymarket import (
         fetch_active_tracking, fetch_tracking_by_id, fetch_xtracker_stats,
         parse_hourly_counts, parse_daily_totals, get_xtracker_summary,
         compute_elapsed_days, fetch_historical_weekly_totals,
         fetch_market_prices, extract_slug_from_tracking,
     )
-    from api.modules.truth_social.regime import detect_regime
+    from api.modules.shared.regime import detect_regime
 
     cfg = get_module_config(module_id)
     handle = _detect_handle(module.data)
@@ -791,7 +791,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     market_prices = await fetch_market_prices(slug) if slug else {}
     market_implied = max(market_prices, key=market_prices.get) if market_prices else None
 
-    from api.modules.truth_social.enhanced_pacing import optimal_entry_timing
+    from api.modules.shared.enhanced_pacing import optimal_entry_timing
     entry_timing = {}
     if conf_bands:
         top_bracket = conf_bands[0]["bracket"]
@@ -805,7 +805,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     hourly_heatmap = _build_hourly_heatmap(hourly_counts)
     dow_hour_heatmap = _build_dow_hour_heatmap(handle)
 
-    from api.modules.truth_social.enhanced_pacing import historical_hourly_averages
+    from api.modules.shared.enhanced_pacing import historical_hourly_averages
     hist_dir = str(Path(__file__).resolve().parent.parent.parent / "_DataMetricPulls" / "historical")
     hist_hourly = historical_hourly_averages(hist_dir, handle)
     historical_hourly_heatmap = _build_historical_hourly_heatmap(hist_hourly)
@@ -1220,7 +1220,7 @@ async def post_count_history(
     if tracking_id:
         q = q.eq("tracking_id", tracking_id)
     else:
-        from api.modules.truth_social.data import fetch_active_tracking
+        from api.modules.shared.polymarket import fetch_active_tracking
         handle = _detect_handle({"name": (sb.table("modules").select("name").eq("id", module_id).single().execute().data or {}).get("name", "")})
         try:
             tracking = await fetch_active_tracking(handle)
