@@ -203,7 +203,14 @@ class RiskManager:
         this new signal must be positive.
 
         EV = sum over brackets of [ P(bracket wins) × shares_in_bracket × $1 ] - total_cost
+
+        Structural strategies (e.g. spike_trading) opt out via skip_edge_check
+        — they don't have a model_prob to compute EV from, so this check
+        would always reject them. Their sizing is bounded by their own
+        per-tier % caps.
         """
+        if (signal.metadata or {}).get("skip_edge_check") is True:
+            return True, ""
         try:
             sb = get_supabase()
             existing = sb.table("positions").select("bracket,size,avg_price").eq("status", "open").eq("market_id", signal.market_id).eq("side", "BUY").execute()
@@ -385,6 +392,11 @@ class RiskManager:
         return True, ""
 
     def _check_spread(self, signal: Signal, settings) -> tuple[bool, str]:
+        # Structural strategies (spike_trading) place LIMIT orders that may be
+        # well below the current bid — they intentionally don't care about
+        # the live spread because they wait for the market to come to them.
+        if (signal.metadata or {}).get("skip_edge_check") is True:
+            return True, ""
         # Either default sentinel means no real book data was populated by the
         # module (Signal dataclass defaults: best_bid=0.0, best_ask=1.0). Prior
         # AND condition only matched when BOTH defaults were present, leaving a
@@ -399,6 +411,10 @@ class RiskManager:
         return True, ""
 
     def _check_liquidity(self, signal: Signal, settings) -> tuple[bool, str]:
+        # Structural strategies opt out — limit orders wait for fills, depth
+        # at signal time isn't relevant.
+        if (signal.metadata or {}).get("skip_edge_check") is True:
+            return True, ""
         depth = signal.ask_depth_5 if signal.side == "BUY" else signal.bid_depth_5
         target_size = signal.kelly_pct * settings.bankroll
         if depth <= 0:

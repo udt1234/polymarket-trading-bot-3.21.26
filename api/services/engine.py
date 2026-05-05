@@ -96,8 +96,11 @@ class TradingEngine:
         self.scheduler.add_job(self._run_order_ttl_sweep, "interval", minutes=5, max_instances=1)
         self.scheduler.add_job(self._run_order_book_snapshot, "interval", minutes=5, max_instances=1)
         self.scheduler.add_job(self._run_post_count_snapshot, "interval", minutes=5, max_instances=1)
-        # Daily 9 AM ET digest of any non-active modules — silent if all clear
-        self.scheduler.add_job(self._run_daily_module_digest, "cron", hour=13, minute=0, max_instances=1)
+        # Daily module-status digests at 9 AM ET (13 UTC) and 5 PM ET (21 UTC).
+        # Silent on all-clear days. Each fires independently with its own
+        # 12h dedupe window so missing one doesn't block the other.
+        self.scheduler.add_job(self._run_daily_module_digest, "cron", hour=13, minute=0, max_instances=1, id="digest_9am")
+        self.scheduler.add_job(self._run_daily_module_digest, "cron", hour=21, minute=0, max_instances=1, id="digest_5pm")
         self.scheduler.start()
         self._running = True
         log.info(f"Engine started: interval={interval}s, paper={settings.paper_mode}, shadow={settings.shadow_mode}, multi={self._multi_mode}")

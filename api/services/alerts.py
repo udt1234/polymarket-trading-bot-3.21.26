@@ -168,8 +168,14 @@ async def notify_daily_module_status_digest():
         return
     if not _is_alert_enabled("module_status_change"):
         return
-    key = "alert_daily_module_digest"
-    if not _dedupe_check_and_record(key, 24.0, {}):
+    # Bucket the dedupe key by the calling hour-block so 9 AM ET and
+    # 5 PM ET fire independently. Without this the 5pm digest would be
+    # silenced by the morning's 24h dedupe.
+    from datetime import datetime as _dt, timezone as _tz
+    hour_utc = _dt.now(_tz.utc).hour
+    bucket = "morning" if hour_utc < 18 else "evening"
+    key = f"alert_daily_module_digest_{bucket}"
+    if not _dedupe_check_and_record(key, 23.0, {}):
         return
     try:
         sb = get_supabase()

@@ -13,12 +13,11 @@ DEFAULT_CONFIG = {
     "handle": "elonmusk",
     "window_days": 2,                         # only trade 2-day auctions
     "bracket_pattern": "<40",                 # which bracket label to trade
-    # Skip illiquid markets. Lowered to 1k from 50k (2026-05-05) so we can
-    # enter pre-launch auctions where the betting window has just opened
-    # but volume hasn't built up yet. Real safety comes from limit-only
-    # orders + per-tier sizing — illiquidity won't blow up the position,
-    # it just means we may not fill.
-    "min_market_volume_24h": 1_000,
+    # No volume threshold (removed 2026-05-05 per user). For limit-only
+    # entries, illiquidity doesn't matter: a 12c limit either fills at 12c
+    # or doesn't fill at all. Exit-side liquidity is handled separately
+    # by the SELLNOW_MIN_BID guard.
+    "min_market_volume_24h": 0,
     # Polymarket Series slug — primary discovery path. Surfaces auctions as
     # soon as Polymarket lists them, before xTracker starts counting tweets.
     # Find via gamma-api.polymarket.com/series?slug=<x> or by inspecting the
@@ -40,23 +39,27 @@ DEFAULT_CONFIG = {
     "buy_tier_2_pct":   0.50,
     "buy_cancel_after_hours": 24,
 
-    # ---- Sell ladder ----
-    # Tuned for 12¢ entry (per user override 2026-05-05).
-    # Old 3¢/7¢/15¢/30¢ ladder doesn't make sense anymore — selling at 3¢
-    # after a 12¢ entry is a 75% loss. New ladder targets profitable exits
-    # above entry plus a moonshot. Hit-rate from historical 2-day <40:
-    #   15¢ ->  41% of auctions (lock-in profit, +25%)
-    #   25¢ ->  ~28% (typical peak, +108%)
-    #   50¢ ->  ~12% (rare moonshot, +317%)
-    #   90¢ ->  resolves YES (+650%)
-    "sell_tier_1_price": 0.15,                # 15¢ - lock-in (+25% on 12¢ entry)
-    "sell_tier_1_pct":   0.30,
-    "sell_tier_2_price": 0.25,                # 25¢ - typical peak (+108%)
-    "sell_tier_2_pct":   0.30,
-    "sell_tier_3_price": 0.50,                # 50¢ - rare moonshot (+317%)
-    "sell_tier_3_pct":   0.20,
-    "sell_tier_4_price": 0.90,                # 90¢ - hold-to-resolve (+650%)
-    "sell_tier_4_pct":   0.20,
+    # ---- Sell ladder (RELATIVE to entry, not hardcoded prices) ----
+    # Multipliers are applied to actual fill price, so a 9c fill -> 13.5/18/36/72
+    # whereas a 12c fill -> 18/24/48/96 (capped at 99c). This is much smarter
+    # than hardcoded sells because the same multiplier-based ladder works
+    # whether we filled cheap or expensive.
+    "sell_multipliers": [1.5, 2.0, 4.0, 8.0],
+    "sell_multiplier_pcts": [0.30, 0.30, 0.20, 0.20],
+
+    # ---- Take-profit / stop-loss / trailing-stop (consumed by exit_manager) ----
+    # These fire AUTOMATICALLY at the position level — no manual intervention.
+    # take_profit_pct: exit when price up this fraction above avg fill (e.g.
+    #   0.50 = exit at 1.5× entry; 1.50 = exit at 2.5× entry)
+    # stop_loss_pct: exit when price down this fraction below avg fill
+    #   (0.60 = exit at 40% of entry. Spike is lottery-ticket so we tolerate
+    #    deep drawdown — the SELL-NOW classifier handles the "bracket
+    #    busting" case faster than a generic stop-loss would.)
+    # trailing_stop_pct: when up >50%, lock in by trailing the stop this far
+    #   below the running peak.
+    "take_profit_pct": 7.0,                   # +700% (8x — moonshot)
+    "stop_loss_pct": 0.85,                    # -85% (deep — strategy expects losers)
+    "trailing_stop_pct": 0.30,                # 30% trail behind peak
 
     # ---- HOLD signal (don't liquidate even if up 5x) ----
     # Validated against 51 markets — only ONE state cell qualifies as a clean HOLD.
@@ -72,9 +75,19 @@ DEFAULT_CONFIG = {
         [30, 0],                              # 30+ tweets at any time
     ],
 
+    # ---- Pacing-aware overrides (classify_decision_v2) ----
+    # pacing_score = projected_final_tweets / bracket_max_count (40 for <40).
+    #   < 0.30 → bracket clearly NOT going to bust — hold even if other
+    #            signals say sell.
+    #   >= 1.20 → bracket clearly busting — SELL-NOW even if other signals
+    #            say hold. Only fires after first 20% of window elapsed
+    #            (avoids extrapolating from 0 elapsed hours).
+    "bracket_max_count": 40,                  # the "<40" boundary
+    "pacing_sell_score": 1.20,
+    "pacing_hold_score": 0.30,
+
     # ---- Risk ----
     "bracket_cap_pct_of_bankroll": 0.05,      # 5% per cycle max (lottery ticket sizing)
-    "stop_loss_pct": -0.5,                    # bail if down 50% before SELL-NOW triggers
     "max_open_positions": 3,                  # cap concurrent positions
 
     # ---- Operational ----

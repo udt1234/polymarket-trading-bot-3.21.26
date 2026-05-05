@@ -9,7 +9,10 @@ from api.services.position_manager import open_position
 
 log = logging.getLogger(__name__)
 
-MIN_PRICE_FLOOR = 0.01
+# Polymarket CLOB tick size is 0.001 ($0.001 = 0.1¢). Lottery-ticket entries
+# at 0.3¢/0.5¢ need to pass this floor. Was 0.01 (1¢) which silently
+# rejected every spike_trading tier 2 signal.
+MIN_PRICE_FLOOR = 0.001
 
 
 def _run_async(coro):
@@ -36,9 +39,12 @@ class PaperExecutor:
 
         fill_price, max_depth = self._check_liquidity(signal)
         if fill_price is None:
-            log.info(f"PAPER REJECT {signal.bracket}: no liquidity")
-            self._log_rejection(signal, "no_liquidity")
-            return {"status": "rejected", "reason": "no_liquidity"}
+            # Limit didn't cross — order rests on the book unfilled. This is
+            # the CORRECT outcome for our spike strategy: we WANT the limit
+            # to wait. We log as 'unfilled' (not rejected) so the engine
+            # doesn't treat it as a failure.
+            log.info(f"PAPER UNFILLED {signal.bracket} {signal.side} @ {signal.market_price:.4f}: book hasn't crossed limit")
+            return {"status": "unfilled", "reason": "limit_not_crossed", "price": signal.market_price}
 
         order_id = str(uuid.uuid4())
         # On SELL, "size" comes from kelly_pct meaning "fraction of position to liquidate".
@@ -140,6 +146,15 @@ class PaperExecutor:
         return order
 
     def _check_liquidity(self, signal: Signal) -> tuple:
+        """For limit orders: only fill if the book is already crossing our limit.
+
+        BUY: fills at best_ask only if best_ask <= signal.market_price.
+             Otherwise no fill — the limit waits on the book.
+        SELL: fills at best_bid only if best_bid >= signal.market_price.
+
+        Returns (fill_price | None, depth). None price = no fill (limit
+        sits unfilled, which is the realistic paper-trading outcome).
+        """
         try:
             from api.modules.shared.polymarket import fetch_order_books_for_brackets
             books = _run_async(fetch_order_books_for_brackets(signal.market_id, [signal.bracket]))
@@ -148,16 +163,22 @@ class PaperExecutor:
                 return (signal.market_price, 0)
 
             if signal.side == "BUY":
-                fill_price = book.get("best_ask", signal.market_price)
+                best_ask = book.get("best_ask")
                 depth = book.get("ask_depth_5", 0)
+                if best_ask is None or best_ask <= 0 or best_ask >= 1:
+                    return (signal.market_price, depth)
+                # Limit only fills if book ask is at or below our limit
+                if best_ask > signal.market_price:
+                    return (None, depth)
+                return (best_ask, depth)
             else:
-                fill_price = book.get("best_bid", signal.market_price)
+                best_bid = book.get("best_bid")
                 depth = book.get("bid_depth_5", 0)
-
-            if fill_price <= 0 or fill_price >= 1:
-                return (signal.market_price, depth)
-
-            return (fill_price, depth)
+                if best_bid is None or best_bid <= 0 or best_bid >= 1:
+                    return (signal.market_price, depth)
+                if best_bid < signal.market_price:
+                    return (None, depth)
+                return (best_bid, depth)
         except Exception as e:
             log.warning(f"Liquidity check failed for {signal.bracket}, using signal price: {e}")
             return (signal.market_price, 0)

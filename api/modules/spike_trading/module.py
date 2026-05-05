@@ -42,8 +42,12 @@ from api.modules.spike_trading.data import (
 from api.modules.spike_trading.decision import (
     PositionState,
     classify_decision,
+    classify_decision_v2,
     should_market_sell,
     should_cancel_aggressive_tiers,
+    adaptive_buy_price,
+    trailing_stop_price,
+    slow_bleed_sell_price,
 )
 
 log = logging.getLogger(__name__)
@@ -261,12 +265,17 @@ class SpikeTradingModule(BaseModule):
             entry_price=entry,
             pnl_pct=pnl_pct,
         )
-        decision = classify_decision(state, cfg)
+        # Pacing-aware classifier: knows projected final tweet count
+        # based on current rate, can override v1 when pacing is extreme.
+        total_hours = float(cfg.get("window_days", 2)) * 24.0
+        decision, ctx = classify_decision_v2(state, cfg, total_hours)
 
         self._log(sb, module_id, "decision", "info",
                   f"{market_id} {bracket} state=({cum_tweets} tweets, "
                   f"{h_to_close:.1f}h left, price={current_price*100:.1f}¢, "
-                  f"pnl={pnl_pct:+.1f}%) → {decision}")
+                  f"pnl={pnl_pct:+.1f}%) pacing={ctx['pacing_score']} "
+                  f"proj_final={ctx['projected_final_tweets']} → {decision} "
+                  f"({ctx.get('trigger','')})")
 
         # Skip DB mutations in shadow mode — keeps spike_positions / snapshots
         # clean of phantom rows when the operator is just observing.
@@ -281,7 +290,7 @@ class SpikeTradingModule(BaseModule):
             }).eq("id", position["id"]).execute()
 
         if should_market_sell(decision):
-            return self._build_market_sell(sb, module_id, market, position)
+            return self._build_market_sell(sb, module_id, market, position, h_to_close)
 
         # HOLD / HOLD-LIGHT / SELL — no immediate signal action.
         # (A future enhancement: cancel/adjust live limit-sell orders here.)
@@ -292,23 +301,27 @@ class SpikeTradingModule(BaseModule):
     # ------------------------------------------------------------------
 
     def _build_buy_ladder(self, module_id: str, market: dict, cfg: dict) -> list[Signal]:
-        """Emit two buy Signals at tier 1 and tier 2 prices.
+        """Emit buy Signals using adaptive pricing.
 
-        Signal contract:
-          - side='BUY'
-          - market_price = limit price for this tier
-          - kelly_pct    = % of allocation for this tier (from cfg)
-          - metadata     = tier index + spike_trading flag
+        Each tier is built from a TARGET price in cfg, but the actual limit
+        sent uses adaptive_buy_price() to undercut the ask if the market is
+        already at or below our target — saving cost without changing
+        fill-probability.
         """
         signals = []
+        bid = float(market.get("best_bid") or 0.0)
+        ask = float(market.get("best_ask") or 1.0)
         for tier_idx, (price_key, pct_key) in enumerate([
             ("buy_tier_1_price", "buy_tier_1_pct"),
             ("buy_tier_2_price", "buy_tier_2_pct"),
         ], start=1):
-            price = float(cfg.get(price_key, 0.0))
+            target = float(cfg.get(price_key, 0.0))
             pct = float(cfg.get(pct_key, 0.0))
-            if price <= 0 or pct <= 0:
+            if target <= 0 or pct <= 0:
                 continue
+            # Adaptive: if ask is already ≤ target, place just under the ask
+            # to jump the queue at near-equivalent cost.
+            limit_price = adaptive_buy_price(bid, ask, target)
             signals.append(Signal(
                 module_id=module_id,
                 market_id=market["market_id"],
@@ -316,60 +329,70 @@ class SpikeTradingModule(BaseModule):
                 side="BUY",
                 edge=0.0,                # not edge-driven; strategy is structural
                 model_prob=0.0,           # not used by spike strategy
-                market_price=price,
+                market_price=limit_price,
                 kelly_pct=pct * cfg.get("bracket_cap_pct_of_bankroll", 0.05),
                 confidence=0.5,
-                best_bid=market["best_bid"],
-                best_ask=market["best_ask"],
+                best_bid=bid,
+                best_ask=ask,
                 metadata={
                     "strategy": "spike_trading",
                     "tier": tier_idx,
                     "tier_type": "buy",
                     "shadow_mode": cfg.get("shadow_mode", False),
-                    # Structural strategy — bypass the global edge threshold.
-                    # Sizing is bounded by bracket_cap_pct_of_bankroll instead.
                     "skip_edge_check": True,
+                    "target_price": target,
+                    "adaptive_price": limit_price,
                 },
             ))
         return signals
 
-    # Minimum acceptable bid for a SELL-NOW exit. Below this, the book is so
-    # thin that placing a sell at the bid is functionally a market order at 0
-    # — we'd dump the position for nothing AND likely not even fill due to
-    # tick-size rounding. Better to flag and let a human handle.
+    # Minimum acceptable bid for a SELL-NOW exit. Below this we don't dump
+    # at the bid (would functionally be a market order at 0). Instead we
+    # use a slow-bleed limit that walks DOWN over remaining hours — the
+    # position auto-exits even with no manual intervention.
     SELLNOW_MIN_BID = 0.005   # 0.5¢
 
-    def _build_market_sell(self, sb, module_id: str, market: dict, position: dict) -> list[Signal]:
-        """Emit a SELL signal aggressively priced to fill on the dying bracket.
+    def _build_market_sell(self, sb, module_id: str, market: dict, position: dict, h_to_close: float) -> list[Signal]:
+        """Emit a SELL signal to exit the position on a dying bracket.
 
-        Critical safety: if the bid book is empty (best_bid below tick floor),
-        we cannot exit cleanly. Log loud and skip — operator-visible. Better
-        a stuck position with an alert than a silent unfillable order.
+        Two paths:
+          - Bid book is healthy (best_bid >= 0.5¢): cross the spread at
+            the bid for an aggressive but predictable fill.
+          - Bid book is too thin: place a slow-bleed limit a tick under
+            the bid (or below 1¢ if no bid). Each cycle the price walks
+            lower until we fill or close approaches. NO MANUAL EXIT NEEDED.
         """
         bid = float(market.get("best_bid") or 0.0)
         ask = float(market.get("best_ask") or 1.0)
 
         if bid < self.SELLNOW_MIN_BID:
-            # No liquidity to exit on. Log + alert, do nothing.
+            # Slow-bleed exit: keep walking the limit down each cycle.
+            sell_px = slow_bleed_sell_price(h_to_close, bid, min_floor=0.001)
             self._log(sb, module_id, "risk", "warning",
-                      f"SELL-NOW triggered for {market['market_id']} but best_bid={bid:.4f} "
-                      f"is below floor {self.SELLNOW_MIN_BID:.4f}. Position remains open. "
-                      f"Manual exit required.")
-            try:
-                from api.services.engine import _fire_and_forget_async
-                from api.services.notifications import send_slack
-                _fire_and_forget_async(send_slack(
-                    f":warning: *Spike Trading: stuck SELL-NOW*\n"
-                    f"Market `{market['market_id']}` SELL-NOW classifier fired but bid book is empty "
-                    f"(best_bid={bid*100:.2f}¢). Position cannot exit cleanly — manual review needed."
-                ))
-            except Exception as e:
-                log.warning(f"Failed to send stuck-SELL-NOW Slack alert: {e}")
-            return []
+                      f"SELL-NOW thin book for {market['market_id']}: "
+                      f"best_bid={bid:.4f}. Posting slow-bleed limit at {sell_px:.4f}.")
+            return [Signal(
+                module_id=module_id,
+                market_id=market["market_id"],
+                bracket=position["bracket"],
+                side="SELL",
+                edge=0.0,
+                model_prob=0.0,
+                market_price=sell_px,
+                kelly_pct=1.0,
+                confidence=1.0,
+                best_bid=bid,
+                best_ask=ask,
+                metadata={
+                    "strategy": "spike_trading",
+                    "tier_type": "slow_bleed",
+                    "reason": "SELL-NOW thin book — auto slow-bleed",
+                    "position_id": position["id"],
+                    "skip_edge_check": True,
+                },
+            )]
 
-        # Aggressive limit at the bid: fills against existing buy orders.
-        # If bid book is thin we may only partial-fill, but the engine's exit
-        # path will retry next cycle.
+        # Healthy bid: cross the spread at the bid.
         return [Signal(
             module_id=module_id,
             market_id=market["market_id"],
@@ -377,8 +400,8 @@ class SpikeTradingModule(BaseModule):
             side="SELL",
             edge=0.0,
             model_prob=0.0,
-            market_price=bid,             # cross the spread, take whatever bid liquidity exists
-            kelly_pct=1.0,                # 100% — exit everything
+            market_price=bid,
+            kelly_pct=1.0,
             confidence=1.0,
             best_bid=bid,
             best_ask=ask,
