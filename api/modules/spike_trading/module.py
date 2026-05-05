@@ -37,6 +37,7 @@ from api.modules.spike_trading.data import (
     fetch_market_for_tracking,
     fetch_cumulative_tweets,
     hours_to_close,
+    _resolve_xtracker_id_for_window,
 )
 from api.modules.spike_trading.decision import (
     PositionState,
@@ -143,6 +144,7 @@ class SpikeTradingModule(BaseModule):
             handle=cfg["handle"],
             platform=cfg["platform"],
             target_window_days=cfg["window_days"],
+            series_slug=cfg.get("series_slug"),
         )
         if not active_trackings:
             self._log(sb, module_id, "decision", "info",
@@ -199,10 +201,21 @@ class SpikeTradingModule(BaseModule):
         end_iso = tracking.get("endDate", "")
 
         position = self._get_open_position(sb, module_id, market_id, bracket)
-        # Use the resolved tracking id (handles both 'id' and 'trackingId' shapes)
-        cum_tweets = await fetch_cumulative_tweets(
-            cfg["handle"], tracking.get("__resolved_id") or tracking.get("id"),
-        )
+        # Discover the right tracking-id for tweet counts:
+        #   - If source=xtracker, the tracking dict already has the right id.
+        #   - If source=gamma_series, the 'id' is a Gamma event id — not
+        #     usable on xTracker. Resolve by matching xTracker tracking
+        #     start/end dates to this auction's window. Returns 0 if no
+        #     xTracker tracking exists yet (pre-launch).
+        if tracking.get("source") == "gamma_series":
+            xt_id = await _resolve_xtracker_id_for_window(
+                cfg["handle"], cfg["platform"], tracking.get("startDate"), tracking.get("endDate"),
+            )
+            cum_tweets = await fetch_cumulative_tweets(cfg["handle"], xt_id) if xt_id else 0
+        else:
+            cum_tweets = await fetch_cumulative_tweets(
+                cfg["handle"], tracking.get("__resolved_id") or tracking.get("id"),
+            )
         h_to_close = hours_to_close(end_iso)
         # Use mid as proxy for "current price" — robust to one-sided books
         current_price = (market["best_bid"] + market["best_ask"]) / 2.0 if market["best_ask"] > 0 else market["best_bid"]

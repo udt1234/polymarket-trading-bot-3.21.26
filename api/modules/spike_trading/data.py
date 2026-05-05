@@ -23,19 +23,86 @@ from api.modules.shared.polymarket import (
 log = logging.getLogger(__name__)
 
 
+async def fetch_active_auctions_from_series(
+    series_slug: str,
+    lookahead_days: float = 7.0,
+) -> list[dict]:
+    """Return live + soon-to-start auctions from a Polymarket Series.
+
+    This is the canonical Polymarket-native discovery path — independent of
+    xTracker. Series tickers like 'elon-tweets-48h' surface every recurring
+    auction (past, current, and future) in a single API call. We filter to:
+      - LIVE: Polymarket startDate <= now <= endDate (betting open right now)
+      - PRE: Polymarket startDate is within `lookahead_days` from now
+        (betting NOT open yet but auction listed; we want to act the moment
+        startDate hits, OR ahead of it if config allows pre-launch entry)
+
+    Returns a list of pseudo-tracking dicts shaped to be drop-in-compatible
+    with the older xTracker tracking format used downstream:
+      { id, title, startDate, endDate, marketLink, source: 'gamma_series' }
+    """
+    url = f"{GAMMA_BASE}/series"
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            r = await client.get(url, params={"slug": series_slug})
+            r.raise_for_status()
+            payload = r.json()
+        except Exception as e:
+            log.warning(f"fetch_active_auctions_from_series({series_slug}) failed: {e}")
+            return []
+
+    if not isinstance(payload, list) or not payload:
+        return []
+    events = payload[0].get("events") or []
+    now = datetime.now(timezone.utc)
+    out = []
+    for e in events:
+        sd, ed = e.get("startDate", ""), e.get("endDate", "")
+        if not (sd and ed):
+            continue
+        try:
+            s = datetime.fromisoformat(sd.replace("Z", "+00:00"))
+            edt = datetime.fromisoformat(ed.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        if edt < now:
+            continue  # already past
+        if (s - now).total_seconds() / 86400.0 > lookahead_days:
+            continue  # too far in the future
+        slug = e.get("slug") or ""
+        out.append({
+            "id": str(e.get("id", "")),
+            "title": e.get("title", ""),
+            "startDate": sd,
+            "endDate": ed,
+            "marketLink": f"https://polymarket.com/event/{slug}" if slug else "",
+            "source": "gamma_series",
+        })
+    return out
+
+
 async def fetch_active_short_window_trackings(
     handle: str,
     platform: str,
     target_window_days: int = 2,
+    series_slug: str | None = None,
 ) -> list[dict]:
-    """Return all currently-active trackings for `handle` whose window length
-    matches `target_window_days` (within ±0.1 day). Excludes trackings that
-    haven't started yet or already ended.
+    """Return active auctions for the configured handle/window.
 
-    For Elon 2-day: typically 1-2 active concurrently. For Truth Social 2-day:
-    not currently a Polymarket pattern (Trump uses 7-day), but the helper is
-    handle-agnostic.
+    PRIMARY PATH: if `series_slug` is provided, query Polymarket's Series API
+    directly. This sees auctions the moment Polymarket lists them, even if
+    xTracker hasn't started counting yet.
+
+    FALLBACK PATH: xTracker trackings filtered to matching window length.
+    Kept for backward compatibility, and as a safety net if the Series API
+    is ever down or the slug changes.
     """
+    if series_slug:
+        gamma = await fetch_active_auctions_from_series(series_slug)
+        if gamma:
+            return gamma
+        log.info(f"Series '{series_slug}' returned 0 — falling back to xTracker")
+
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.get(
             f"https://xtracker.polymarket.com/api/users/{handle}/trackings",
@@ -109,6 +176,53 @@ async def fetch_market_for_tracking(tracking: dict, target_bracket: str) -> Opti
             "volume_24h": float(m.get("volume24hr") or m.get("volume24Hr") or 0.0),
             "outcome_prices": m.get("outcomePrices"),
         }
+    return None
+
+
+async def _resolve_xtracker_id_for_window(
+    handle: str, platform: str, start_iso: str | None, end_iso: str | None,
+) -> str | None:
+    """Find the xTracker tracking id whose window matches the given range.
+
+    Used when we discovered an auction via Polymarket Series (no xTracker id)
+    and need to look up live tweet counts. Returns None if no match — typical
+    for pre-launch auctions where xTracker hasn't activated yet.
+    """
+    if not (start_iso and end_iso):
+        return None
+    try:
+        target_start = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+        target_end = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"https://xtracker.polymarket.com/api/users/{handle}/trackings",
+                params={"platform": platform},
+            )
+            r.raise_for_status()
+            data = r.json()
+            items = data.get("data", data) if isinstance(data, dict) else data
+            if isinstance(items, dict):
+                items = items.get("trackings", [])
+    except Exception:
+        return None
+    for t in items or []:
+        s_iso = t.get("startDate", "")
+        e_iso = t.get("endDate", "")
+        if not (s_iso and e_iso):
+            continue
+        try:
+            ts = datetime.fromisoformat(s_iso.replace("Z", "+00:00"))
+            te = datetime.fromisoformat(e_iso.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        # Match by END date only — Polymarket lists markets ~2 days before
+        # xTracker activates, so startDate diverges, but endDate (resolution
+        # time) lines up within minutes.
+        if abs((te - target_end).total_seconds()) < 3600:  # within 1 hour
+            return str(t.get("id") or t.get("trackingId") or "") or None
     return None
 
 

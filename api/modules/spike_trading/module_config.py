@@ -13,31 +13,50 @@ DEFAULT_CONFIG = {
     "handle": "elonmusk",
     "window_days": 2,                         # only trade 2-day auctions
     "bracket_pattern": "<40",                 # which bracket label to trade
-    "min_market_volume_24h": 50_000,          # skip illiquid markets
+    # Skip illiquid markets. Lowered to 1k from 50k (2026-05-05) so we can
+    # enter pre-launch auctions where the betting window has just opened
+    # but volume hasn't built up yet. Real safety comes from limit-only
+    # orders + per-tier sizing — illiquidity won't blow up the position,
+    # it just means we may not fill.
+    "min_market_volume_24h": 1_000,
+    # Polymarket Series slug — primary discovery path. Surfaces auctions as
+    # soon as Polymarket lists them, before xTracker starts counting tweets.
+    # Find via gamma-api.polymarket.com/series?slug=<x> or by inspecting the
+    # 'series' field on any /events response.
+    "series_slug": "elon-tweets-48h",
 
     # ---- Buy ladder ----
-    # Limit-buy at 0.5¢ for half allocation, 0.3¢ for the other half.
-    # 96-98% of past auctions traded at-or-below 1¢ at some point.
-    "buy_tier_1_price": 0.005,                # 0.5¢
+    # Tier 1 at 12¢: aggressive entry meant to capture the auction WHILE it
+    #   still looks "alive" on Polymarket (per user override 2026-05-05).
+    #   Historical 12¢ floor hit-rate is ~98% (almost every 2-day <40 has
+    #   touched 12¢ at some point), but on most paths price never returns
+    #   to <1¢ — so a high floor catches more positions at the cost of
+    #   higher avg entry.
+    # Tier 2 at 0.5¢: kept as a "if it ever crashes, scoop the lottery
+    #   ticket" cheap re-entry. Historical hit-rate ~96%.
+    "buy_tier_1_price": 0.12,                 # 12¢ — aggressive primary entry
     "buy_tier_1_pct":   0.50,
-    "buy_tier_2_price": 0.003,                # 0.3¢
+    "buy_tier_2_price": 0.005,                # 0.5¢ — cheap re-entry if crash
     "buy_tier_2_pct":   0.50,
     "buy_cancel_after_hours": 24,
 
     # ---- Sell ladder ----
-    # Hit rates from historical data:
-    #   3¢  -> 85% of auctions
-    #   7¢  -> 61%
-    #  15¢  -> 41%
-    #  30¢+ -> 20%
-    "sell_tier_1_price": 0.03,                # 3¢   - lock-in tier
-    "sell_tier_1_pct":   0.25,
-    "sell_tier_2_price": 0.07,                # 7¢
-    "sell_tier_2_pct":   0.25,
-    "sell_tier_3_price": 0.15,                # 15¢
-    "sell_tier_3_pct":   0.25,
-    "sell_tier_4_price": 0.30,                # 30¢ - moonshot
-    "sell_tier_4_pct":   0.25,
+    # Tuned for 12¢ entry (per user override 2026-05-05).
+    # Old 3¢/7¢/15¢/30¢ ladder doesn't make sense anymore — selling at 3¢
+    # after a 12¢ entry is a 75% loss. New ladder targets profitable exits
+    # above entry plus a moonshot. Hit-rate from historical 2-day <40:
+    #   15¢ ->  41% of auctions (lock-in profit, +25%)
+    #   25¢ ->  ~28% (typical peak, +108%)
+    #   50¢ ->  ~12% (rare moonshot, +317%)
+    #   90¢ ->  resolves YES (+650%)
+    "sell_tier_1_price": 0.15,                # 15¢ - lock-in (+25% on 12¢ entry)
+    "sell_tier_1_pct":   0.30,
+    "sell_tier_2_price": 0.25,                # 25¢ - typical peak (+108%)
+    "sell_tier_2_pct":   0.30,
+    "sell_tier_3_price": 0.50,                # 50¢ - rare moonshot (+317%)
+    "sell_tier_3_pct":   0.20,
+    "sell_tier_4_price": 0.90,                # 90¢ - hold-to-resolve (+650%)
+    "sell_tier_4_pct":   0.20,
 
     # ---- HOLD signal (don't liquidate even if up 5x) ----
     # Validated against 51 markets — only ONE state cell qualifies as a clean HOLD.
