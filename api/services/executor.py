@@ -54,7 +54,15 @@ class PaperExecutor:
             if not claim_position_for_exit(existing["id"]):
                 self._log_rejection(signal, "lost_race_to_concurrent_exit")
                 return {"status": "rejected", "reason": "lost_race_to_concurrent_exit"}
-            raw_size = float(existing.get("size") or 0)
+            full_size = float(existing.get("size") or 0)
+            # Partial-exit support: when metadata['partial_exit'] is set, kelly_pct
+            # is interpreted as fraction-of-current-size (spike_rider multi-stage).
+            # Otherwise we liquidate the full position (legacy stop-loss / take-profit path).
+            is_partial = bool((signal.metadata or {}).get("partial_exit"))
+            if is_partial and 0 < signal.kelly_pct < 1.0:
+                raw_size = full_size * float(signal.kelly_pct)
+            else:
+                raw_size = full_size
             size = min(raw_size, max_depth) if max_depth > 0 else raw_size
         else:
             raw_size = self.balance * signal.kelly_pct
@@ -107,9 +115,13 @@ class PaperExecutor:
         }).execute()
 
         if signal.side == "SELL":
-            # Partial fill (depth-capped): only close the portion that filled and
-            # leave the rest open for the next cycle. Full fill: close completely.
-            if size < raw_size and raw_size > 0:
+            # Two reasons we'd partial-close:
+            # 1. Intentional tranche (multi-stage exit): kelly_pct < 1 + partial_exit flag.
+            #    raw_size was scaled down upfront, so size == raw_size < full_size.
+            # 2. Depth-capped fill: requested raw_size, but liquidity only allowed `size < raw_size`.
+            # In either case we leave the unsold portion open. Compare against full_size
+            # (the position's actual current size) — not raw_size, which we may have scaled.
+            if size < full_size and full_size > 0:
                 from api.services.position_manager import partial_close_position
                 partial_close_position(existing["id"], size, fill_price)
             else:
@@ -232,7 +244,13 @@ class LiveExecutor:
                 raise ValueError(f"No open BUY position to sell: {signal.bracket}")
             if not claim_position_for_exit(existing_position["id"]):
                 raise ValueError(f"Lost race to concurrent exit on {signal.bracket}")
-            size = float(existing_position.get("size") or 0)
+            full_size = float(existing_position.get("size") or 0)
+            # Partial-exit path (multi-stage tranches): kelly_pct is fraction-of-current-size
+            is_partial = bool((signal.metadata or {}).get("partial_exit"))
+            if is_partial and 0 < signal.kelly_pct < 1.0:
+                size = full_size * float(signal.kelly_pct)
+            else:
+                size = full_size
         else:
             size = 1000.0 * signal.kelly_pct
         if size <= 0:
@@ -287,8 +305,13 @@ class LiveExecutor:
             }).execute()
 
             if signal.side == "SELL" and existing_position:
-                from api.services.position_manager import close_position
-                close_position(existing_position["id"], signal.market_price)
+                full_existing = float(existing_position.get("size") or 0)
+                if size < full_existing and full_existing > 0:
+                    from api.services.position_manager import partial_close_position
+                    partial_close_position(existing_position["id"], size, signal.market_price)
+                else:
+                    from api.services.position_manager import close_position
+                    close_position(existing_position["id"], signal.market_price)
             else:
                 open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, signal.market_price)
 

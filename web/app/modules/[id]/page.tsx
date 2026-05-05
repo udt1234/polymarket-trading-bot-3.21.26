@@ -32,6 +32,7 @@ import { LatencyHistogramChart } from "./components/latency-histogram-chart"
 import { PostCountDivergenceChart } from "./components/post-count-divergence-chart"
 import { CollapsibleCard } from "./components/collapsible-card"
 import { BotStatusTimeline } from "./components/bot-status-timeline"
+import { SpikeRiderSettings } from "./components/spike-rider-settings"
 
 interface ModuleData {
   id: string
@@ -322,6 +323,58 @@ export default function ModuleDetailPage() {
     return (
       <div className="flex h-64 items-center justify-center text-muted-foreground">
         Loading module...
+      </div>
+    )
+  }
+
+  // Spike Rider modules use a different config schema and don't need the
+  // truth_social pacing/forecast UI. Render a leaner page focused on entry/exit
+  // settings, open positions, and recent trades.
+  if (module.strategy === "spike_rider") {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">{module.name}</h1>
+            <LiveStatusBadge moduleStatus={module.status} />
+            <span className="rounded border border-border px-2 py-0.5 text-xs text-muted-foreground">
+              strategy: spike_rider
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => togglePause()}
+              className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent">
+              {module.status === "active" ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+              {module.status === "active" ? "Pause" : "Resume"}
+            </button>
+            <button
+              onClick={() => { if (confirm("Kill this module?")) killSwitch() }}
+              className="flex items-center gap-1 rounded-md border border-destructive px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10">
+              <Power className="h-3 w-3" />
+              Kill
+            </button>
+          </div>
+        </div>
+
+        <BotHealthBanner />
+
+        <SpikeRiderSettings moduleId={id || ""} />
+
+        <CollapsibleCard id="open-positions" title="Open Positions">
+          <PositionsTable positions={(paperPositions || []).filter((p) => p.status === "open")} />
+        </CollapsibleCard>
+
+        <CollapsibleCard id="closed-positions" title={`Closed Positions (${(paperPositions || []).filter((p) => p.status === "closed").length})`}>
+          <PositionsTable positions={(paperPositions || []).filter((p) => p.status === "closed")} closed />
+        </CollapsibleCard>
+
+        <CollapsibleCard id="signals-table" title="Recent Signals">
+          <SignalsTable signals={mySignals} />
+        </CollapsibleCard>
+
+        <CollapsibleCard id="trade-history" title="Trade History">
+          <TradeHistory trades={(trades?.data) || []} />
+        </CollapsibleCard>
       </div>
     )
   }

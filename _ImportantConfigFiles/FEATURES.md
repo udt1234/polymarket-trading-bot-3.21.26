@@ -29,6 +29,19 @@
 - Variable auction periods (7/14/30 day)
 - Dynamic bracket detection from Gamma API
 
+## Spike Rider Module (NEW)
+- **Strategy**: buy cheap brackets early, ride hype spikes, exit per sell rule
+- **Entry**: every bracket with price in [entry_min, entry_max], fixed `$entry_size_usd` per trade
+- **Sell rules** (configurable, simulator-tuned defaults):
+  - `multi_stage` (default): sell 1/N of original size at each of 2x / 3x / 5x entry
+  - `target_multiplier`: full exit at Nx entry
+  - `trailing_stop`: full exit when price drops X% from peak after Y% gain
+  - All rules also run a backup trailing stop to lock in profit on reversal
+- **Series-driven**: one `auction_series` row maps a Spike Rider module to an xTracker handle + title filter, so adding new recurring count auctions is data-only
+- **Sell rule simulator**: `scripts/simulate_sell_rules.py` replays historical `price_snapshots` through 10 sell rules, ranks by median return, writes a markdown report
+- **First seeded module**: "Spike Rider — Elon" (paper, $100 budget, $10 per entry)
+- **Position-level exit state**: `position_exit_state` table tracks which multi-stage tranches have already fired (restart-safe)
+
 ## Data Sources (10 Active)
 | Source | Purpose | Modules |
 |--------|---------|---------|
@@ -121,14 +134,7 @@ correlated (30%), duplicate, cross-module, settlement decay, spread, liquidity
 ## Future Items (Backlog)
 
 ### Strategy A/B testing via per-module separation
-- **Goal:** run two distinct bidding strategies side-by-side on the same auction with isolated bankrolls so we can compare realized P&L, win rate, Brier score, and execution behavior cleanly.
-- **Approach:** add a second module (e.g. `truth_social_floor_buyer`) extending `BaseModule`, distinct row in `modules` table, fixed dollar bankroll per module (not %). Reuses shared `data.py`, regime detection, risk manager, executor, exit manager. Only `_evaluate_async()` and `module_config.py` differ.
-- **Strategy 2 (rough idea, needs spec):** buy all posting brackets when price < $X during historical-low time windows. Needs decisions on price ceiling, low-window definition, equal vs weighted share per bracket, exit rule.
-- **Prereqs before starting:**
-  - PR #9 snapshot fixes verified live (Order Book Depth + Truth Social Direct populating)
-  - Current module's projection/floor/variance changes proven over at least one full auction cycle
-  - Strategy 2 logic written down in detail (don't iterate on architecture and strategy simultaneously)
-- **Estimated cost:** ~30 min scaffold via `@module-scaffolder` + 100-150 LOC for `_evaluate_async()` + dashboard auto-renders both modules.
+- Spike Rider module (2026-05-04) demonstrates the pattern: same `BaseModule`, distinct config schema, isolated bankroll, separate position book. Add additional A/B variants by cloning the package and adjusting `evaluate()`.
 
 ### Future strategy tests (deferred during PR 1-5 strategy upgrade)
 - **Sell winners when pacing turns against** — backtest historically lost money on this rule (capped upside on real winners). Worth re-testing now that the ensemble has running_total floor + variance shrinkage. Build as a togglable exit rule (`sell_on_pacing_reversal`, default OFF).
