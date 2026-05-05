@@ -77,6 +77,41 @@ class SpikeTradingModule(BaseModule):
             "strategy": "spike_trading_v1",
         }
 
+    def get_display_keywords(self) -> list[str]:
+        # Match DB row name 'Spike Trading' (lowercase 'spike trading')
+        return ["spike trading", "spike_trading", "spike"]
+
+    def get_handle(self) -> str:
+        # Read from the per-module config so it tracks whatever the user
+        # configured (default: elonmusk on x platform).
+        try:
+            sb = get_supabase()
+            row = sb.table("modules").select("id").eq("name", "Spike Trading").execute()
+            if row.data:
+                cfg = get_module_config(row.data[0]["id"])
+                return cfg.get("handle", "elonmusk")
+        except Exception:
+            pass
+        return "elonmusk"
+
+    def get_platform(self) -> str:
+        try:
+            sb = get_supabase()
+            row = sb.table("modules").select("id").eq("name", "Spike Trading").execute()
+            if row.data:
+                cfg = get_module_config(row.data[0]["id"])
+                return cfg.get("platform", "x")
+        except Exception:
+            pass
+        return "x"
+
+    def get_config(self, module_id: str) -> dict:
+        return get_module_config(module_id)
+
+    def save_config(self, module_id: str, config: dict) -> None:
+        from api.modules.spike_trading.module_config import save_module_config
+        save_module_config(module_id, config)
+
     # ------------------------------------------------------------------
     # Main async logic
     # ------------------------------------------------------------------
@@ -89,16 +124,18 @@ class SpikeTradingModule(BaseModule):
             return []
         module_db = module_row.data[0]
         module_id = module_db["id"]
-        # Belt-and-suspenders kill-switch: if DB status isn't 'active' or 'paper',
-        # short-circuit. ('paper' lets us run logic without trading, same as
-        # shadow_mode in cfg below.)
+        # DB status semantics (matches Trump/Elon convention):
+        #   'active' or 'paper' -> evaluate normally; the engine's executor
+        #     decides paper vs live based on env PAPER_MODE.
+        #   'paused' / 'killed' / anything else -> short-circuit, no signals.
+        # NOTE: 'paper' is NOT shadow_mode — it just routes through the
+        # paper executor (which the engine already installs when PAPER_MODE=true).
+        # If you want decisions logged but NOT executed at all, set
+        # shadow_mode=True in module_config.
         db_status = (module_db.get("status") or "").lower()
         if db_status not in ("active", "paper"):
             return []
         cfg = get_module_config(module_id)
-        # If the DB row says 'paper', force shadow_mode regardless of cfg
-        if db_status == "paper":
-            cfg = {**cfg, "shadow_mode": True}
 
         signals: list[Signal] = []
 
@@ -112,6 +149,7 @@ class SpikeTradingModule(BaseModule):
                       f"No active {cfg['window_days']}-day {cfg['handle']} tracking found")
             return []
 
+        shadow = bool(cfg.get("shadow_mode", False))
         for tracking in active_trackings:
             try:
                 market = await fetch_market_for_tracking(tracking, cfg["bracket_pattern"])
@@ -132,7 +170,7 @@ class SpikeTradingModule(BaseModule):
                     continue
                 tracking["__resolved_id"] = tracking_id
                 signals.extend(await self._handle_market(
-                    sb, module_id, cfg, market, tracking,
+                    sb, module_id, cfg, market, tracking, shadow=shadow,
                 ))
             except Exception as e:
                 # Per-market failures shouldn't take down the whole cycle
@@ -140,8 +178,7 @@ class SpikeTradingModule(BaseModule):
                 self._log(sb, module_id, "system", "error",
                           f"market handling failed: {e}")
 
-        if cfg.get("shadow_mode", True):
-            # Phase 1 default: log only, don't trade.
+        if shadow:
             for s in signals:
                 self._log(sb, module_id, "decision", "info",
                           f"[SHADOW] Would emit: {s.side} {s.bracket} @ {s.market_price:.4f} kelly={s.kelly_pct:.4f}")
@@ -155,19 +192,35 @@ class SpikeTradingModule(BaseModule):
 
     async def _handle_market(
         self, sb, module_id: str, cfg: dict, market: dict, tracking: dict,
+        shadow: bool = False,
     ) -> list[Signal]:
         market_id = market["market_id"]
         bracket = cfg["bracket_pattern"]
         end_iso = tracking.get("endDate", "")
 
         position = self._get_open_position(sb, module_id, market_id, bracket)
-        cum_tweets = await fetch_cumulative_tweets(cfg["handle"], tracking.get("id"))
+        # Use the resolved tracking id (handles both 'id' and 'trackingId' shapes)
+        cum_tweets = await fetch_cumulative_tweets(
+            cfg["handle"], tracking.get("__resolved_id") or tracking.get("id"),
+        )
         h_to_close = hours_to_close(end_iso)
         # Use mid as proxy for "current price" — robust to one-sided books
         current_price = (market["best_bid"] + market["best_ask"]) / 2.0 if market["best_ask"] > 0 else market["best_bid"]
 
         # ---- No position yet → maybe place buy ladder ----
         if not position:
+            # Enforce max_open_positions across all open positions for this module
+            max_open = int(cfg.get("max_open_positions", 3))
+            try:
+                open_count = sb.table("spike_positions").select("id", count="exact").eq(
+                    "module_id", module_id,
+                ).in_("state", ["WAITING", "MONITORING"]).execute()
+                if (open_count.count or 0) >= max_open:
+                    self._log(sb, module_id, "decision", "info",
+                              f"Skipping {market_id}: at max_open_positions={max_open}")
+                    return []
+            except Exception as e:
+                log.warning(f"max_open_positions check failed: {e}")
             if h_to_close <= (cfg["window_days"] * 24 - cfg["buy_cancel_after_hours"]):
                 self._log(sb, module_id, "decision", "info",
                           f"Skipping {market_id}: past buy-eligibility cutoff "
@@ -180,7 +233,8 @@ class SpikeTradingModule(BaseModule):
                 self._log(sb, module_id, "decision", "info",
                           f"{market_id} {bracket}: pending BUY orders already in flight, no re-emit")
                 return []
-            self._open_position(sb, module_id, market, bracket, current_price)
+            if not shadow:
+                self._open_position(sb, module_id, market, bracket, current_price)
             return self._build_buy_ladder(module_id, market, cfg)
 
         # ---- Position exists → run HOLD/SELL classifier ----
@@ -196,20 +250,22 @@ class SpikeTradingModule(BaseModule):
         )
         decision = classify_decision(state, cfg)
 
-        # Always snapshot
-        self._snapshot(sb, position["id"], state, decision)
         self._log(sb, module_id, "decision", "info",
                   f"{market_id} {bracket} state=({cum_tweets} tweets, "
                   f"{h_to_close:.1f}h left, price={current_price*100:.1f}¢, "
                   f"pnl={pnl_pct:+.1f}%) → {decision}")
 
-        sb.table("spike_positions").update({
-            "state": "MONITORING",
-            "current_tweets": cum_tweets,
-            "hours_to_close": round(h_to_close, 2),
-            "last_decision": decision,
-            "last_decision_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", position["id"]).execute()
+        # Skip DB mutations in shadow mode — keeps spike_positions / snapshots
+        # clean of phantom rows when the operator is just observing.
+        if not shadow:
+            self._snapshot(sb, position["id"], state, decision)
+            sb.table("spike_positions").update({
+                "state": "MONITORING",
+                "current_tweets": cum_tweets,
+                "hours_to_close": round(h_to_close, 2),
+                "last_decision": decision,
+                "last_decision_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", position["id"]).execute()
 
         if should_market_sell(decision):
             return self._build_market_sell(sb, module_id, market, position)
@@ -256,7 +312,10 @@ class SpikeTradingModule(BaseModule):
                     "strategy": "spike_trading",
                     "tier": tier_idx,
                     "tier_type": "buy",
-                    "shadow_mode": cfg.get("shadow_mode", True),
+                    "shadow_mode": cfg.get("shadow_mode", False),
+                    # Structural strategy — bypass the global edge threshold.
+                    # Sizing is bounded by bracket_cap_pct_of_bankroll instead.
+                    "skip_edge_check": True,
                 },
             ))
         return signals
@@ -284,15 +343,15 @@ class SpikeTradingModule(BaseModule):
                       f"is below floor {self.SELLNOW_MIN_BID:.4f}. Position remains open. "
                       f"Manual exit required.")
             try:
-                from api.services.alerts import send_slack
-                import asyncio
-                asyncio.get_event_loop().create_task(send_slack(
+                from api.services.engine import _fire_and_forget_async
+                from api.services.notifications import send_slack
+                _fire_and_forget_async(send_slack(
                     f":warning: *Spike Trading: stuck SELL-NOW*\n"
                     f"Market `{market['market_id']}` SELL-NOW classifier fired but bid book is empty "
                     f"(best_bid={bid*100:.2f}¢). Position cannot exit cleanly — manual review needed."
                 ))
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning(f"Failed to send stuck-SELL-NOW Slack alert: {e}")
             return []
 
         # Aggressive limit at the bid: fills against existing buy orders.
@@ -315,6 +374,7 @@ class SpikeTradingModule(BaseModule):
                 "tier_type": "market_sell",
                 "reason": "SELL-NOW classifier triggered",
                 "position_id": position["id"],
+                "skip_edge_check": True,
             },
         )]
 

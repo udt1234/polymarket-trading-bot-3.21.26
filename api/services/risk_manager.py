@@ -105,8 +105,17 @@ class RiskManager:
         return True, ""
 
     def _check_edge_threshold(self, signal: Signal, settings) -> tuple[bool, str]:
+        # Structural strategies (e.g. spike_trading) intentionally set edge=0
+        # because their thesis isn't "model price > market price" — it's
+        # "buy a lottery ticket at a fixed cheap price". Let them through
+        # via an explicit opt-out flag in metadata. Other strategies still
+        # face the global floor. Spike sizing is bounded by its own
+        # bracket_cap_pct_of_bankroll and stop_loss_pct.
+        meta = signal.metadata or {}
+        if meta.get("skip_edge_check") is True:
+            return True, ""
         # Modules can RAISE the bar via signal metadata, but never lower it below the global floor
-        meta_threshold = (signal.metadata or {}).get("min_edge_threshold")
+        meta_threshold = meta.get("min_edge_threshold")
         if meta_threshold is None:
             threshold = settings.min_edge_threshold
         else:

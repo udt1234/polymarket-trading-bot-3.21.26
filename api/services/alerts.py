@@ -175,7 +175,9 @@ async def notify_daily_module_status_digest():
         sb = get_supabase()
         # All non-active modules (paused, killed, scaffold, paper)
         mods = sb.table("modules").select("id,name,status").execute().data or []
-        down = [m for m in mods if (m.get("status") or "").lower() not in ("active",)]
+        # 'active' AND 'paper' are healthy operational states — only flag
+        # truly degraded modules (paused/killed/scaffold).
+        down = [m for m in mods if (m.get("status") or "").lower() not in ("active", "paper")]
         if not down:
             return  # Silence on all-clear days
 
