@@ -1,6 +1,16 @@
 # PolyMarket Bot — Handoff
 
-## Current State (2026-05-02 evening)
+## Current State (2026-05-05)
+Bot LIVE on Trump + Elon (paper). Spike Rider work was merged then reverted (PR #30 → revert). Full rebuild spec in **`_ImportantConfigFiles/SPIKE_RIDER_SPEC.md`** — covers strategy, simulator results, architecture lessons, required platform changes, UI changes, DB schema, sell-rule logic, and test plan. Rebuild from there once core file cleanup is done.
+
+### Spike Rider revert checklist (done 2026-05-05)
+- ✅ Module row deleted from `modules` table
+- ✅ `auction_series` and `position_exit_state` tables dropped
+- ✅ All `spike_rider` code reverted via revert commit on master
+- ✅ Trump + Elon modules untouched
+- See `SPIKE_RIDER_SPEC.md` for the rebuild plan
+
+## Earlier State (2026-05-02 evening)
 Bot is LIVE & TRADING. Trump module's 4-day silence resolved (missing pending_signals table). Data Explorer + IFTTT webhook + dynamic-bracket support all shipped today.
 
 ## Trump Backfill: ✅ COMPLETE (2026-05-03 00:10 EDT)
