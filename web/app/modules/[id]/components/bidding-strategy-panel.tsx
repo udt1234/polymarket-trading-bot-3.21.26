@@ -28,10 +28,20 @@ export function BiddingStrategyPanel({ config }: BiddingStrategyPanelProps) {
   const windowDays = cfg.window_days ?? 2
   const bracket = cfg.bracket_pattern ?? "<40"
   const seriesSlug = cfg.series_slug ?? "elon-tweets-48h"
-  const buy1Price = cfg.buy_tier_1_price ?? 0.12
-  const buy1Pct = cfg.buy_tier_1_pct ?? 0.5
-  const buy2Price = cfg.buy_tier_2_price ?? 0.005
-  const buy2Pct = cfg.buy_tier_2_pct ?? 0.5
+  // N-tier buy ladder (new format). Falls back to legacy 2-tier keys.
+  const ladderRaw = Array.isArray(cfg.buy_ladder) ? cfg.buy_ladder : null
+  const buyLadder: { price: number; pct: number; label?: string }[] = ladderRaw && ladderRaw.length
+    ? ladderRaw.map((t: any) => ({
+        price: Number(t.price || 0),
+        pct: Number(t.pct || 0),
+        label: String(t.label || ""),
+      }))
+    : [
+        { price: cfg.buy_tier_1_price ?? 0.12, pct: cfg.buy_tier_1_pct ?? 0.5, label: "tier1" },
+        { price: cfg.buy_tier_2_price ?? 0.005, pct: cfg.buy_tier_2_pct ?? 0.5, label: "tier2" },
+      ]
+  // Highest-priced tier is the reference for sell-multiplier preview.
+  const buyTopPrice = buyLadder.reduce((m, t) => Math.max(m, t.price), 0) || 0.12
   const buyCancelHrs = cfg.buy_cancel_after_hours ?? 24
   const sellMults = Array.isArray(cfg.sell_multipliers) ? cfg.sell_multipliers : [1.5, 2.0, 4.0, 8.0]
   const sellPcts = Array.isArray(cfg.sell_multiplier_pcts) ? cfg.sell_multiplier_pcts : [0.3, 0.3, 0.2, 0.2]
@@ -51,9 +61,9 @@ export function BiddingStrategyPanel({ config }: BiddingStrategyPanelProps) {
   const cents = (p: number) => `${(p * 100).toFixed(p < 0.01 ? 2 : 1)}¢`
   const pct = (p: number) => `${(p * 100).toFixed(0)}%`
 
-  // Compute absolute sell prices from multipliers × tier-1 buy price
-  // (rough preview — actual ladder uses real fill price)
-  const sellPreview = sellMults.map((m: number) => Math.min(buy1Price * m, 0.99))
+  // Compute absolute sell prices from multipliers × top buy tier
+  // (rough preview — actual ladder uses real fill price per position)
+  const sellPreview = sellMults.map((m: number) => Math.min(buyTopPrice * m, 0.99))
 
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -85,19 +95,23 @@ export function BiddingStrategyPanel({ config }: BiddingStrategyPanelProps) {
             (too late to enter), or BUY orders already in flight on this market.
           </Step>
 
-          <Step n={3} title="Place buy ladder (limit orders)">
-            Open a tracked position and emit two BUY signals:
+          <Step n={3} title={`Place buy ladder — ${buyLadder.length} simultaneous limit orders`}>
+            Strategy: try cheap first, escalate. The market crosses each tier
+            in sequence as price drops; whichever tiers fill, fill. Patient
+            bidders capture most fills at the bottom of the ladder.
             <ul className="mt-1 ml-4 list-disc space-y-0.5">
-              <li>
-                <strong>Tier 1</strong>: limit BUY at <strong>{cents(buy1Price)}</strong>
-                {" "}— <strong>{pct(buy1Pct * bracketCap)}</strong> of bankroll ({pct(buy1Pct)} of the {pct(bracketCap)} per-cycle cap).
-                Adaptive: if the market's ask is already at or below {cents(buy1Price)}, jump the queue at <code>ask − 0.001</code>.
-              </li>
-              <li>
-                <strong>Tier 2</strong>: limit BUY at <strong>{cents(buy2Price)}</strong>
-                {" "}— <strong>{pct(buy2Pct * bracketCap)}</strong> of bankroll. The "scoop" tier if the bracket crashes.
-              </li>
+              {buyLadder.map((t, i) => (
+                <li key={i}>
+                  <strong>Tier {i + 1}</strong>
+                  {t.label ? <span className="text-muted-foreground"> ({t.label})</span> : null}
+                  : limit BUY at <strong>{cents(t.price)}</strong>
+                  {" "}— <strong>{pct(t.pct * bracketCap)}</strong> of bankroll ({pct(t.pct)} of the {pct(bracketCap)} per-cycle cap).
+                </li>
+              ))}
             </ul>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Adaptive: if the market's ask is already at or below a tier's target, the bot places at <code>ask − 0.001</code> to jump the queue at near-equivalent cost.
+            </p>
           </Step>
 
           <Step n={4} title="Risk gate (per signal)">
@@ -127,7 +141,7 @@ export function BiddingStrategyPanel({ config }: BiddingStrategyPanelProps) {
           </Step>
 
           <Step n={7} title="Sell ladder (multipliers of fill price)">
-            On fill, the ladder multipliers determine sell tiers (preview shown for {cents(buy1Price)} entry):
+            On fill, the ladder multipliers determine sell tiers (preview shown for top tier {cents(buyTopPrice)} entry):
             <ul className="mt-1 ml-4 list-disc space-y-0.5">
               {sellMults.map((m: number, i: number) => (
                 <li key={i}>

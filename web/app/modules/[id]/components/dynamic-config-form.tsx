@@ -221,7 +221,14 @@ function FieldEditor({
         )}>
           {Array.from({ length }).map((_, i) => {
             if (cols === 2) {
-              const pair = Array.isArray(rows[i]) ? rows[i] : [0, 0]
+              // Some keys (e.g. buy_ladder) store as list of {price, pct} dicts
+              // server-side. Normalize to [a, b] for the editor.
+              const raw = rows[i]
+              const pair = Array.isArray(raw)
+                ? raw
+                : (raw && typeof raw === "object" && "price" in (raw as any))
+                  ? [(raw as any).price ?? 0, (raw as any).pct ?? 0]
+                  : [0, 0]
               const labels = field.labels && field.labels.length === 2 ? field.labels : ["a", "b"]
               return (
                 <div key={i} className="rounded border border-border/60 bg-muted/10 p-2">

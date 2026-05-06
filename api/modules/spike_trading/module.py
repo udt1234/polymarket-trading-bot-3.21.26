@@ -136,18 +136,13 @@ class SpikeTradingModule(BaseModule):
             {"key": "series_slug", "label": "Polymarket Series Slug", "type": "string", "section": "general",
              "help": "Primary discovery: e.g. 'elon-tweets-48h'. Find via gamma-api.polymarket.com/series. Typo here = silent break."},
 
-            # ---- Buy ladder ----
-            {"key": "buy_tier_1_price", "label": "Tier 1 Buy Price", "type": "number", "section": "buy",
-             "min": 0.001, "max": 0.99, "step": 0.001,
-             "help": "Aggressive primary entry (e.g. 0.12)"},
-            {"key": "buy_tier_1_pct", "label": "Tier 1 Allocation", "type": "number", "section": "buy",
-             "min": 0, "max": 1, "step": 0.05,
-             "help": "Fraction of bracket cap deployed at Tier 1"},
-            {"key": "buy_tier_2_price", "label": "Tier 2 Buy Price", "type": "number", "section": "buy",
-             "min": 0.001, "max": 0.99, "step": 0.001,
-             "help": "Cheap re-entry if bracket crashes"},
-            {"key": "buy_tier_2_pct", "label": "Tier 2 Allocation", "type": "number", "section": "buy",
-             "min": 0, "max": 1, "step": 0.05},
+            # ---- Buy ladder (5 tiers, [price, allocation%] pairs) ----
+            {"key": "buy_ladder", "label": "Buy Ladder (price ¢, alloc %)", "type": "number_list_2",
+             "section": "buy", "length": 5, "cols": 2,
+             "labels": ["price", "alloc"],
+             "help": "Each row = one limit BUY tier. price = $ (e.g. 0.005 = 0.5¢). "
+                     "alloc = fraction of bracket cap (sum should ≈ 1.0). "
+                     "All tiers fire simultaneously; whichever the market crosses, fill."},
             {"key": "buy_cancel_after_hours", "label": "Cancel BUYs After (h)", "type": "number", "section": "buy",
              "min": 1, "max": 168, "step": 1,
              "help": "Stop placing buys this many hours into the auction window"},
@@ -394,34 +389,42 @@ class SpikeTradingModule(BaseModule):
     # ------------------------------------------------------------------
 
     def _build_buy_ladder(self, module_id: str, market: dict, cfg: dict) -> list[Signal]:
-        """Emit buy Signals using adaptive pricing.
+        """Emit buy Signals across the configured tier ladder.
 
-        Each tier is built from a TARGET price in cfg, but the actual limit
-        sent uses adaptive_buy_price() to undercut the ask if the market is
-        already at or below our target — saving cost without changing
-        fill-probability.
+        Reads `cfg["buy_ladder"]` first (new N-tier format), falls back to
+        legacy `buy_tier_1_*` / `buy_tier_2_*` keys for back-compat. Each
+        tier's `target` price is run through adaptive_buy_price() to
+        undercut the ask if it's already at or below the target.
         """
         signals = []
         bid = float(market.get("best_bid") or 0.0)
         ask = float(market.get("best_ask") or 1.0)
-        for tier_idx, (price_key, pct_key) in enumerate([
-            ("buy_tier_1_price", "buy_tier_1_pct"),
-            ("buy_tier_2_price", "buy_tier_2_pct"),
-        ], start=1):
-            target = float(cfg.get(price_key, 0.0))
-            pct = float(cfg.get(pct_key, 0.0))
+
+        ladder = cfg.get("buy_ladder")
+        if isinstance(ladder, list) and ladder:
+            tiers = [
+                (i + 1, float(t.get("price", 0.0)), float(t.get("pct", 0.0)),
+                 t.get("label", f"tier{i+1}"))
+                for i, t in enumerate(ladder)
+            ]
+        else:
+            # Legacy 2-tier format
+            tiers = [
+                (1, float(cfg.get("buy_tier_1_price", 0.0)), float(cfg.get("buy_tier_1_pct", 0.0)), "tier1"),
+                (2, float(cfg.get("buy_tier_2_price", 0.0)), float(cfg.get("buy_tier_2_pct", 0.0)), "tier2"),
+            ]
+
+        for tier_idx, target, pct, label in tiers:
             if target <= 0 or pct <= 0:
                 continue
-            # Adaptive: if ask is already ≤ target, place just under the ask
-            # to jump the queue at near-equivalent cost.
             limit_price = adaptive_buy_price(bid, ask, target)
             signals.append(Signal(
                 module_id=module_id,
                 market_id=market["market_id"],
                 bracket=cfg["bracket_pattern"],
                 side="BUY",
-                edge=0.0,                # not edge-driven; strategy is structural
-                model_prob=0.0,           # not used by spike strategy
+                edge=0.0,
+                model_prob=0.0,
                 market_price=limit_price,
                 kelly_pct=pct * cfg.get("bracket_cap_pct_of_bankroll", 0.05),
                 confidence=0.5,
@@ -430,6 +433,7 @@ class SpikeTradingModule(BaseModule):
                 metadata={
                     "strategy": "spike_trading",
                     "tier": tier_idx,
+                    "tier_label": label,
                     "tier_type": "buy",
                     "skip_edge_check": True,
                     "target_price": target,

@@ -25,18 +25,32 @@ DEFAULT_CONFIG = {
     "series_slug": "elon-tweets-48h",
 
     # ---- Buy ladder ----
-    # Tier 1 at 12¢: aggressive entry meant to capture the auction WHILE it
-    #   still looks "alive" on Polymarket (per user override 2026-05-05).
-    #   Historical 12¢ floor hit-rate is ~98% (almost every 2-day <40 has
-    #   touched 12¢ at some point), but on most paths price never returns
-    #   to <1¢ — so a high floor catches more positions at the cost of
-    #   higher avg entry.
-    # Tier 2 at 0.5¢: kept as a "if it ever crashes, scoop the lottery
-    #   ticket" cheap re-entry. Historical hit-rate ~96%.
-    "buy_tier_1_price": 0.12,                 # 12¢ — aggressive primary entry
-    "buy_tier_1_pct":   0.50,
-    "buy_tier_2_price": 0.005,                # 0.5¢ — cheap re-entry if crash
-    "buy_tier_2_pct":   0.50,
+    # 5-tier descending buy ladder (2026-05-06 redesign per parquet recalibration).
+    # Tries cheap first; only the most desperate auctions fill the top tiers.
+    # All five fire simultaneously as limit orders. Whichever ones the market
+    # crosses, fill. Patient bidders capture most fills at 0.5¢ or below
+    # (96% historical hit-rate), giving ~24x more shares per dollar on
+    # winning auctions vs a single 12¢ entry. The 12¢ tier is the catch-all
+    # for the rare auction that stays strong throughout.
+    # Hit rates from parquet (n=54 resolved 2-day <40 auctions):
+    #   0.3¢ -> 96.3% hit
+    #   0.5¢ -> 96.3% hit
+    #   2.0¢ -> 98.1%
+    #   5.0¢ -> 98.1%
+    #   12¢  -> 100.0%
+    "buy_ladder": [
+        {"price": 0.003, "pct": 0.30, "label": "lottery"},   # 333x payout when YES
+        {"price": 0.005, "pct": 0.30, "label": "scoop"},     # 200x payout
+        {"price": 0.020, "pct": 0.20, "label": "value"},     #  50x payout
+        {"price": 0.050, "pct": 0.10, "label": "mid"},       #  20x payout
+        {"price": 0.120, "pct": 0.10, "label": "catchall"},  #   8x payout
+    ],
+    # Legacy tier_1/tier_2 keys kept for backwards compat with stored configs.
+    # If `buy_ladder` is present (new format), those are ignored.
+    "buy_tier_1_price": 0.003,
+    "buy_tier_1_pct":   0.30,
+    "buy_tier_2_price": 0.005,
+    "buy_tier_2_pct":   0.30,
     "buy_cancel_after_hours": 24,
 
     # ---- Sell ladder (RELATIVE to entry, not hardcoded prices) ----
@@ -105,6 +119,27 @@ def get_module_config(module_id: str) -> dict:
     return dict(DEFAULT_CONFIG)
 
 
+def _ladder_pairs_to_dicts(pairs):
+    """Convert dashboard ladder format [[price, pct], ...] -> [{price, pct}, ...]"""
+    out = []
+    for row in pairs or []:
+        if isinstance(row, dict):
+            # Already in dict form
+            out.append({
+                "price": float(row.get("price", 0)),
+                "pct": float(row.get("pct", 0)),
+                "label": str(row.get("label", "")),
+            })
+        elif isinstance(row, (list, tuple)) and len(row) >= 2:
+            out.append({"price": float(row[0]), "pct": float(row[1])})
+    return out
+
+
+def _ladder_dicts_to_pairs(dicts):
+    """Convert internal ladder format [{price, pct, ...}] -> [[price, pct], ...]"""
+    return [[float(d.get("price", 0)), float(d.get("pct", 0))] for d in (dicts or [])]
+
+
 def _validate_against_schema(config: dict) -> dict:
     """Bounds-clamp incoming config values against the module schema.
     Defense-in-depth: the dashboard input clamps too, but a malicious or
@@ -133,8 +168,12 @@ def _validate_against_schema(config: dict) -> dict:
                 if "options" in spec and v not in spec["options"]:
                     continue  # silently drop invalid selection
             elif t == "number_list_2":
-                # Accept either flat list-of-numbers or list-of-pairs.
-                if isinstance(v, list):
+                # Special case: buy_ladder stores as list of dicts internally
+                # but the schema-driven form sends list of [price, pct] pairs.
+                if k == "buy_ladder":
+                    v = _ladder_pairs_to_dicts(v)
+                elif isinstance(v, list):
+                    # Accept either flat list-of-numbers or list-of-pairs.
                     if v and isinstance(v[0], (list, tuple)):
                         v = [[float(x) for x in row] for row in v]
                     else:
