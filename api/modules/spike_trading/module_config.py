@@ -105,11 +105,54 @@ def get_module_config(module_id: str) -> dict:
     return dict(DEFAULT_CONFIG)
 
 
+def _validate_against_schema(config: dict) -> dict:
+    """Bounds-clamp incoming config values against the module schema.
+    Defense-in-depth: the dashboard input clamps too, but a malicious or
+    buggy client could still POST out-of-range values. Unknown keys pass
+    through untouched (so legacy/extension keys keep working). Type
+    coercion: numbers from JSON come as int/float; strings stay strings."""
+    from api.modules.spike_trading.module import SpikeTradingModule
+    schema = {f["key"]: f for f in SpikeTradingModule().get_config_schema()}
+    out = {}
+    for k, v in (config or {}).items():
+        spec = schema.get(k)
+        if spec is None:
+            out[k] = v
+            continue
+        t = spec.get("type")
+        try:
+            if t == "number":
+                v = float(v)
+                if "min" in spec: v = max(v, float(spec["min"]))
+                if "max" in spec: v = min(v, float(spec["max"]))
+            elif t == "boolean":
+                v = bool(v)
+            elif t == "string":
+                v = str(v) if v is not None else ""
+            elif t == "select":
+                if "options" in spec and v not in spec["options"]:
+                    continue  # silently drop invalid selection
+            elif t == "number_list_2":
+                # Accept either flat list-of-numbers or list-of-pairs.
+                if isinstance(v, list):
+                    if v and isinstance(v[0], (list, tuple)):
+                        v = [[float(x) for x in row] for row in v]
+                    else:
+                        v = [float(x) for x in v]
+        except (ValueError, TypeError):
+            continue  # drop the bad field rather than crash the whole save
+        out[k] = v
+    return out
+
+
 def save_module_config(module_id: str, config: dict):
-    """Partial-update without resetting other fields."""
+    """Partial-update without resetting other fields. Validates incoming
+    payload against the schema (clamps numbers, drops invalid select values).
+    """
+    validated = _validate_against_schema(config)
     sb = get_supabase()
     key = f"module_config:{module_id}"
     existing_row = sb.table("settings").select("value").eq("key", key).execute()
     stored = (existing_row.data[0].get("value") or {}) if existing_row.data else {}
-    merged = {**DEFAULT_CONFIG, **stored, **(config or {})}
+    merged = {**DEFAULT_CONFIG, **stored, **validated}
     sb.table("settings").upsert({"key": key, "value": merged}).execute()

@@ -59,6 +59,24 @@ class BaseModule(ABC):
         Elon's many concurrent series (1d/2d/7d/monthly) down to just 2-day."""
         return None
 
+    def get_config_schema(self) -> list[dict]:
+        """Return a list of field descriptors describing this module's config.
+
+        Powers the dynamic config form on the dashboard. Each item:
+          {
+            "key": str,                    # cfg dict key
+            "label": str,                  # display label
+            "type": "number"|"boolean"|"string"|"select"|"number_list_2",
+            "section": "general"|"buy"|"sell"|"risk"|"advanced",  # optional, default "general"
+            "help": str,                   # tooltip
+            "min"/"max"/"step": float,     # number constraints
+            "options": list[str|number],   # for type=select
+            "length": int,                 # for number_list_2 (rows × 2)
+            "labels": list[str],           # column labels for number_list_2
+          }
+        Default returns [] which means "no editable schema" (read-only fallback)."""
+        return []
+
     def supports_direct_post_count(self) -> bool:
         """True if this module can count posts directly (bypassing xTracker)."""
         return False

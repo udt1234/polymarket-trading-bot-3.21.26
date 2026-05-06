@@ -115,6 +115,102 @@ class SpikeTradingModule(BaseModule):
         from api.modules.spike_trading.module_config import save_module_config
         save_module_config(module_id, config)
 
+    def get_config_schema(self) -> list[dict]:
+        """Schema for the dashboard's dynamic config form. Sections render
+        as collapsible groups so the form stays scannable. Bounds are also
+        enforced server-side in save_config (defense in depth)."""
+        return [
+            # ---- Discovery (general) ----
+            {"key": "handle", "label": "Handle", "type": "string", "section": "general",
+             "help": "Social handle this module tracks (xTracker username)"},
+            {"key": "platform", "label": "Platform", "type": "select", "section": "general",
+             "options": ["x", "truthsocial"], "help": "xTracker platform identifier"},
+            {"key": "window_days", "label": "Window (days)", "type": "number", "section": "general",
+             "min": 1, "max": 31, "step": 1,
+             "help": "Auction window length in days. Strategy is calibrated for 2."},
+            {"key": "bracket_pattern", "label": "Bracket Pattern", "type": "string", "section": "general",
+             "help": "Which bracket label to trade (e.g. '<40')"},
+            {"key": "min_market_volume_24h", "label": "Min 24h Volume ($)", "type": "number", "section": "general",
+             "min": 0, "max": 1_000_000, "step": 100,
+             "help": "Skip markets thinner than this. 0 = no filter."},
+            {"key": "series_slug", "label": "Polymarket Series Slug", "type": "string", "section": "general",
+             "help": "Primary discovery: e.g. 'elon-tweets-48h'. Find via gamma-api.polymarket.com/series. Typo here = silent break."},
+
+            # ---- Buy ladder ----
+            {"key": "buy_tier_1_price", "label": "Tier 1 Buy Price", "type": "number", "section": "buy",
+             "min": 0.001, "max": 0.99, "step": 0.001,
+             "help": "Aggressive primary entry (e.g. 0.12)"},
+            {"key": "buy_tier_1_pct", "label": "Tier 1 Allocation", "type": "number", "section": "buy",
+             "min": 0, "max": 1, "step": 0.05,
+             "help": "Fraction of bracket cap deployed at Tier 1"},
+            {"key": "buy_tier_2_price", "label": "Tier 2 Buy Price", "type": "number", "section": "buy",
+             "min": 0.001, "max": 0.99, "step": 0.001,
+             "help": "Cheap re-entry if bracket crashes"},
+            {"key": "buy_tier_2_pct", "label": "Tier 2 Allocation", "type": "number", "section": "buy",
+             "min": 0, "max": 1, "step": 0.05},
+            {"key": "buy_cancel_after_hours", "label": "Cancel BUYs After (h)", "type": "number", "section": "buy",
+             "min": 1, "max": 168, "step": 1,
+             "help": "Stop placing buys this many hours into the auction window"},
+
+            # ---- Sell ladder (multipliers of fill price) ----
+            {"key": "sell_multipliers", "label": "Sell Multipliers (×entry)", "type": "number_list_2",
+             "section": "sell", "length": 4,
+             "labels": ["Tier 1", "Tier 2", "Tier 3", "Tier 4"],
+             "help": "Multipliers of actual fill price. e.g. 1.5 = exit when price up 50%"},
+            {"key": "sell_multiplier_pcts", "label": "Sell Tier Allocations", "type": "number_list_2",
+             "section": "sell", "length": 4,
+             "labels": ["T1 %", "T2 %", "T3 %", "T4 %"],
+             "help": "Fraction of position sold at each tier (sum should = 1.0)"},
+
+            # ---- Auto-exit thresholds ----
+            {"key": "take_profit_pct", "label": "Take Profit %", "type": "number", "section": "sell",
+             "min": 0, "max": 20, "step": 0.5,
+             "help": "Exit when price up this multiple from entry. 7.0 = +700% (8× entry)"},
+            {"key": "stop_loss_pct", "label": "Stop Loss %", "type": "number", "section": "sell",
+             "min": 0, "max": 1, "step": 0.05,
+             "help": "Exit when price drops this fraction below entry. 0.85 = exit at 15% of entry"},
+            {"key": "trailing_stop_pct", "label": "Trailing Stop %", "type": "number", "section": "sell",
+             "min": 0, "max": 1, "step": 0.05,
+             "help": "When up >50%, lock in by trailing this fraction below the running peak"},
+
+            # ---- HOLD signal ----
+            {"key": "hold_max_tweets", "label": "HOLD: Max Tweets", "type": "number", "section": "sell",
+             "min": 0, "max": 100, "step": 1,
+             "help": "≤ this many tweets to qualify as a HOLD"},
+            {"key": "hold_min_hours_remaining", "label": "HOLD: Min Hours Left", "type": "number", "section": "sell",
+             "min": 0, "max": 168, "step": 1,
+             "help": "≥ this many hours remaining to qualify as a HOLD"},
+
+            # ---- SELL-NOW grid (3 rows × 2 cols) ----
+            {"key": "sellnow_grid", "label": "SELL-NOW Grid", "type": "number_list_2",
+             "section": "sell", "length": 3, "cols": 2,
+             "labels": ["min_tweets", "min_hours"],
+             "help": "Each row: trigger SELL-NOW if cum_tweets ≥ row[0] AND hours_left ≥ row[1]"},
+
+            # ---- Pacing classifier ----
+            {"key": "bracket_max_count", "label": "Bracket Cap (count)", "type": "number", "section": "advanced",
+             "min": 1, "max": 1000, "step": 1,
+             "help": "The numeric boundary of the bracket (e.g. 40 for '<40')"},
+            {"key": "pacing_sell_score", "label": "Pacing SELL Threshold", "type": "number", "section": "advanced",
+             "min": 0.5, "max": 3.0, "step": 0.05,
+             "help": "If projected_final / bracket_max ≥ this, force SELL-NOW. 1.20 = 20% past cap."},
+            {"key": "pacing_hold_score", "label": "Pacing HOLD Threshold", "type": "number", "section": "advanced",
+             "min": 0.0, "max": 1.0, "step": 0.05,
+             "help": "If projected_final / bracket_max ≤ this, override SELL → HOLD-LIGHT"},
+
+            # ---- Risk ----
+            {"key": "bracket_cap_pct_of_bankroll", "label": "Per-Cycle Bankroll Cap", "type": "number",
+             "section": "risk", "min": 0.01, "max": 0.5, "step": 0.01,
+             "help": "Max % of bankroll deployed per cycle (lottery sizing)"},
+            {"key": "max_open_positions", "label": "Max Open Positions", "type": "number", "section": "risk",
+             "min": 1, "max": 20, "step": 1},
+
+            # ---- Operational ----
+            {"key": "log_decisions_to_supabase", "label": "Log Decisions", "type": "boolean",
+             "section": "advanced",
+             "help": "Write spike_state_snapshots rows for backtest replay"},
+        ]
+
     def get_auction_window_days(self) -> float | None:
         """Spike strategy is calibrated specifically on 2-day windows.
         Filters the dashboard's auction lists (and any other consumer of

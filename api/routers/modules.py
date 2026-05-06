@@ -394,12 +394,46 @@ async def get_config(module_id: str):
     return _get_module_config_dispatch(module_id)
 
 
+@router.get("/{module_id}/config-schema")
+async def get_config_schema(module_id: str):
+    """Return the editable-field schema for this module's config.
+    Used by the dashboard's dynamic config form. Empty list means
+    'no editable schema' (e.g. ensemble modules use the legacy hardcoded
+    UI)."""
+    module = _resolve_module(module_id)
+    if module is None:
+        return []
+    try:
+        return module.get_config_schema()
+    except Exception as e:
+        log.warning(f"get_config_schema failed for {module_id}: {e}")
+        return []
+
+
 @router.put("/{module_id}/config")
 async def update_config(module_id: str, config: ModuleConfigUpdate):
-    # Pydantic enforces bounds; only fields explicitly set in the payload are
-    # forwarded so we don't overwrite stored values with None.
+    # Legacy ensemble path: Pydantic enforces bounds; only explicit fields
+    # are forwarded so stored values aren't overwritten with None.
     payload = config.model_dump(exclude_unset=True)
     return _save_module_config_dispatch(module_id, payload)
+
+
+@router.put("/{module_id}/config-dynamic")
+async def update_config_dynamic(module_id: str, payload: dict):
+    """Schema-driven config save for non-ensemble modules.
+
+    Accepts an arbitrary key/value dict. The module's own save_config()
+    runs validation (bounds clamp, type coercion, schema-driven drops).
+    Use this from the dashboard's <DynamicConfigForm>; the legacy
+    /config endpoint stays for ensemble modules using ModuleConfigUpdate.
+    """
+    module = _resolve_module(module_id)
+    if module is None:
+        raise HTTPException(status_code=404, detail="Module not found or unknown strategy")
+    # Strip nulls so we don't accidentally clear fields the form didn't touch
+    clean = {k: v for k, v in (payload or {}).items() if v is not None}
+    module.save_config(module_id, clean)
+    return module.get_config(module_id)
 
 
 @router.get("/{module_id}/auctions")
