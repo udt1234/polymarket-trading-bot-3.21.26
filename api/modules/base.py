@@ -52,6 +52,13 @@ class BaseModule(ABC):
         market type. Default returns empty string = no filter."""
         return ""
 
+    def get_auction_window_days(self) -> float | None:
+        """If set, only auctions whose tracking window matches this length
+        (within ±0.15d) are considered this module's. None = no length filter
+        (default — accepts any window size). Spike Trading uses 2.0 to filter
+        Elon's many concurrent series (1d/2d/7d/monthly) down to just 2-day."""
+        return None
+
     def supports_direct_post_count(self) -> bool:
         """True if this module can count posts directly (bypassing xTracker)."""
         return False

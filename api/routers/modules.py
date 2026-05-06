@@ -81,6 +81,33 @@ def _detect_name_filter(module_data: dict) -> str:
     return module.get_auction_title_filter()
 
 
+def _detect_window_days(module_data: dict) -> float | None:
+    """Optional auction window-length filter (e.g. 2.0 days for Spike).
+    None means accept all window lengths."""
+    from api.services.engine import engine
+    module = engine.registry.for_db_row(module_data)
+    if module is None:
+        return None
+    return module.get_auction_window_days()
+
+
+def _matches_window(t: dict, window_days: float | None) -> bool:
+    """True if tracking's window length matches the required window (within
+    ±0.15 days). Always True if no window constraint set."""
+    if window_days is None:
+        return True
+    s, e = t.get("startDate", ""), t.get("endDate", "")
+    if not (s and e):
+        return False
+    try:
+        sd = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        ed = datetime.fromisoformat(e.replace("Z", "+00:00"))
+    except Exception:
+        return False
+    actual = (ed - sd).total_seconds() / 86400.0
+    return abs(actual - window_days) <= 0.15
+
+
 class ModuleCreate(BaseModel):
     name: str
     market_slug: str
@@ -384,6 +411,7 @@ async def get_auctions(module_id: str, include_past: bool = True):
 
     handle = _detect_handle(module.data)
     name_filter = _detect_name_filter(module.data)
+    window_days = _detect_window_days(module.data)
     now = datetime.now(timezone.utc)
 
     all_trackings = await _fetch_trackings_raw(handle, _detect_platform(module.data))
@@ -391,6 +419,7 @@ async def get_auctions(module_id: str, include_past: bool = True):
     module_trackings = [
         t for t in all_trackings
         if name_filter in t.get("title", "").lower()
+        and _matches_window(t, window_days)
     ]
 
     results = []
@@ -482,12 +511,15 @@ async def get_auction_history(module_id: str, limit: int = 20):
 
     handle = _detect_handle(module.data)
     name_filter = _detect_name_filter(module.data)
+    window_days = _detect_window_days(module.data)
     now = datetime.now(timezone.utc)
 
     all_trackings = await _fetch_trackings_raw(handle, _detect_platform(module.data))
     past_trackings = []
     for t in all_trackings:
         if name_filter not in t.get("title", "").lower():
+            continue
+        if not _matches_window(t, window_days):
             continue
         end_str = t.get("endDate", "")
         if not end_str:

@@ -115,6 +115,21 @@ class SpikeTradingModule(BaseModule):
         from api.modules.spike_trading.module_config import save_module_config
         save_module_config(module_id, config)
 
+    def get_auction_window_days(self) -> float | None:
+        """Spike strategy is calibrated specifically on 2-day windows.
+        Filters the dashboard's auction lists (and any other consumer of
+        the modules router) to only show 2-day Elon auctions, not the
+        overlapping 1d/7d/monthly series."""
+        try:
+            sb = get_supabase()
+            row = sb.table("modules").select("id").eq("name", "Spike Trading").execute()
+            if row.data:
+                cfg = get_module_config(row.data[0]["id"])
+                return float(cfg.get("window_days", 2))
+        except Exception:
+            pass
+        return 2.0
+
     # ------------------------------------------------------------------
     # Main async logic
     # ------------------------------------------------------------------
