@@ -17,6 +17,14 @@ from dataclasses import dataclass
 from typing import Any
 
 
+# Strategy registry lives HERE, not in __init__.py, so __init_subclass__
+# (which runs at subclass-definition time) can populate it without the
+# package's __init__ needing to be fully initialized first. This avoids a
+# circular-import / boot-order race where importing a strategy file before
+# the package __init__ finished would leave REGISTRY undefined.
+REGISTRY: dict[str, type] = {}
+
+
 @dataclass
 class AuctionState:
     """Snapshot of the current auction the strategy is being asked about.
@@ -33,13 +41,16 @@ class AuctionState:
 
 
 class Strategy:
-    """Base class. Subclasses MUST set `name` and override the four methods."""
+    """Base class. Subclasses MUST set `name` and override the four methods.
+    They SHOULD also set DEFAULT_PARAMS — the dict consumed when a profile
+    has no `params` overrides. The base provides an empty dict so callers
+    that forget can still operate without crashing."""
     name: str = ""
+    DEFAULT_PARAMS: dict = {}
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
         if cls.name:
-            from . import REGISTRY
             REGISTRY[cls.name] = cls
 
     # ------------------------------------------------------------

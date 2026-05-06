@@ -275,7 +275,9 @@ class SpikeTradingModule(BaseModule):
                       f"[{label}] unknown strategy '{strategy_name}'. Available: {all_strategy_names()}")
             return []
         strategy = strategy_cls()
-        params = {**strategy.DEFAULT_PARAMS, **(profile.get("params") or {})}
+        # Defensive: future strategy plugins may forget DEFAULT_PARAMS
+        defaults = getattr(strategy_cls, "DEFAULT_PARAMS", {}) or {}
+        params = {**defaults, **(profile.get("params") or {})}
 
         # 3. Fetch market for THIS profile's bracket
         try:
@@ -312,7 +314,17 @@ class SpikeTradingModule(BaseModule):
         h_to_close = hours_to_close(end_iso)
         total_hours = float(auction_type.get("window_days", 2)) * 24.0
         elapsed_hours = max(total_hours - h_to_close, 0.0)
-        current_price = (market["best_bid"] + market["best_ask"]) / 2.0 if market["best_ask"] > 0 else market["best_bid"]
+        bid_v = float(market.get("best_bid") or 0.0)
+        ask_v = float(market.get("best_ask") or 0.0)
+        # Guard against fully empty book — happens on freshly-listed markets
+        # before any liquidity arrives. Skip the cycle rather than build a
+        # bogus AuctionState with current_price=0 (which downstream would
+        # produce nonsensical pnl/pacing math).
+        if bid_v <= 0 and ask_v <= 0:
+            self._log(sb, module_id, "decision", "info",
+                      f"[{label}] {market_id}: empty order book — skipping cycle")
+            return []
+        current_price = (bid_v + ask_v) / 2.0 if (bid_v > 0 and ask_v > 0) else max(bid_v, ask_v)
 
         state = AuctionState(
             market_id=market_id,

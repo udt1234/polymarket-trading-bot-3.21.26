@@ -139,8 +139,12 @@ DEFAULT_CONFIG = {
 
 def _migrate_legacy_to_auction_types(stored: dict) -> dict:
     """If stored config lacks `auction_types`, wrap legacy keys into a
-    single-profile auction_type so the module can iterate uniformly."""
-    if "auction_types" in stored and stored["auction_types"]:
+    single-profile auction_type so the module can iterate uniformly.
+
+    NOTE: an explicit empty `auction_types: []` is RESPECTED — that means the
+    user intentionally cleared the list (module idle). Only legacy configs
+    where the key is entirely absent get migrated."""
+    if "auction_types" in stored:
         return stored
     legacy_profile = {
         "bracket": stored.get("bracket_pattern", "<40"),
@@ -204,42 +208,255 @@ def _ladder_pairs_to_dicts(pairs):
     return out
 
 
+import math
+import re
+
+# Defense-in-depth bounds on per-profile params. The dashboard clamps inputs,
+# but a buggy/malicious client could POST arbitrary JSON. These caps make
+# sure that no value can cause: (a) >100% bankroll deployment, (b) infinite
+# loops, (c) NaN propagation through the pacing classifier.
+_PARAM_BOUNDS = {
+    # ladder pricing
+    "buy_tier_1_price": (0.0, 1.0),
+    "buy_tier_2_price": (0.0, 1.0),
+    # generic per-tier caps applied inside lists below too
+    # exit thresholds
+    "take_profit_pct": (0.0, 100.0),     # multiples of entry
+    "stop_loss_pct": (0.0, 1.0),         # fraction of entry
+    "trailing_stop_pct": (0.0, 1.0),
+    # pacing
+    "pacing_sell_score": (0.0, 10.0),
+    "pacing_hold_score": (0.0, 10.0),
+    "pacing_eligible_after_pct": (0.0, 1.0),
+    # timing
+    "buy_cancel_after_hours": (0.0, 168.0 * 4),
+    "enter_after_hours_elapsed": (0.0, 168.0 * 4),
+    "hold_max_tweets": (0, 10000),
+    "hold_min_hours_remaining": (0.0, 168.0 * 4),
+}
+
+# Valid charset for free-text fields stored in config and later passed into
+# HTTP calls / log lines. Conservative: alnum + a few separators.
+_SAFE_STR = re.compile(r"^[A-Za-z0-9_./<>+:\- ]{0,128}$")
+# Stricter charset for handles (passed straight into URLs as path components)
+# — no dots, slashes, or anything that could traverse a path.
+_SAFE_HANDLE = re.compile(r"^[A-Za-z0-9_-]{0,64}$")
+_MAX_LADDER_TIERS = 10
+_MAX_PROFILES_PER_AUCTION = 30
+_MAX_AUCTION_TYPES = 20
+
+
+def _safe_str(v, fallback: str = "", max_len: int = 64) -> str:
+    if v is None:
+        return fallback
+    s = str(v)[:max_len]
+    if not _SAFE_STR.fullmatch(s):
+        # Strip unsafe chars rather than rejecting outright (UX > strictness)
+        s = re.sub(r"[^A-Za-z0-9_./<>+:\- ]", "", s)[:max_len]
+    return s or fallback
+
+
+def _safe_handle(v, fallback: str = "elonmusk") -> str:
+    """Stricter than _safe_str — for handle/platform values that get
+    interpolated into URL path components. No dots/slashes/control chars."""
+    if v is None:
+        return fallback
+    s = str(v)[:64]
+    if not _SAFE_HANDLE.fullmatch(s):
+        s = re.sub(r"[^A-Za-z0-9_-]", "", s)[:64]
+    return s or fallback
+
+
+def _safe_finite_float(v, default: float = 0.0) -> float:
+    try:
+        f = float(v)
+        if not math.isfinite(f):
+            return default
+        return f
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_finite_int(v, default: int = 0) -> int:
+    try:
+        n = int(v)
+        return n
+    except (TypeError, ValueError):
+        return default
+
+
+def _clamp(v: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, v))
+
+
+def _validate_ladder(raw, max_tiers: int = _MAX_LADDER_TIERS) -> list:
+    """Validate a buy ladder (list of {price, pct, label} dicts).
+    Each price clamped [0, 1]; each pct clamped [0, 1]; sum-of-pct clamped to 1.0
+    (extras silently scaled down so total allocation never exceeds 100%).
+    """
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for row in raw[:max_tiers]:
+        if isinstance(row, dict):
+            price = _clamp(_safe_finite_float(row.get("price"), 0), 0.0, 1.0)
+            pct = _clamp(_safe_finite_float(row.get("pct"), 0), 0.0, 1.0)
+            label = _safe_str(row.get("label"), "tier", max_len=32)
+        elif isinstance(row, (list, tuple)) and len(row) >= 2:
+            price = _clamp(_safe_finite_float(row[0], 0), 0.0, 1.0)
+            pct = _clamp(_safe_finite_float(row[1], 0), 0.0, 1.0)
+            label = "tier"
+        else:
+            continue
+        if price <= 0 or pct <= 0:
+            continue
+        out.append({"price": price, "pct": pct, "label": label})
+    # If sum of pct > 1.0, scale down proportionally
+    total = sum(t["pct"] for t in out)
+    if total > 1.0:
+        for t in out:
+            t["pct"] = t["pct"] / total
+    return out
+
+
+def _validate_params(raw: dict) -> dict:
+    """Apply numeric bounds + finite-checks to a profile.params dict.
+    Unknown keys are dropped (NOT passed through) — preventing a malicious
+    payload from injecting arbitrary keys that downstream strategy code
+    might trust."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict = {}
+    # Valid param key charset: alnum + underscore. Anything else dropped to
+    # prevent control chars / log-injection / weird strategy lookups.
+    _key_re = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+    for k, v in raw.items():
+        if not isinstance(k, str) or not _key_re.fullmatch(k):
+            continue
+        # Special-case structured fields
+        if k == "buy_ladder":
+            out[k] = _validate_ladder(v)
+            continue
+        if k == "sell_targets":
+            # list of {price, pct} dicts
+            cleaned = []
+            if isinstance(v, list):
+                for row in v[:_MAX_LADDER_TIERS]:
+                    if not isinstance(row, dict):
+                        continue
+                    price = _clamp(_safe_finite_float(row.get("price"), 0), 0.0, 1.0)
+                    pct = _clamp(_safe_finite_float(row.get("pct"), 0), 0.0, 1.0)
+                    if price > 0 and pct > 0:
+                        cleaned.append({"price": price, "pct": pct})
+                # Scale pct sum down to ≤1.0
+                total = sum(t["pct"] for t in cleaned)
+                if total > 1.0:
+                    for t in cleaned:
+                        t["pct"] = t["pct"] / total
+            out[k] = cleaned
+            continue
+        if k == "sell_multipliers":
+            if isinstance(v, list):
+                out[k] = [_clamp(_safe_finite_float(x, 0), 0.0, 1000.0) for x in v[:_MAX_LADDER_TIERS]]
+            continue
+        if k == "sell_multiplier_pcts":
+            if isinstance(v, list):
+                cleaned = [_clamp(_safe_finite_float(x, 0), 0.0, 1.0) for x in v[:_MAX_LADDER_TIERS]]
+                total = sum(cleaned)
+                if total > 1.0:
+                    cleaned = [x / total for x in cleaned]
+                out[k] = cleaned
+            continue
+        if k == "sellnow_grid":
+            if isinstance(v, list):
+                cleaned = []
+                for row in v[:20]:
+                    if isinstance(row, (list, tuple)) and len(row) >= 2:
+                        cleaned.append([
+                            _clamp(_safe_finite_float(row[0], 0), 0.0, 1e6),
+                            _clamp(_safe_finite_float(row[1], 0), 0.0, 1e6),
+                        ])
+                out[k] = cleaned
+            continue
+        # Bounded scalar params
+        if k in _PARAM_BOUNDS:
+            lo, hi = _PARAM_BOUNDS[k]
+            out[k] = _clamp(_safe_finite_float(v, lo), lo, hi)
+            continue
+        # Unknown leaf key — coerce to safe primitive types only
+        if isinstance(v, bool):
+            out[k] = v
+        elif isinstance(v, (int, float)):
+            out[k] = _safe_finite_float(v, 0)
+        elif isinstance(v, str):
+            out[k] = _safe_str(v, "", max_len=128)
+        # Other types (lists/dicts of unknown shape) are dropped silently
+    return out
+
+
 def _validate_auction_types(at_list) -> list:
-    """Sanity-check the auction_types structure. Drops malformed entries."""
+    """Sanity-check the auction_types structure with bounds + length caps."""
     if not isinstance(at_list, list):
         return []
     cleaned = []
-    for at in at_list:
+    seen_ids: set[str] = set()
+    for at in at_list[:_MAX_AUCTION_TYPES]:
         if not isinstance(at, dict):
             continue
+        at_id = _safe_str(at.get("id"), "auction", max_len=48)
+        # Enforce id uniqueness — silently drop duplicates so React keys stay
+        # stable and downstream lookups don't collide.
+        if at_id in seen_ids:
+            continue
+        seen_ids.add(at_id)
         profiles = []
-        for p in at.get("bracket_profiles", []) or []:
+        seen_profile_keys: set[tuple] = set()
+        for p in (at.get("bracket_profiles") or [])[:_MAX_PROFILES_PER_AUCTION]:
             if not isinstance(p, dict):
                 continue
+            bracket = _safe_str(p.get("bracket"), "", max_len=32)
+            if not bracket:
+                continue
+            # Profile uniqueness key: (bracket, label) — duplicates dropped
+            key = (bracket, _safe_str(p.get("label"), "", max_len=64))
+            if key in seen_profile_keys:
+                continue
+            seen_profile_keys.add(key)
             profiles.append({
-                "bracket": str(p.get("bracket", "")),
-                "label": str(p.get("label", "")),
+                "bracket": bracket,
+                "label": _safe_str(p.get("label"), bracket, max_len=64),
                 "enabled": bool(p.get("enabled", False)),
-                "strategy_name": str(p.get("strategy_name", "Cheap_Lottery_Pacing")),
-                "bracket_max_count": int(p.get("bracket_max_count", 40)),
-                "params": p.get("params", {}) if isinstance(p.get("params"), dict) else {},
+                "strategy_name": _safe_str(p.get("strategy_name"), "Cheap_Lottery_Pacing", max_len=64),
+                "bracket_max_count": max(_safe_finite_int(p.get("bracket_max_count"), 40), 0),
+                "params": _validate_params(p.get("params") or {}),
             })
         cleaned.append({
-            "id": str(at.get("id", "")),
-            "label": str(at.get("label", "")),
+            "id": at_id,
+            "label": _safe_str(at.get("label"), at_id, max_len=64),
             "enabled": bool(at.get("enabled", False)),
-            "handle": str(at.get("handle", "")),
-            "platform": str(at.get("platform", "")),
-            "series_slug": str(at.get("series_slug", "")),
-            "window_days": int(at.get("window_days", 2)),
+            "handle": _safe_handle(at.get("handle"), "elonmusk"),
+            "platform": _safe_handle(at.get("platform"), "x"),
+            "series_slug": _safe_str(at.get("series_slug"), "", max_len=128),
+            "window_days": max(_safe_finite_int(at.get("window_days"), 2), 1),
             "bracket_profiles": profiles,
         })
     return cleaned
 
 
+# Module-wide schema for the schema-driven form. Defined here (not imported
+# from module.py) to avoid the module_config <-> module circular dependency
+# QA-flagged in the 2026-05-06 review. SpikeTradingModule.get_config_schema()
+# returns this same list.
+MODULE_WIDE_SCHEMA = [
+    {"key": "min_market_volume_24h", "type": "number", "min": 0, "max": 1_000_000, "step": 100},
+    {"key": "bracket_cap_pct_of_bankroll", "type": "number", "min": 0.01, "max": 0.5, "step": 0.01},
+    {"key": "max_open_positions", "type": "number", "min": 1, "max": 20, "step": 1},
+    {"key": "log_decisions_to_supabase", "type": "boolean"},
+]
+
+
 def _validate_against_schema(config: dict) -> dict:
-    from api.modules.spike_trading.module import SpikeTradingModule
-    schema = {f["key"]: f for f in SpikeTradingModule().get_config_schema()}
+    schema = {f["key"]: f for f in MODULE_WIDE_SCHEMA}
     out = {}
     for k, v in (config or {}).items():
         if k == "auction_types":

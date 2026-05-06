@@ -148,8 +148,12 @@ export function AuctionTypesEditor({
       {value.map((at, atIdx) => {
         const isOpen = openTypes.has(at.id)
         const enabledCount = at.bracket_profiles.filter(p => p.enabled).length
+        // Compound key: id + index. Server now de-dupes ids, but defend
+        // against stale data where two entries might share an id during
+        // an in-flight save.
+        const keyId = `${at.id}__${atIdx}`
         return (
-          <div key={at.id} className="rounded-md border border-border/60">
+          <div key={keyId} className="rounded-md border border-border/60">
             <div className="flex items-center justify-between px-4 py-2 bg-accent/20">
               <button
                 onClick={() => toggleType(at.id)}
@@ -186,7 +190,7 @@ export function AuctionTypesEditor({
                 <div className="space-y-2">
                   {at.bracket_profiles.map((p, pIdx) => (
                     <ProfileEditor
-                      key={pIdx}
+                      key={`${p.bracket}__${p.label}__${pIdx}`}
                       profile={p}
                       strategies={strategies}
                       onChange={(patch) => updateProfile(atIdx, pIdx, patch)}
