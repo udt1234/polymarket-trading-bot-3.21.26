@@ -47,6 +47,8 @@ from api.modules.spike_trading.decision import (
     trailing_stop_price,
     slow_bleed_sell_price,
 )
+from api.modules.spike_trading.strategies import get_strategy, all_strategy_names
+from api.modules.spike_trading.strategies.base import AuctionState
 
 log = logging.getLogger(__name__)
 
@@ -84,29 +86,32 @@ class SpikeTradingModule(BaseModule):
         # Match DB row name 'Spike Trading' (lowercase 'spike trading')
         return ["spike trading", "spike_trading", "spike"]
 
-    def get_handle(self) -> str:
-        # Read from the per-module config so it tracks whatever the user
-        # configured (default: elonmusk on x platform).
+    def _first_enabled_auction(self) -> dict | None:
+        """First enabled auction_type. Used by engine.* methods that expect
+        a single handle/platform/window (post-count snapshot, dashboard
+        default). Multi-auction iteration happens in _evaluate_async."""
         try:
             sb = get_supabase()
             row = sb.table("modules").select("id").eq("name", "Spike Trading").execute()
-            if row.data:
-                cfg = get_module_config(row.data[0]["id"])
-                return cfg.get("handle", "elonmusk")
+            if not row.data:
+                return None
+            cfg = get_module_config(row.data[0]["id"])
+            for at in cfg.get("auction_types", []) or []:
+                if at.get("enabled"):
+                    return at
+            # No enabled auction type — fall back to first regardless
+            ats = cfg.get("auction_types", []) or []
+            return ats[0] if ats else None
         except Exception:
-            pass
-        return "elonmusk"
+            return None
+
+    def get_handle(self) -> str:
+        at = self._first_enabled_auction()
+        return at.get("handle", "elonmusk") if at else "elonmusk"
 
     def get_platform(self) -> str:
-        try:
-            sb = get_supabase()
-            row = sb.table("modules").select("id").eq("name", "Spike Trading").execute()
-            if row.data:
-                cfg = get_module_config(row.data[0]["id"])
-                return cfg.get("platform", "x")
-        except Exception:
-            pass
-        return "x"
+        at = self._first_enabled_auction()
+        return at.get("platform", "x") if at else "x"
 
     def get_config(self, module_id: str) -> dict:
         return get_module_config(module_id)
@@ -116,109 +121,57 @@ class SpikeTradingModule(BaseModule):
         save_module_config(module_id, config)
 
     def get_config_schema(self) -> list[dict]:
-        """Schema for the dashboard's dynamic config form. Sections render
-        as collapsible groups so the form stays scannable. Bounds are also
-        enforced server-side in save_config (defense in depth)."""
+        """Schema for the dashboard's dynamic config form.
+
+        The new auction_types architecture means most config lives nested
+        in `auction_types[].bracket_profiles[].params`. The dashboard renders
+        that via a dedicated <AuctionTypesEditor /> component, NOT via the
+        schema-driven form. Only module-wide knobs are exposed here.
+        """
         return [
-            # ---- Discovery (general) ----
-            {"key": "handle", "label": "Handle", "type": "string", "section": "general",
-             "help": "Social handle this module tracks (xTracker username)"},
-            {"key": "platform", "label": "Platform", "type": "select", "section": "general",
-             "options": ["x", "truthsocial"], "help": "xTracker platform identifier"},
-            {"key": "window_days", "label": "Window (days)", "type": "number", "section": "general",
-             "min": 1, "max": 31, "step": 1,
-             "help": "Auction window length in days. Strategy is calibrated for 2."},
-            {"key": "bracket_pattern", "label": "Bracket Pattern", "type": "string", "section": "general",
-             "help": "Which bracket label to trade (e.g. '<40')"},
-            {"key": "min_market_volume_24h", "label": "Min 24h Volume ($)", "type": "number", "section": "general",
+            {"key": "min_market_volume_24h", "label": "Min 24h Volume ($)", "type": "number", "section": "risk",
              "min": 0, "max": 1_000_000, "step": 100,
              "help": "Skip markets thinner than this. 0 = no filter."},
-            {"key": "series_slug", "label": "Polymarket Series Slug", "type": "string", "section": "general",
-             "help": "Primary discovery: e.g. 'elon-tweets-48h'. Find via gamma-api.polymarket.com/series. Typo here = silent break."},
-
-            # ---- Buy ladder (5 tiers, [price, allocation%] pairs) ----
-            {"key": "buy_ladder", "label": "Buy Ladder (price ¢, alloc %)", "type": "number_list_2",
-             "section": "buy", "length": 5, "cols": 2,
-             "labels": ["price", "alloc"],
-             "help": "Each row = one limit BUY tier. price = $ (e.g. 0.005 = 0.5¢). "
-                     "alloc = fraction of bracket cap (sum should ≈ 1.0). "
-                     "All tiers fire simultaneously; whichever the market crosses, fill."},
-            {"key": "buy_cancel_after_hours", "label": "Cancel BUYs After (h)", "type": "number", "section": "buy",
-             "min": 1, "max": 168, "step": 1,
-             "help": "Stop placing buys this many hours into the auction window"},
-
-            # ---- Sell ladder (multipliers of fill price) ----
-            {"key": "sell_multipliers", "label": "Sell Multipliers (×entry)", "type": "number_list_2",
-             "section": "sell", "length": 4,
-             "labels": ["Tier 1", "Tier 2", "Tier 3", "Tier 4"],
-             "help": "Multipliers of actual fill price. e.g. 1.5 = exit when price up 50%"},
-            {"key": "sell_multiplier_pcts", "label": "Sell Tier Allocations", "type": "number_list_2",
-             "section": "sell", "length": 4,
-             "labels": ["T1 %", "T2 %", "T3 %", "T4 %"],
-             "help": "Fraction of position sold at each tier (sum should = 1.0)"},
-
-            # ---- Auto-exit thresholds ----
-            {"key": "take_profit_pct", "label": "Take Profit %", "type": "number", "section": "sell",
-             "min": 0, "max": 20, "step": 0.5,
-             "help": "Exit when price up this multiple from entry. 7.0 = +700% (8× entry)"},
-            {"key": "stop_loss_pct", "label": "Stop Loss %", "type": "number", "section": "sell",
-             "min": 0, "max": 1, "step": 0.05,
-             "help": "Exit when price drops this fraction below entry. 0.85 = exit at 15% of entry"},
-            {"key": "trailing_stop_pct", "label": "Trailing Stop %", "type": "number", "section": "sell",
-             "min": 0, "max": 1, "step": 0.05,
-             "help": "When up >50%, lock in by trailing this fraction below the running peak"},
-
-            # ---- HOLD signal ----
-            {"key": "hold_max_tweets", "label": "HOLD: Max Tweets", "type": "number", "section": "sell",
-             "min": 0, "max": 100, "step": 1,
-             "help": "≤ this many tweets to qualify as a HOLD"},
-            {"key": "hold_min_hours_remaining", "label": "HOLD: Min Hours Left", "type": "number", "section": "sell",
-             "min": 0, "max": 168, "step": 1,
-             "help": "≥ this many hours remaining to qualify as a HOLD"},
-
-            # ---- SELL-NOW grid (3 rows × 2 cols) ----
-            {"key": "sellnow_grid", "label": "SELL-NOW Grid", "type": "number_list_2",
-             "section": "sell", "length": 3, "cols": 2,
-             "labels": ["min_tweets", "min_hours"],
-             "help": "Each row: trigger SELL-NOW if cum_tweets ≥ row[0] AND hours_left ≥ row[1]"},
-
-            # ---- Pacing classifier ----
-            {"key": "bracket_max_count", "label": "Bracket Cap (count)", "type": "number", "section": "advanced",
-             "min": 1, "max": 1000, "step": 1,
-             "help": "The numeric boundary of the bracket (e.g. 40 for '<40')"},
-            {"key": "pacing_sell_score", "label": "Pacing SELL Threshold", "type": "number", "section": "advanced",
-             "min": 0.5, "max": 3.0, "step": 0.05,
-             "help": "If projected_final / bracket_max ≥ this, force SELL-NOW. 1.20 = 20% past cap."},
-            {"key": "pacing_hold_score", "label": "Pacing HOLD Threshold", "type": "number", "section": "advanced",
-             "min": 0.0, "max": 1.0, "step": 0.05,
-             "help": "If projected_final / bracket_max ≤ this, override SELL → HOLD-LIGHT"},
-
-            # ---- Risk ----
             {"key": "bracket_cap_pct_of_bankroll", "label": "Per-Cycle Bankroll Cap", "type": "number",
              "section": "risk", "min": 0.01, "max": 0.5, "step": 0.01,
-             "help": "Max % of bankroll deployed per cycle (lottery sizing)"},
+             "help": "Max % of bankroll deployed per cycle (lottery sizing). Applies to each profile."},
             {"key": "max_open_positions", "label": "Max Open Positions", "type": "number", "section": "risk",
-             "min": 1, "max": 20, "step": 1},
-
-            # ---- Operational ----
+             "min": 1, "max": 20, "step": 1,
+             "help": "Cap concurrent open positions across ALL enabled profiles."},
             {"key": "log_decisions_to_supabase", "label": "Log Decisions", "type": "boolean",
              "section": "advanced",
              "help": "Write spike_state_snapshots rows for backtest replay"},
         ]
 
+    def get_strategy_metadata(self) -> list[dict]:
+        """Surface strategy plugin info to the dashboard. Used by the
+        AuctionTypesEditor to populate the strategy dropdown per profile.
+        """
+        out = []
+        for name in all_strategy_names():
+            cls = get_strategy(name)
+            if cls is None:
+                continue
+            inst = cls()
+            out.append({
+                "name": name,
+                "label": inst.display_label({}),
+                "default_params": getattr(cls, "DEFAULT_PARAMS", {}),
+            })
+        return out
+
     def get_auction_window_days(self) -> float | None:
-        """Spike strategy is calibrated specifically on 2-day windows.
-        Filters the dashboard's auction lists (and any other consumer of
-        the modules router) to only show 2-day Elon auctions, not the
-        overlapping 1d/7d/monthly series."""
-        try:
-            sb = get_supabase()
-            row = sb.table("modules").select("id").eq("name", "Spike Trading").execute()
-            if row.data:
-                cfg = get_module_config(row.data[0]["id"])
-                return float(cfg.get("window_days", 2))
-        except Exception:
-            pass
+        """Window length of the FIRST enabled auction type. With multi-
+        auction support, this is no longer monolithic — but the engine's
+        post-count snapshot + auction-list endpoints expect a single value,
+        so we return the primary enabled auction type's window. The actual
+        evaluation cycle iterates over ALL enabled types."""
+        at = self._first_enabled_auction()
+        if at:
+            try:
+                return float(at.get("window_days", 2))
+            except (ValueError, TypeError):
+                pass
         return 2.0
 
     # ------------------------------------------------------------------
@@ -243,45 +196,54 @@ class SpikeTradingModule(BaseModule):
         cfg = get_module_config(module_id)
 
         signals: list[Signal] = []
-
-        active_trackings = await fetch_active_short_window_trackings(
-            handle=cfg["handle"],
-            platform=cfg["platform"],
-            target_window_days=cfg["window_days"],
-            series_slug=cfg.get("series_slug"),
-        )
-        if not active_trackings:
-            self._log(sb, module_id, "decision", "info",
-                      f"No active {cfg['window_days']}-day {cfg['handle']} tracking found")
+        auction_types = cfg.get("auction_types") or []
+        if not auction_types:
+            self._log(sb, module_id, "decision", "warning",
+                      "No auction_types configured — module idle")
             return []
 
-        for tracking in active_trackings:
+        for at in auction_types:
+            if not at.get("enabled"):
+                continue
+            enabled_profiles = [p for p in (at.get("bracket_profiles") or []) if p.get("enabled")]
+            if not enabled_profiles:
+                continue
             try:
-                market = await fetch_market_for_tracking(tracking, cfg["bracket_pattern"])
-                if not market or not market.get("market_id"):
-                    self._log(sb, module_id, "decision", "info",
-                              f"No matching {cfg['bracket_pattern']} market for tracking {tracking.get('id')}")
-                    continue
-                if market.get("volume_24h", 0) < cfg.get("min_market_volume_24h", 0):
-                    self._log(sb, module_id, "decision", "info",
-                              f"Skipping market {market['market_id']} — volume_24h ${market.get('volume_24h', 0):,.0f} below threshold")
-                    continue
+                trackings = await fetch_active_short_window_trackings(
+                    handle=at.get("handle", "elonmusk"),
+                    platform=at.get("platform", "x"),
+                    target_window_days=at.get("window_days", 2),
+                    series_slug=at.get("series_slug"),
+                )
+            except Exception as e:
+                log.exception(f"discovery failed for {at.get('id')}: {e}")
+                self._log(sb, module_id, "system", "error",
+                          f"discovery failed for auction_type {at.get('id')}: {e}")
+                continue
+            if not trackings:
+                self._log(sb, module_id, "decision", "info",
+                          f"[{at.get('label', at.get('id'))}] no active {at.get('window_days')}d "
+                          f"{at.get('handle')} tracking found")
+                continue
 
-                # xTracker payloads sometimes use 'id' and sometimes 'trackingId'
+            for tracking in trackings:
                 tracking_id = tracking.get("id") or tracking.get("trackingId")
                 if not tracking_id:
                     self._log(sb, module_id, "decision", "warning",
-                              f"Skipping tracking with no id: {tracking.get('title', '?')}")
+                              f"Skipping tracking with no id: {tracking.get('title','?')}")
                     continue
                 tracking["__resolved_id"] = tracking_id
-                signals.extend(await self._handle_market(
-                    sb, module_id, cfg, market, tracking,
-                ))
-            except Exception as e:
-                # Per-market failures shouldn't take down the whole cycle
-                log.exception(f"spike_trading per-market error: {e}")
-                self._log(sb, module_id, "system", "error",
-                          f"market handling failed: {e}")
+
+                for profile in enabled_profiles:
+                    try:
+                        sigs = await self._handle_auction_for_profile(
+                            sb, module_id, at, profile, tracking, cfg,
+                        )
+                        signals.extend(sigs)
+                    except Exception as e:
+                        log.exception(f"profile {profile.get('label')} on {tracking.get('title')} failed: {e}")
+                        self._log(sb, module_id, "system", "error",
+                                  f"profile {profile.get('label')} failed: {e}")
 
         return signals
 
@@ -289,36 +251,85 @@ class SpikeTradingModule(BaseModule):
     # Per-market state machine
     # ------------------------------------------------------------------
 
-    async def _handle_market(
-        self, sb, module_id: str, cfg: dict, market: dict, tracking: dict,
+    async def _handle_auction_for_profile(
+        self, sb, module_id: str, auction_type: dict, profile: dict,
+        tracking: dict, cfg: dict,
     ) -> list[Signal]:
+        """Run one (auction × bracket profile) combination through its strategy.
+
+        Steps:
+          1. Resolve the strategy plugin from profile.strategy_name.
+          2. Merge profile.params over strategy.DEFAULT_PARAMS to get
+             the effective param set for this profile.
+          3. Fetch the bracket's market on Polymarket.
+          4. Build AuctionState (tweets, hours, prices, etc.).
+          5. If no open position: ask strategy.can_enter; if yes, emit buy ladder.
+          6. If open position: ask strategy.classify; if SELL-NOW, emit market sell.
+        """
+        bracket = profile.get("bracket")
+        label = profile.get("label", f"{auction_type.get('id')}/{bracket}")
+        strategy_name = profile.get("strategy_name", "Cheap_Lottery_Pacing")
+        strategy_cls = get_strategy(strategy_name)
+        if strategy_cls is None:
+            self._log(sb, module_id, "decision", "error",
+                      f"[{label}] unknown strategy '{strategy_name}'. Available: {all_strategy_names()}")
+            return []
+        strategy = strategy_cls()
+        params = {**strategy.DEFAULT_PARAMS, **(profile.get("params") or {})}
+
+        # 3. Fetch market for THIS profile's bracket
+        try:
+            market = await fetch_market_for_tracking(tracking, bracket)
+        except Exception as e:
+            log.warning(f"[{label}] market fetch failed: {e}")
+            return []
+        if not market or not market.get("market_id"):
+            self._log(sb, module_id, "decision", "info",
+                      f"[{label}] no matching {bracket} market in tracking {tracking.get('id')}")
+            return []
+        if market.get("volume_24h", 0) < cfg.get("min_market_volume_24h", 0):
+            self._log(sb, module_id, "decision", "info",
+                      f"[{label}] skipping {market['market_id']}: volume below threshold")
+            return []
+
         market_id = market["market_id"]
-        bracket = cfg["bracket_pattern"]
         end_iso = tracking.get("endDate", "")
 
-        position = self._get_open_position(sb, module_id, market_id, bracket)
-        # Discover the right tracking-id for tweet counts:
-        #   - If source=xtracker, the tracking dict already has the right id.
-        #   - If source=gamma_series, the 'id' is a Gamma event id — not
-        #     usable on xTracker. Resolve by matching xTracker tracking
-        #     start/end dates to this auction's window. Returns 0 if no
-        #     xTracker tracking exists yet (pre-launch).
+        # Resolve cum_tweets via the source-aware path
         if tracking.get("source") == "gamma_series":
             xt_id = await _resolve_xtracker_id_for_window(
-                cfg["handle"], cfg["platform"], tracking.get("startDate"), tracking.get("endDate"),
+                auction_type.get("handle", "elonmusk"),
+                auction_type.get("platform", "x"),
+                tracking.get("startDate"), tracking.get("endDate"),
             )
-            cum_tweets = await fetch_cumulative_tweets(cfg["handle"], xt_id) if xt_id else 0
+            cum_tweets = await fetch_cumulative_tweets(auction_type.get("handle", "elonmusk"), xt_id) if xt_id else 0
         else:
             cum_tweets = await fetch_cumulative_tweets(
-                cfg["handle"], tracking.get("__resolved_id") or tracking.get("id"),
+                auction_type.get("handle", "elonmusk"),
+                tracking.get("__resolved_id") or tracking.get("id"),
             )
+
         h_to_close = hours_to_close(end_iso)
-        # Use mid as proxy for "current price" — robust to one-sided books
+        total_hours = float(auction_type.get("window_days", 2)) * 24.0
+        elapsed_hours = max(total_hours - h_to_close, 0.0)
         current_price = (market["best_bid"] + market["best_ask"]) / 2.0 if market["best_ask"] > 0 else market["best_bid"]
 
-        # ---- No position yet → maybe place buy ladder ----
+        state = AuctionState(
+            market_id=market_id,
+            bracket=bracket,
+            best_bid=float(market.get("best_bid") or 0.0),
+            best_ask=float(market.get("best_ask") or 1.0),
+            cum_tweets=cum_tweets,
+            hours_to_close=h_to_close,
+            elapsed_hours=elapsed_hours,
+            total_hours=total_hours,
+            bracket_max_count=int(profile.get("bracket_max_count", 40)),
+        )
+
+        position = self._get_open_position(sb, module_id, market_id, bracket)
+
+        # ---- No position: maybe enter ----
         if not position:
-            # Enforce max_open_positions across all open positions for this module
             max_open = int(cfg.get("max_open_positions", 3))
             try:
                 open_count = sb.table("spike_positions").select("id", count="exact").eq(
@@ -326,49 +337,47 @@ class SpikeTradingModule(BaseModule):
                 ).in_("state", ["WAITING", "MONITORING"]).execute()
                 if (open_count.count or 0) >= max_open:
                     self._log(sb, module_id, "decision", "info",
-                              f"Skipping {market_id}: at max_open_positions={max_open}")
+                              f"[{label}] at max_open_positions={max_open}")
                     return []
             except Exception as e:
                 log.warning(f"max_open_positions check failed: {e}")
-            if h_to_close <= (cfg["window_days"] * 24 - cfg["buy_cancel_after_hours"]):
+
+            can_enter, reason = strategy.can_enter(state, params)
+            if not can_enter:
                 self._log(sb, module_id, "decision", "info",
-                          f"Skipping {market_id}: past buy-eligibility cutoff "
-                          f"(t-{h_to_close:.1f}h, cutoff={cfg['buy_cancel_after_hours']}h after open)")
+                          f"[{label}] entry blocked: {reason}")
                 return []
-            # Don't re-emit buy signals if we already have unfilled BUYs in flight.
-            # Without this guard the 5-min cycle would spam the order book with
-            # duplicate limits at the same prices on every iteration.
+
             if self._has_pending_spike_buys(sb, module_id, market_id, bracket):
                 self._log(sb, module_id, "decision", "info",
-                          f"{market_id} {bracket}: pending BUY orders already in flight, no re-emit")
+                          f"[{label}] pending BUY orders already in flight")
                 return []
-            self._open_position(sb, module_id, market, bracket, current_price)
-            return self._build_buy_ladder(module_id, market, cfg)
 
-        # ---- Position exists → run HOLD/SELL classifier ----
+            self._open_position(sb, module_id, market, bracket, current_price)
+            return self._build_buy_ladder_for_profile(
+                module_id, market, profile, params, strategy, state, cfg,
+            )
+
+        # ---- Position exists: classify ----
         entry = float(position.get("entry_price") or current_price)
         pnl_pct = ((current_price - entry) / entry * 100.0) if entry > 0 else 0.0
+        decision, ctx = strategy.classify(state, position, params)
 
-        state = PositionState(
+        self._log(sb, module_id, "decision", "info",
+                  f"[{label}] {market_id} state=({cum_tweets} tweets, "
+                  f"{h_to_close:.1f}h left, price={current_price*100:.1f}¢, "
+                  f"pnl={pnl_pct:+.1f}%) pacing={ctx.get('pacing_score','—')} "
+                  f"→ {decision} ({ctx.get('trigger','')})")
+
+        # Snapshot uses the legacy PositionState shape for the snapshots table
+        ps = PositionState(
             cum_tweets=cum_tweets,
             hours_to_close=h_to_close,
             current_price=current_price,
             entry_price=entry,
             pnl_pct=pnl_pct,
         )
-        # Pacing-aware classifier: knows projected final tweet count
-        # based on current rate, can override v1 when pacing is extreme.
-        total_hours = float(cfg.get("window_days", 2)) * 24.0
-        decision, ctx = classify_decision_v2(state, cfg, total_hours)
-
-        self._log(sb, module_id, "decision", "info",
-                  f"{market_id} {bracket} state=({cum_tweets} tweets, "
-                  f"{h_to_close:.1f}h left, price={current_price*100:.1f}¢, "
-                  f"pnl={pnl_pct:+.1f}%) pacing={ctx['pacing_score']} "
-                  f"proj_final={ctx['projected_final_tweets']} → {decision} "
-                  f"({ctx.get('trigger','')})")
-
-        self._snapshot(sb, position["id"], state, decision)
+        self._snapshot(sb, position["id"], ps, decision)
         sb.table("spike_positions").update({
             "state": "MONITORING",
             "current_tweets": cum_tweets,
@@ -377,29 +386,65 @@ class SpikeTradingModule(BaseModule):
             "last_decision_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", position["id"]).execute()
 
-        if should_market_sell(decision):
+        if decision == "SELL-NOW":
             return self._build_market_sell(sb, module_id, market, position, h_to_close)
-
-        # HOLD / HOLD-LIGHT / SELL — no immediate signal action.
-        # (A future enhancement: cancel/adjust live limit-sell orders here.)
         return []
 
     # ------------------------------------------------------------------
     # Signal builders
     # ------------------------------------------------------------------
 
-    def _build_buy_ladder(self, module_id: str, market: dict, cfg: dict) -> list[Signal]:
-        """Emit buy Signals across the configured tier ladder.
+    def _build_buy_ladder_for_profile(
+        self, module_id: str, market: dict, profile: dict, params: dict,
+        strategy, state, cfg: dict,
+    ) -> list[Signal]:
+        """Emit buy Signals using the strategy-supplied tier ladder.
+        Strategy returns abstract tier dicts; this wraps them into Signals
+        with adaptive_buy_price + module-wide bracket cap applied."""
+        signals: list[Signal] = []
+        bid = float(market.get("best_bid") or 0.0)
+        ask = float(market.get("best_ask") or 1.0)
+        bracket_cap = float(cfg.get("bracket_cap_pct_of_bankroll", 0.05))
+        bracket = profile.get("bracket")
 
-        Reads `cfg["buy_ladder"]` first (new N-tier format), falls back to
-        legacy `buy_tier_1_*` / `buy_tier_2_*` keys for back-compat. Each
-        tier's `target` price is run through adaptive_buy_price() to
-        undercut the ask if it's already at or below the target.
-        """
+        for tier in strategy.build_buy_ladder(state, params):
+            target = float(tier.get("price", 0))
+            pct = float(tier.get("pct", 0))
+            if target <= 0 or pct <= 0:
+                continue
+            limit_price = adaptive_buy_price(bid, ask, target)
+            signals.append(Signal(
+                module_id=module_id,
+                market_id=market["market_id"],
+                bracket=bracket,
+                side="BUY",
+                edge=0.0,
+                model_prob=0.0,
+                market_price=limit_price,
+                kelly_pct=pct * bracket_cap,
+                confidence=0.5,
+                best_bid=bid,
+                best_ask=ask,
+                metadata={
+                    "strategy": "spike_trading",
+                    "strategy_name": strategy.name,
+                    "profile_label": profile.get("label"),
+                    "tier": tier.get("tier"),
+                    "tier_label": tier.get("label"),
+                    "tier_type": "buy",
+                    "skip_edge_check": True,
+                    "target_price": target,
+                    "adaptive_price": limit_price,
+                },
+            ))
+        return signals
+
+    # Legacy single-bracket builder kept for backwards-compat with any code
+    # that may still call it. New callers should use _build_buy_ladder_for_profile.
+    def _build_buy_ladder(self, module_id: str, market: dict, cfg: dict) -> list[Signal]:
         signals = []
         bid = float(market.get("best_bid") or 0.0)
         ask = float(market.get("best_ask") or 1.0)
-
         ladder = cfg.get("buy_ladder")
         if isinstance(ladder, list) and ladder:
             tiers = [
@@ -408,12 +453,10 @@ class SpikeTradingModule(BaseModule):
                 for i, t in enumerate(ladder)
             ]
         else:
-            # Legacy 2-tier format
             tiers = [
                 (1, float(cfg.get("buy_tier_1_price", 0.0)), float(cfg.get("buy_tier_1_pct", 0.0)), "tier1"),
                 (2, float(cfg.get("buy_tier_2_price", 0.0)), float(cfg.get("buy_tier_2_pct", 0.0)), "tier2"),
             ]
-
         for tier_idx, target, pct, label in tiers:
             if target <= 0 or pct <= 0:
                 continue
@@ -421,23 +464,16 @@ class SpikeTradingModule(BaseModule):
             signals.append(Signal(
                 module_id=module_id,
                 market_id=market["market_id"],
-                bracket=cfg["bracket_pattern"],
+                bracket=cfg.get("bracket_pattern", "<40"),
                 side="BUY",
-                edge=0.0,
-                model_prob=0.0,
-                market_price=limit_price,
+                edge=0.0, model_prob=0.0, market_price=limit_price,
                 kelly_pct=pct * cfg.get("bracket_cap_pct_of_bankroll", 0.05),
                 confidence=0.5,
-                best_bid=bid,
-                best_ask=ask,
+                best_bid=bid, best_ask=ask,
                 metadata={
-                    "strategy": "spike_trading",
-                    "tier": tier_idx,
-                    "tier_label": label,
-                    "tier_type": "buy",
-                    "skip_edge_check": True,
-                    "target_price": target,
-                    "adaptive_price": limit_price,
+                    "strategy": "spike_trading", "tier": tier_idx, "tier_label": label,
+                    "tier_type": "buy", "skip_edge_check": True,
+                    "target_price": target, "adaptive_price": limit_price,
                 },
             ))
         return signals

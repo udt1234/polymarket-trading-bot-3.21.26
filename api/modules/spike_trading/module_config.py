@@ -1,112 +1,176 @@
-"""Spike Trading module config.
+"""Spike Trading module config — multi-auction-type, multi-profile.
 
-Defaults are calibrated from 51 historical Elon 2-day <40 auctions
-(see _DataMetricPulls/elon_2day_analysis/decision_brief.md). Re-run
-the analysis whenever you add a new month of data and tune these
-thresholds in this dict.
+Architecture:
+  cfg["auction_types"] = list of auction-type objects, each with:
+    - id, label, enabled flag, discovery params (handle/platform/series/window_days)
+    - bracket_profiles: list of profile objects, each with:
+        - bracket, enabled flag, strategy_name, label, params dict (overrides
+          the strategy's DEFAULT_PARAMS for this profile)
+
+Legacy keys (handle, bracket_pattern, buy_ladder, etc. at top level) remain
+in DEFAULT_CONFIG for backwards compat. get_module_config() auto-migrates
+old single-bracket configs by wrapping them into a single auction_type with
+one bracket_profile when no `auction_types` list is present.
+
+Strategy plugins live in `strategies/`. Adding a new strategy = drop a file
+that subclasses Strategy. Profiles reference strategies by `name`.
 """
 from api.dependencies import get_supabase
 
+# ---------------------------------------------------------------------------
+# DEFAULT_CONFIG: out-of-the-box behavior is identical to the pre-refactor
+# single-bracket Spike Trading. The new auction_types list ships with one
+# auction type (Elon 2-day) and one enabled profile (<40 with the
+# Cheap_Lottery_Pacing strategy). Add more by editing this dict OR (better)
+# editing live config from the dashboard.
+# ---------------------------------------------------------------------------
 DEFAULT_CONFIG = {
-    # ---- Discovery ----
-    "platform": "x",                          # 'x' for Elon, 'truthsocial' for Trump
-    "handle": "elonmusk",
-    "window_days": 2,                         # only trade 2-day auctions
-    "bracket_pattern": "<40",                 # which bracket label to trade
-    # No volume threshold (removed 2026-05-05 per user). For limit-only
-    # entries, illiquidity doesn't matter: a 12c limit either fills at 12c
-    # or doesn't fill at all. Exit-side liquidity is handled separately
-    # by the SELLNOW_MIN_BID guard.
-    "min_market_volume_24h": 0,
-    # Polymarket Series slug — primary discovery path. Surfaces auctions as
-    # soon as Polymarket lists them, before xTracker starts counting tweets.
-    # Find via gamma-api.polymarket.com/series?slug=<x> or by inspecting the
-    # 'series' field on any /events response.
-    "series_slug": "elon-tweets-48h",
-
-    # ---- Buy ladder ----
-    # 5-tier descending buy ladder (2026-05-06 redesign per parquet recalibration).
-    # Tries cheap first; only the most desperate auctions fill the top tiers.
-    # All five fire simultaneously as limit orders. Whichever ones the market
-    # crosses, fill. Patient bidders capture most fills at 0.5¢ or below
-    # (96% historical hit-rate), giving ~24x more shares per dollar on
-    # winning auctions vs a single 12¢ entry. The 12¢ tier is the catch-all
-    # for the rare auction that stays strong throughout.
-    # Hit rates from parquet (n=54 resolved 2-day <40 auctions):
-    #   0.3¢ -> 96.3% hit
-    #   0.5¢ -> 96.3% hit
-    #   2.0¢ -> 98.1%
-    #   5.0¢ -> 98.1%
-    #   12¢  -> 100.0%
-    "buy_ladder": [
-        {"price": 0.003, "pct": 0.30, "label": "lottery"},   # 333x payout when YES
-        {"price": 0.005, "pct": 0.30, "label": "scoop"},     # 200x payout
-        {"price": 0.020, "pct": 0.20, "label": "value"},     #  50x payout
-        {"price": 0.050, "pct": 0.10, "label": "mid"},       #  20x payout
-        {"price": 0.120, "pct": 0.10, "label": "catchall"},  #   8x payout
+    # ===== NEW: nested auction_types schema =====
+    "auction_types": [
+        {
+            "id": "elon-2day",
+            "label": "Elon 2-Day",
+            "enabled": True,
+            "handle": "elonmusk",
+            "platform": "x",
+            "series_slug": "elon-tweets-48h",
+            "window_days": 2,
+            "bracket_profiles": [
+                {
+                    "bracket": "<40",
+                    "label": "Elon_2Day_<40",
+                    "enabled": True,
+                    "strategy_name": "Cheap_Lottery_Pacing",
+                    "bracket_max_count": 40,
+                    "params": {
+                        # Inherits Cheap_Lottery_Pacing.DEFAULT_PARAMS
+                        # Override individual keys here to customize this profile.
+                    },
+                },
+                {
+                    "bracket": "65-89",
+                    "label": "Elon_2Day_65-89",
+                    "enabled": False,  # off until you turn it on
+                    "strategy_name": "Mid_Range_Spike",
+                    "bracket_max_count": 89,
+                    "params": {},
+                },
+                {
+                    "bracket": "90-114",
+                    "label": "Elon_2Day_90-114",
+                    "enabled": False,
+                    "strategy_name": "Mid_Range_Spike",
+                    "bracket_max_count": 114,
+                    "params": {},
+                },
+                {
+                    "bracket": "40-64",
+                    "label": "Elon_2Day_40-64",
+                    "enabled": False,
+                    "strategy_name": "Mid_Range_Spike",
+                    "bracket_max_count": 64,
+                    "params": {},
+                },
+            ],
+        },
+        {
+            "id": "elon-monthly",
+            "label": "Elon Monthly",
+            "enabled": False,  # off — turn on after manual review
+            "handle": "elonmusk",
+            "platform": "x",
+            "series_slug": "elon-tweets-monthly",  # update if Polymarket uses different slug
+            "window_days": 30,
+            "bracket_profiles": [
+                {
+                    "bracket": "1400+",
+                    "label": "Elon_Monthly_1400+",
+                    "enabled": False,
+                    "strategy_name": "Big_Hold_Monthly",
+                    "bracket_max_count": 1400,
+                    "params": {},
+                },
+            ],
+        },
+        # Trump 7-day intentionally NOT included — the existing truth_social
+        # ensemble module owns that. Per user 2026-05-06: do not touch ensemble.
     ],
-    # Legacy tier_1/tier_2 keys kept for backwards compat with stored configs.
-    # If `buy_ladder` is present (new format), those are ignored.
+
+    # ===== Module-wide knobs (apply across all auction types) =====
+    "bracket_cap_pct_of_bankroll": 0.05,
+    "max_open_positions": 3,
+    "min_market_volume_24h": 0,
+    "log_decisions_to_supabase": True,
+
+    # ===== Legacy single-bracket keys (kept for backwards compat) =====
+    # If a stored config lacks `auction_types`, get_module_config() wraps these
+    # into a single-profile auction_type at read time. New code should always
+    # consume `auction_types` instead.
+    "platform": "x",
+    "handle": "elonmusk",
+    "window_days": 2,
+    "bracket_pattern": "<40",
+    "series_slug": "elon-tweets-48h",
+    "buy_ladder": [
+        {"price": 0.003, "pct": 0.30, "label": "lottery"},
+        {"price": 0.005, "pct": 0.30, "label": "scoop"},
+        {"price": 0.020, "pct": 0.20, "label": "value"},
+        {"price": 0.050, "pct": 0.10, "label": "mid"},
+        {"price": 0.120, "pct": 0.10, "label": "catchall"},
+    ],
     "buy_tier_1_price": 0.003,
     "buy_tier_1_pct":   0.30,
     "buy_tier_2_price": 0.005,
     "buy_tier_2_pct":   0.30,
     "buy_cancel_after_hours": 24,
-
-    # ---- Sell ladder (RELATIVE to entry, not hardcoded prices) ----
-    # Multipliers are applied to actual fill price, so a 9c fill -> 13.5/18/36/72
-    # whereas a 12c fill -> 18/24/48/96 (capped at 99c). This is much smarter
-    # than hardcoded sells because the same multiplier-based ladder works
-    # whether we filled cheap or expensive.
     "sell_multipliers": [1.5, 2.0, 4.0, 8.0],
     "sell_multiplier_pcts": [0.30, 0.30, 0.20, 0.20],
-
-    # ---- Take-profit / stop-loss / trailing-stop (consumed by exit_manager) ----
-    # These fire AUTOMATICALLY at the position level — no manual intervention.
-    # take_profit_pct: exit when price up this fraction above avg fill (e.g.
-    #   0.50 = exit at 1.5× entry; 1.50 = exit at 2.5× entry)
-    # stop_loss_pct: exit when price down this fraction below avg fill
-    #   (0.60 = exit at 40% of entry. Spike is lottery-ticket so we tolerate
-    #    deep drawdown — the SELL-NOW classifier handles the "bracket
-    #    busting" case faster than a generic stop-loss would.)
-    # trailing_stop_pct: when up >50%, lock in by trailing the stop this far
-    #   below the running peak.
-    "take_profit_pct": 7.0,                   # +700% (8x — moonshot)
-    "stop_loss_pct": 0.85,                    # -85% (deep — strategy expects losers)
-    "trailing_stop_pct": 0.30,                # 30% trail behind peak
-
-    # ---- HOLD signal (don't liquidate even if up 5x) ----
-    # Validated against 51 markets — only ONE state cell qualifies as a clean HOLD.
-    "hold_max_tweets": 5,                     # ≤ this many tweets in window
-    "hold_min_hours_remaining": 24,           # ≥ this many hours left
-
-    # ---- SELL-NOW grid (liquidate immediately, bracket is dying) ----
-    # ≥70% of historicals in these states ended ≤1¢.
-    # Each entry is (min_cumulative_tweets, min_hours_remaining_when_triggered).
-    "sellnow_grid": [
-        [16, 24],                             # 16+ tweets with 24+ hours left
-        [20, 18],                             # 20+ tweets with 18+ hours left
-        [30, 0],                              # 30+ tweets at any time
-    ],
-
-    # ---- Pacing-aware overrides (classify_decision_v2) ----
-    # pacing_score = projected_final_tweets / bracket_max_count (40 for <40).
-    #   < 0.30 → bracket clearly NOT going to bust — hold even if other
-    #            signals say sell.
-    #   >= 1.20 → bracket clearly busting — SELL-NOW even if other signals
-    #            say hold. Only fires after first 20% of window elapsed
-    #            (avoids extrapolating from 0 elapsed hours).
-    "bracket_max_count": 40,                  # the "<40" boundary
+    "take_profit_pct": 7.0,
+    "stop_loss_pct": 0.85,
+    "trailing_stop_pct": 0.30,
+    "hold_max_tweets": 5,
+    "hold_min_hours_remaining": 24,
+    "sellnow_grid": [[16, 24], [20, 18], [30, 0]],
+    "bracket_max_count": 40,
     "pacing_sell_score": 1.20,
     "pacing_hold_score": 0.30,
-
-    # ---- Risk ----
-    "bracket_cap_pct_of_bankroll": 0.05,      # 5% per cycle max (lottery ticket sizing)
-    "max_open_positions": 3,                  # cap concurrent positions
-
-    # ---- Operational ----
-    "log_decisions_to_supabase": True,        # write spike_state_snapshots
 }
+
+
+def _migrate_legacy_to_auction_types(stored: dict) -> dict:
+    """If stored config lacks `auction_types`, wrap legacy keys into a
+    single-profile auction_type so the module can iterate uniformly."""
+    if "auction_types" in stored and stored["auction_types"]:
+        return stored
+    legacy_profile = {
+        "bracket": stored.get("bracket_pattern", "<40"),
+        "label": f"{stored.get('handle', 'elonmusk')}_{stored.get('window_days', 2)}D_{stored.get('bracket_pattern', '<40')}",
+        "enabled": True,
+        "strategy_name": "Cheap_Lottery_Pacing",
+        "bracket_max_count": int(stored.get("bracket_max_count", 40)),
+        "params": {
+            k: stored[k] for k in (
+                "buy_ladder", "buy_cancel_after_hours",
+                "sell_multipliers", "sell_multiplier_pcts",
+                "take_profit_pct", "stop_loss_pct", "trailing_stop_pct",
+                "hold_max_tweets", "hold_min_hours_remaining",
+                "sellnow_grid", "pacing_sell_score", "pacing_hold_score",
+            ) if k in stored
+        },
+    }
+    legacy_auction = {
+        "id": "elon-2day-legacy",
+        "label": "Elon 2-Day (legacy)",
+        "enabled": True,
+        "handle": stored.get("handle", "elonmusk"),
+        "platform": stored.get("platform", "x"),
+        "series_slug": stored.get("series_slug", "elon-tweets-48h"),
+        "window_days": stored.get("window_days", 2),
+        "bracket_profiles": [legacy_profile],
+    }
+    out = dict(stored)
+    out["auction_types"] = [legacy_auction]
+    return out
 
 
 def get_module_config(module_id: str) -> dict:
@@ -114,17 +178,22 @@ def get_module_config(module_id: str) -> dict:
     key = f"module_config:{module_id}"
     res = sb.table("settings").select("*").eq("key", key).execute()
     if res.data:
-        stored = res.data[0].get("value", {})
-        return {**DEFAULT_CONFIG, **stored}
+        stored = res.data[0].get("value", {}) or {}
+        merged = {**DEFAULT_CONFIG, **stored}
+        # Auto-migrate legacy configs (no auction_types list saved yet).
+        return _migrate_legacy_to_auction_types(merged)
     return dict(DEFAULT_CONFIG)
 
 
+# ---------------------------------------------------------------------------
+# Validation: bounds-clamp incoming dashboard payloads. Schema-driven for
+# leaf number/boolean fields; structural fields (auction_types) pass through
+# but are sanity-checked.
+# ---------------------------------------------------------------------------
 def _ladder_pairs_to_dicts(pairs):
-    """Convert dashboard ladder format [[price, pct], ...] -> [{price, pct}, ...]"""
     out = []
     for row in pairs or []:
         if isinstance(row, dict):
-            # Already in dict form
             out.append({
                 "price": float(row.get("price", 0)),
                 "pct": float(row.get("pct", 0)),
@@ -135,21 +204,47 @@ def _ladder_pairs_to_dicts(pairs):
     return out
 
 
-def _ladder_dicts_to_pairs(dicts):
-    """Convert internal ladder format [{price, pct, ...}] -> [[price, pct], ...]"""
-    return [[float(d.get("price", 0)), float(d.get("pct", 0))] for d in (dicts or [])]
+def _validate_auction_types(at_list) -> list:
+    """Sanity-check the auction_types structure. Drops malformed entries."""
+    if not isinstance(at_list, list):
+        return []
+    cleaned = []
+    for at in at_list:
+        if not isinstance(at, dict):
+            continue
+        profiles = []
+        for p in at.get("bracket_profiles", []) or []:
+            if not isinstance(p, dict):
+                continue
+            profiles.append({
+                "bracket": str(p.get("bracket", "")),
+                "label": str(p.get("label", "")),
+                "enabled": bool(p.get("enabled", False)),
+                "strategy_name": str(p.get("strategy_name", "Cheap_Lottery_Pacing")),
+                "bracket_max_count": int(p.get("bracket_max_count", 40)),
+                "params": p.get("params", {}) if isinstance(p.get("params"), dict) else {},
+            })
+        cleaned.append({
+            "id": str(at.get("id", "")),
+            "label": str(at.get("label", "")),
+            "enabled": bool(at.get("enabled", False)),
+            "handle": str(at.get("handle", "")),
+            "platform": str(at.get("platform", "")),
+            "series_slug": str(at.get("series_slug", "")),
+            "window_days": int(at.get("window_days", 2)),
+            "bracket_profiles": profiles,
+        })
+    return cleaned
 
 
 def _validate_against_schema(config: dict) -> dict:
-    """Bounds-clamp incoming config values against the module schema.
-    Defense-in-depth: the dashboard input clamps too, but a malicious or
-    buggy client could still POST out-of-range values. Unknown keys pass
-    through untouched (so legacy/extension keys keep working). Type
-    coercion: numbers from JSON come as int/float; strings stay strings."""
     from api.modules.spike_trading.module import SpikeTradingModule
     schema = {f["key"]: f for f in SpikeTradingModule().get_config_schema()}
     out = {}
     for k, v in (config or {}).items():
+        if k == "auction_types":
+            out[k] = _validate_auction_types(v)
+            continue
         spec = schema.get(k)
         if spec is None:
             out[k] = v
@@ -166,28 +261,22 @@ def _validate_against_schema(config: dict) -> dict:
                 v = str(v) if v is not None else ""
             elif t == "select":
                 if "options" in spec and v not in spec["options"]:
-                    continue  # silently drop invalid selection
+                    continue
             elif t == "number_list_2":
-                # Special case: buy_ladder stores as list of dicts internally
-                # but the schema-driven form sends list of [price, pct] pairs.
                 if k == "buy_ladder":
                     v = _ladder_pairs_to_dicts(v)
                 elif isinstance(v, list):
-                    # Accept either flat list-of-numbers or list-of-pairs.
                     if v and isinstance(v[0], (list, tuple)):
                         v = [[float(x) for x in row] for row in v]
                     else:
                         v = [float(x) for x in v]
         except (ValueError, TypeError):
-            continue  # drop the bad field rather than crash the whole save
+            continue
         out[k] = v
     return out
 
 
 def save_module_config(module_id: str, config: dict):
-    """Partial-update without resetting other fields. Validates incoming
-    payload against the schema (clamps numbers, drops invalid select values).
-    """
     validated = _validate_against_schema(config)
     sb = get_supabase()
     key = f"module_config:{module_id}"

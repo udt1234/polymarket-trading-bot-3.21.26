@@ -410,6 +410,21 @@ async def get_config_schema(module_id: str):
         return []
 
 
+@router.get("/{module_id}/strategy-metadata")
+async def get_strategy_metadata(module_id: str):
+    """Return available strategy plugins for modules that support pluggable
+    strategies (currently spike_trading). Each entry has name, label, and
+    default_params (used by the AuctionTypesEditor to seed new profiles)."""
+    module = _resolve_module(module_id)
+    if module is None or not hasattr(module, "get_strategy_metadata"):
+        return []
+    try:
+        return module.get_strategy_metadata()
+    except Exception as e:
+        log.warning(f"get_strategy_metadata failed for {module_id}: {e}")
+        return []
+
+
 @router.put("/{module_id}/config")
 async def update_config(module_id: str, config: ModuleConfigUpdate):
     # Legacy ensemble path: Pydantic enforces bounds; only explicit fields

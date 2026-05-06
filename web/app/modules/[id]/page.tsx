@@ -22,6 +22,7 @@ import { LiveStatusBadge } from "./components/live-status-badge"
 import { StatusDropdown } from "./components/status-dropdown"
 import { DynamicConfigForm, type ConfigSchemaField } from "./components/dynamic-config-form"
 import { BiddingStrategyPanel } from "./components/bidding-strategy-panel"
+import { AuctionTypesEditor } from "./components/auction-types-editor"
 import { LastAuctionsPnl } from "./components/last-auctions-pnl"
 import { PendingSignalsCard } from "./components/pending-signals-card"
 import { PostTimingGrid } from "./components/post-timing-grid"
@@ -203,6 +204,9 @@ export default function ModuleDetailPage() {
   )
   const { data: configSchema } = useApi<ConfigSchemaField[]>(
     id ? `/api/modules/${id}/config-schema` : null
+  )
+  const { data: strategyMetadata } = useApi<any[]>(
+    id ? `/api/modules/${id}/strategy-metadata` : null
   )
   const { data: priceHeatmaps } = useApi<any>(
     id ? `/api/modules/${id}/price-heatmaps` : null
@@ -500,17 +504,38 @@ export default function ModuleDetailPage() {
           {configOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
         {configOpen && !Array.isArray((localConfig as any).enabled_models) && (
-          <div className="border-t border-border px-6 py-4">
-            {/* Schema-driven config form — works for any module that
-                implements get_config_schema(). Falls back to a read-only
-                key/value view if the schema endpoint returns []. */}
+          <div className="border-t border-border px-6 py-4 space-y-6">
+            {/* Auction Types editor — for modules that support multi-auction
+                multi-profile pluggable strategies (currently spike_trading).
+                Surfaces only when the API returns strategy metadata. */}
+            {Array.isArray(strategyMetadata) && strategyMetadata.length > 0 && Array.isArray((localConfig as any).auction_types) && (
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Auction Types &amp; Bracket Profiles
+                </h3>
+                <AuctionTypesEditor
+                  moduleId={module.id}
+                  initialValue={((localConfig as any).auction_types) || []}
+                  strategies={strategyMetadata}
+                  onSaved={() => { refetchConfig(); refetchPacing(); }}
+                />
+              </div>
+            )}
+            {/* Schema-driven config form — module-wide knobs (volume floor,
+                bracket cap, max open positions, etc.). Falls back to read-only
+                summary if no schema. */}
             {configSchema && configSchema.length > 0 ? (
-              <DynamicConfigForm
-                moduleId={module.id}
-                schema={configSchema}
-                initialValues={(config as any) || {}}
-                onSaved={() => { refetchConfig(); refetchPacing(); }}
-              />
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Module-Wide Settings
+                </h3>
+                <DynamicConfigForm
+                  moduleId={module.id}
+                  schema={configSchema}
+                  initialValues={(config as any) || {}}
+                  onSaved={() => { refetchConfig(); refetchPacing(); }}
+                />
+              </div>
             ) : (
               <>
                 <p className="text-xs text-muted-foreground mb-3">

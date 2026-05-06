@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { ChevronDown, ChevronUp, BookOpen } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface BiddingStrategyPanelProps {
   config: Record<string, any> | null
@@ -65,6 +66,10 @@ export function BiddingStrategyPanel({ config }: BiddingStrategyPanelProps) {
   // (rough preview — actual ladder uses real fill price per position)
   const sellPreview = sellMults.map((m: number) => Math.min(buyTopPrice * m, 0.99))
 
+  // Multi-auction-types path: when the new auction_types schema is present,
+  // render nested accordions (auction type → bracket profile → narrative).
+  const auctionTypes = Array.isArray(cfg.auction_types) ? cfg.auction_types : null
+
   return (
     <div className="rounded-lg border border-border bg-card">
       <button
@@ -77,7 +82,17 @@ export function BiddingStrategyPanel({ config }: BiddingStrategyPanelProps) {
         </span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
-      {open && (
+      {open && auctionTypes && (
+        <div className="border-t border-border px-6 py-4 space-y-3 text-xs leading-relaxed text-muted-foreground">
+          <p className="text-foreground">
+            One narrative per enabled bracket profile. Numbers reflect the merged params (strategy defaults + per-profile overrides) and update live as you edit Configuration.
+          </p>
+          {auctionTypes.map((at: any) => (
+            <AuctionTypeNarrative key={at.id} auctionType={at} />
+          ))}
+        </div>
+      )}
+      {open && !auctionTypes && (
         <div className="border-t border-border px-6 py-4 space-y-4 text-xs leading-relaxed text-muted-foreground">
           <p className="text-foreground">
             Plain-English walkthrough of what the bot does, in order. Numbers update live as you edit Configuration.
@@ -183,6 +198,94 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
         <span className="text-muted-foreground">{n}.</span> {title}
       </p>
       <div className="mt-1 text-xs">{children}</div>
+    </div>
+  )
+}
+
+function AuctionTypeNarrative({ auctionType }: { auctionType: any }) {
+  const [open, setOpen] = useState(auctionType.enabled)
+  const enabledProfiles = (auctionType.bracket_profiles || []).filter((p: any) => p.enabled)
+  const allProfiles = auctionType.bracket_profiles || []
+  return (
+    <div className={cn("rounded border", auctionType.enabled ? "border-success/40" : "border-border/50")}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-accent/30"
+      >
+        <div className="flex items-center gap-2">
+          {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          <span className="font-semibold text-foreground">{auctionType.label}</span>
+          <span className="text-[10px] text-muted-foreground">
+            {auctionType.handle}@{auctionType.platform} · {auctionType.window_days}d
+          </span>
+        </div>
+        <span className="text-[10px] text-muted-foreground">
+          {enabledProfiles.length}/{allProfiles.length} profiles enabled
+          {!auctionType.enabled && " · TYPE DISABLED"}
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-border/50 p-3 space-y-2">
+          {allProfiles.map((p: any, i: number) => (
+            <ProfileNarrative key={i} profile={p} auctionEnabled={auctionType.enabled} />
+          ))}
+          {allProfiles.length === 0 && (
+            <p className="text-[11px] italic text-muted-foreground">No bracket profiles configured.</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProfileNarrative({ profile, auctionEnabled }: { profile: any; auctionEnabled: boolean }) {
+  const [open, setOpen] = useState(false)
+  const isLive = auctionEnabled && profile.enabled
+  return (
+    <div className={cn("rounded border-l-2 pl-2", isLive ? "border-success" : "border-border/40")}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between py-1 text-left"
+      >
+        <div className="flex items-center gap-2">
+          {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          <span className="font-medium text-foreground">{profile.label}</span>
+          <span className="text-[10px] text-muted-foreground">
+            bracket {profile.bracket} · strategy: <code className="rounded bg-muted px-1">{profile.strategy_name}</code>
+          </span>
+        </div>
+        <span className={cn(
+          "text-[10px] font-semibold",
+          isLive ? "text-success" : "text-muted-foreground",
+        )}>
+          {isLive ? "LIVE" : "off"}
+        </span>
+      </button>
+      {open && (
+        <div className="mt-1 space-y-1 pl-4 text-[11px] text-muted-foreground">
+          <p>
+            <strong>Strategy:</strong> {profile.strategy_name}.
+            See the strategy file in <code className="rounded bg-muted px-1">api/modules/spike_trading/strategies/</code> for the full algorithm.
+          </p>
+          <p>
+            <strong>Bracket cap:</strong> {profile.bracket_max_count} (the numeric ceiling — pacing extrapolations compare against this)
+          </p>
+          {profile.params && Object.keys(profile.params).length > 0 ? (
+            <div>
+              <strong>Per-profile param overrides:</strong>
+              <ul className="ml-4 mt-0.5 list-disc">
+                {Object.entries(profile.params).map(([k, v]) => (
+                  <li key={k}>
+                    <code className="rounded bg-muted px-1">{k}</code> = {Array.isArray(v) ? JSON.stringify(v) : String(v)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="italic">Using strategy defaults (no per-profile overrides).</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
