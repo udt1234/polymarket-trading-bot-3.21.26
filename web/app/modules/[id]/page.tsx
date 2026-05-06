@@ -21,6 +21,7 @@ import { BotHealthBanner } from "./components/bot-health-banner"
 import { LiveStatusBadge } from "./components/live-status-badge"
 import { StatusDropdown } from "./components/status-dropdown"
 import { DynamicConfigForm, type ConfigSchemaField } from "./components/dynamic-config-form"
+import { BiddingStrategyPanel } from "./components/bidding-strategy-panel"
 import { LastAuctionsPnl } from "./components/last-auctions-pnl"
 import { PendingSignalsCard } from "./components/pending-signals-card"
 import { PostTimingGrid } from "./components/post-timing-grid"
@@ -449,7 +450,13 @@ export default function ModuleDetailPage() {
         </div>
       )}
 
-      {/* Config Panel */}
+      {/* Config Panel — for non-ensemble modules, sit side-by-side with the
+          Bidding Strategy panel at 1/2 width each. The Configuration panel
+          internally still spans full-width when expanded (the dropdown has
+          its own grid that uses the inner container's full width). */}
+      <div className={!Array.isArray((localConfig as any).enabled_models)
+        ? "grid grid-cols-1 lg:grid-cols-2 gap-6 items-start"
+        : ""}>
       <div className="rounded-lg border border-border bg-card">
         <button
           onClick={() => setConfigOpen(!configOpen)}
@@ -457,7 +464,7 @@ export default function ModuleDetailPage() {
         >
           <span className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
-            Pacing Configuration
+            {Array.isArray((localConfig as any).enabled_models) ? "Pacing Configuration" : "Configuration"}
           </span>
           {configOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
@@ -919,6 +926,15 @@ export default function ModuleDetailPage() {
             </div>
           </div>
         )}
+      </div>
+      {/* Bidding Strategy panel — only for non-ensemble modules. Reflects
+          live config values; users see how their edits change the strategy. */}
+      {!Array.isArray((localConfig as any).enabled_models) && (
+        <BiddingStrategyPanel
+          config={localConfig as any}
+          moduleName={module.name}
+        />
+      )}
       </div>
 
       {/* Pending Signals */}

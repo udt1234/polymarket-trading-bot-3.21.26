@@ -929,7 +929,13 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     if tracking_id:
         tracking = await fetch_tracking_by_id(handle, tracking_id, _detect_platform(module.data))
     else:
-        tracking = await fetch_active_tracking(handle, _detect_platform(module.data))
+        # Module-aware default: if the module declares a target window length
+        # (e.g. Spike Trading = 2 days), pick the matching tracking instead
+        # of the legacy "earliest active" which prefers Elon's monthly.
+        tracking = await fetch_active_tracking(
+            handle, _detect_platform(module.data),
+            preferred_window_days=_detect_window_days(module.data),
+        )
 
     if tracking:
         tid = tracking.get("id") or tracking.get("trackingId")
@@ -1422,7 +1428,10 @@ async def post_count_history(
         _mod_row = (sb.table("modules").select("id,name,strategy").eq("id", module_id).single().execute().data or {})
         handle = _detect_handle(_mod_row)
         try:
-            tracking = await fetch_active_tracking(handle, _detect_platform(_mod_row))
+            tracking = await fetch_active_tracking(
+                handle, _detect_platform(_mod_row),
+                preferred_window_days=_detect_window_days(_mod_row),
+            )
             if tracking:
                 tid = str(tracking.get("id") or tracking.get("trackingId") or "")
                 if tid:

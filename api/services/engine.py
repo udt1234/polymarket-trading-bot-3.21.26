@@ -519,7 +519,11 @@ class TradingEngine:
                 platform = module.get_platform()
 
                 try:
-                    tracking = _run_async(fetch_active_tracking(handle, platform))
+                    # Window-aware: spike-style modules ignore Elon's monthly
+                    pref_w = None
+                    try: pref_w = module.get_auction_window_days()
+                    except Exception: pass
+                    tracking = _run_async(fetch_active_tracking(handle, platform, preferred_window_days=pref_w))
                 except Exception as e:
                     log.warning(f"Post count snapshot: tracking fetch failed for {handle}: {e}")
                     continue

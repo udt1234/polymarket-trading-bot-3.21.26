@@ -74,7 +74,20 @@ async def _fetch_trackings_raw(handle: str = "realDonaldTrump", platform: str = 
         return trackings if isinstance(trackings, list) else []
 
 
-async def fetch_active_tracking(handle: str = "realDonaldTrump", platform: str = "truthsocial") -> dict | None:
+async def fetch_active_tracking(
+    handle: str = "realDonaldTrump",
+    platform: str = "truthsocial",
+    preferred_window_days: float | None = None,
+) -> dict | None:
+    """Return the currently-active tracking for `handle`.
+
+    When multiple trackings are concurrently active (e.g. Elon has
+    monthly + 7d + 2d running at once), `preferred_window_days` lets a
+    module narrow to its target window length. Without it, the function
+    falls back to the legacy "earliest startDate" tiebreaker — which
+    incorrectly picks the monthly auction for modules that only care
+    about shorter windows.
+    """
     trackings = await _fetch_trackings_raw(handle, platform)
     if not trackings:
         return None
@@ -93,7 +106,17 @@ async def fetch_active_tracking(handle: str = "realDonaldTrump", platform: str =
     if not active:
         return trackings[0] if trackings else None
 
-    # Prefer the tracking with the earliest startDate (most elapsed time)
+    # Window-preference filter: if the caller specified a target window
+    # length, restrict to trackings matching it (within ±0.15 day).
+    if preferred_window_days is not None:
+        matched = [
+            (t, s, e) for (t, s, e) in active
+            if abs((e - s).total_seconds() / 86400.0 - preferred_window_days) <= 0.15
+        ]
+        if matched:
+            active = matched
+
+    # Tiebreaker: earliest startDate (most elapsed = most data to work with).
     active.sort(key=lambda x: x[1])
     return active[0][0]
 
