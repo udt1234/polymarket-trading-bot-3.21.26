@@ -457,7 +457,39 @@ export default function ModuleDetailPage() {
           </span>
           {configOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
-        {configOpen && (
+        {configOpen && !Array.isArray((localConfig as any).enabled_models) && (
+          <div className="border-t border-border px-6 py-4">
+            {/* Spike Trading (and any other non-ensemble strategy) uses a
+                different config schema. Show a structured summary of the
+                actual fields instead of crashing on missing ensemble props. */}
+            <p className="text-xs text-muted-foreground mb-3">
+              This module uses a custom strategy. Config below is read from
+              <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px]">module_config:&lt;id&gt;</code>
+              in <code className="rounded bg-muted px-1 py-0.5 text-[10px]">settings</code>.
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {Object.entries(localConfig as any)
+                .filter(([k]) => !k.startsWith("_"))
+                .map(([k, v]) => (
+                  <div key={k} className="rounded border border-border/60 bg-muted/20 px-3 py-2 text-xs">
+                    <div className="font-mono text-[10px] uppercase text-muted-foreground">{k}</div>
+                    <div className="mt-0.5 break-words font-medium">
+                      {typeof v === "boolean" ? (v ? "true" : "false")
+                        : v === null || v === undefined ? <span className="text-muted-foreground">—</span>
+                        : Array.isArray(v) ? `[${v.join(", ")}]`
+                        : typeof v === "object" ? JSON.stringify(v)
+                        : String(v)}
+                    </div>
+                  </div>
+                ))}
+            </div>
+            <p className="mt-4 text-[11px] text-muted-foreground">
+              Editing custom-strategy configs from this dashboard isn't wired up yet —
+              update via the API or the <code className="rounded bg-muted px-1 py-0.5">module_config.py</code> defaults.
+            </p>
+          </div>
+        )}
+        {configOpen && Array.isArray((localConfig as any).enabled_models) && (
           <div className="border-t border-border px-6 py-4">
             <details className="mb-4 rounded-md border border-border/60 bg-muted/20 px-4 py-3">
               <summary className="cursor-pointer text-sm font-semibold text-foreground">
