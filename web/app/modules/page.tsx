@@ -110,6 +110,8 @@ export default function ModulesPage() {
             name={m.name}
             strategy={m.strategy}
             status={m.status}
+            displayBadge={m.display_badge}
+            inactiveReasonHuman={m.inactive_reason_human}
             pnl={0}
             positions={0}
           />

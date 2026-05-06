@@ -45,9 +45,6 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "http://localhost:3010"
 
-    # Shadow mode
-    shadow_mode: bool = False
-
     # LunarCrush
     lunarcrush_api_key: str = ""
 

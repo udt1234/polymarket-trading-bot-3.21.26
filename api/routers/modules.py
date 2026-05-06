@@ -150,11 +150,44 @@ class ModuleConfigUpdate(BaseModel):
     model_config = {"extra": "ignore"}
 
 
+_INACTIVE_REASON_LABELS = {
+    "manual_pause": "Manually paused",
+    "kill_switch": "Kill switch fired",
+    "circuit_breaker": "Circuit breaker tripped",
+    "data_stale": "Data feed stale",
+    "error": "Repeated errors",
+    "scaffold": "Not yet deployed",
+}
+
+
+def _decorate_with_badge(module_row: dict) -> dict:
+    """Compute display_badge + inactive_reason_human server-side so the
+    frontend stays dumb. Three badges:
+      - real_trading  — running, env is live
+      - paper_trading — running, env is paper (or per-module 'paper')
+      - inactive      — not running; shows reason
+    """
+    from api.config import get_settings
+    settings = get_settings()
+    status = (module_row.get("status") or "").lower()
+    if status == "inactive":
+        reason = module_row.get("inactive_reason") or "unknown"
+        module_row["display_badge"] = "inactive"
+        module_row["inactive_reason_human"] = _INACTIVE_REASON_LABELS.get(reason, reason)
+        return module_row
+    is_live_env = (not settings.paper_mode) and (settings.environment == "production")
+    if status == "active" and is_live_env:
+        module_row["display_badge"] = "real_trading"
+    else:
+        module_row["display_badge"] = "paper_trading"
+    return module_row
+
+
 @router.get("/")
 async def list_modules():
     sb = get_supabase()
     res = sb.table("modules").select("*").order("created_at", desc=True).execute()
-    return res.data
+    return [_decorate_with_badge(m) for m in (res.data or [])]
 
 
 @router.get("/{module_id}")
@@ -163,7 +196,7 @@ async def get_module(module_id: str):
     res = sb.table("modules").select("*").eq("id", module_id).single().execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Module not found")
-    return res.data
+    return _decorate_with_badge(res.data)
 
 
 @router.post("/")
@@ -189,15 +222,20 @@ async def delete_module(module_id: str):
 
 
 @router.post("/{module_id}/pause")
-async def pause_module(module_id: str):
+async def pause_module(module_id: str, detail: str | None = None):
     sb = get_supabase()
     mod_row = sb.table("modules").select("name,status").eq("id", module_id).single().execute()
     old_status = (mod_row.data or {}).get("status", "active")
     name = (mod_row.data or {}).get("name") or module_id
-    sb.table("modules").update({"status": "paused"}).eq("id", module_id).execute()
+    sb.table("modules").update({
+        "status": "inactive",
+        "inactive_reason": "manual_pause",
+        "inactive_since": datetime.now(timezone.utc).isoformat(),
+        "inactive_detail": detail or "Manually paused via dashboard",
+    }).eq("id", module_id).execute()
     try:
         from api.services.alerts import notify_module_status_change
-        await notify_module_status_change(module_id, name, old_status, "paused", reason="Manual pause")
+        await notify_module_status_change(module_id, name, old_status, "inactive", reason="Manual pause")
     except Exception:
         pass
     return {"ok": True}
@@ -207,9 +245,14 @@ async def pause_module(module_id: str):
 async def resume_module(module_id: str):
     sb = get_supabase()
     mod_row = sb.table("modules").select("name,status").eq("id", module_id).single().execute()
-    old_status = (mod_row.data or {}).get("status", "paused")
+    old_status = (mod_row.data or {}).get("status", "inactive")
     name = (mod_row.data or {}).get("name") or module_id
-    sb.table("modules").update({"status": "active"}).eq("id", module_id).execute()
+    sb.table("modules").update({
+        "status": "active",
+        "inactive_reason": None,
+        "inactive_since": None,
+        "inactive_detail": None,
+    }).eq("id", module_id).execute()
     try:
         from api.services.alerts import notify_module_status_change
         await notify_module_status_change(module_id, name, old_status, "active", reason="Manual resume")
@@ -219,7 +262,7 @@ async def resume_module(module_id: str):
 
 
 @router.post("/{module_id}/kill")
-async def kill_module(module_id: str):
+async def kill_module(module_id: str, detail: str | None = None):
     sb = get_supabase()
 
     module = sb.table("modules").select("id,name,status").eq("id", module_id).single().execute()
@@ -229,7 +272,12 @@ async def kill_module(module_id: str):
     old_status = module.data.get("status", "active")
     name = module.data.get("name") or module_id
 
-    sb.table("modules").update({"status": "killed"}).eq("id", module_id).execute()
+    sb.table("modules").update({
+        "status": "inactive",
+        "inactive_reason": "kill_switch",
+        "inactive_since": datetime.now(timezone.utc).isoformat(),
+        "inactive_detail": detail or "Kill switch fired via dashboard",
+    }).eq("id", module_id).execute()
 
     open_positions = (
         sb.table("positions")
@@ -260,8 +308,8 @@ async def kill_module(module_id: str):
     try:
         from api.services.alerts import notify_module_status_change
         await notify_module_status_change(
-            module_id, name, old_status, "killed",
-            reason=f"Manual kill, {closed_count} positions closed",
+            module_id, name, old_status, "inactive",
+            reason=f"Kill switch fired, {closed_count} positions closed",
         )
     except Exception:
         pass

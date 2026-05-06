@@ -106,9 +106,9 @@ async def notify_module_status_change(
                                     {"old": old_status, "new": new_status}):
         return
     emoji = {
-        "killed": ":skull:",
-        "paused": ":pause_button:",
+        "inactive": ":no_entry:",
         "active": ":white_check_mark:",
+        "paper": ":memo:",
     }.get(new_status, ":information_source:")
     msg = f"{emoji} *Module status: {name}*\n*{old_status}* -> *{new_status}*"
     if reason:
@@ -179,11 +179,9 @@ async def notify_daily_module_status_digest():
         return
     try:
         sb = get_supabase()
-        # All non-active modules (paused, killed, scaffold, paper)
-        mods = sb.table("modules").select("id,name,status").execute().data or []
-        # 'active' AND 'paper' are healthy operational states — only flag
-        # truly degraded modules (paused/killed/scaffold).
-        down = [m for m in mods if (m.get("status") or "").lower() not in ("active", "paper")]
+        # 'active' AND 'paper' are healthy. Only 'inactive' is degraded.
+        mods = sb.table("modules").select("id,name,status,inactive_reason,inactive_detail").execute().data or []
+        down = [m for m in mods if (m.get("status") or "").lower() == "inactive"]
         if not down:
             return  # Silence on all-clear days
 
@@ -199,13 +197,16 @@ async def notify_daily_module_status_digest():
                     reason = (logs[0].get("message") or reason)[:240]
             except Exception:
                 pass
-            emoji = {
-                "killed": ":skull:",
-                "paused": ":pause_button:",
-                "paper":  ":page_facing_up:",
-                "scaffold": ":construction:",
-            }.get((m.get("status") or "").lower(), ":grey_question:")
-            lines.append(f"{emoji} *{m.get('name')}* — `{m.get('status')}`\n_{reason}_")
+            # All non-active/non-paper modules are 'inactive' now; show the
+            # structured reason (e.g. circuit_breaker, manual_pause) when set.
+            reason_label = m.get("inactive_reason") or "unknown"
+            detail = m.get("inactive_detail")
+            label_line = f":no_entry: *{m.get('name')}* — `inactive ({reason_label})`"
+            if detail:
+                label_line += f"\n_{detail[:200]}_"
+            else:
+                label_line += f"\n_{reason}_"
+            lines.append(label_line)
 
         msg = (
             f":bell: *Daily Module Status — {len(down)} not active*\n\n"

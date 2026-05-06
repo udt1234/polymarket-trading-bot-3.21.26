@@ -14,8 +14,6 @@ Cycle (every 5 min via engine scheduler):
         - HOLD-LIGHT → no-op (same as HOLD; soft hold for now).
         - SELL       → no-op (default; ladder runs).
      c. Snapshot the (state, decision) into spike_state_snapshots for backtest.
-  3. Shadow mode (cfg.shadow_mode=True): all decisions logged, no Signals
-     returned to the engine — nothing trades. Default for Phase 1.
 
 The module emits standard Signal objects so the existing executor + risk
 manager pipelines handle order placement. Spike-specific state lives in the
@@ -129,14 +127,10 @@ class SpikeTradingModule(BaseModule):
             return []
         module_db = module_row.data[0]
         module_id = module_db["id"]
-        # DB status semantics (matches Trump/Elon convention):
+        # DB status semantics:
         #   'active' or 'paper' -> evaluate normally; the engine's executor
         #     decides paper vs live based on env PAPER_MODE.
-        #   'paused' / 'killed' / anything else -> short-circuit, no signals.
-        # NOTE: 'paper' is NOT shadow_mode — it just routes through the
-        # paper executor (which the engine already installs when PAPER_MODE=true).
-        # If you want decisions logged but NOT executed at all, set
-        # shadow_mode=True in module_config.
+        #   'inactive' (or anything else) -> short-circuit, no signals.
         db_status = (module_db.get("status") or "").lower()
         if db_status not in ("active", "paper"):
             return []
@@ -155,7 +149,6 @@ class SpikeTradingModule(BaseModule):
                       f"No active {cfg['window_days']}-day {cfg['handle']} tracking found")
             return []
 
-        shadow = bool(cfg.get("shadow_mode", False))
         for tracking in active_trackings:
             try:
                 market = await fetch_market_for_tracking(tracking, cfg["bracket_pattern"])
@@ -176,19 +169,13 @@ class SpikeTradingModule(BaseModule):
                     continue
                 tracking["__resolved_id"] = tracking_id
                 signals.extend(await self._handle_market(
-                    sb, module_id, cfg, market, tracking, shadow=shadow,
+                    sb, module_id, cfg, market, tracking,
                 ))
             except Exception as e:
                 # Per-market failures shouldn't take down the whole cycle
                 log.exception(f"spike_trading per-market error: {e}")
                 self._log(sb, module_id, "system", "error",
                           f"market handling failed: {e}")
-
-        if shadow:
-            for s in signals:
-                self._log(sb, module_id, "decision", "info",
-                          f"[SHADOW] Would emit: {s.side} {s.bracket} @ {s.market_price:.4f} kelly={s.kelly_pct:.4f}")
-            return []
 
         return signals
 
@@ -198,7 +185,6 @@ class SpikeTradingModule(BaseModule):
 
     async def _handle_market(
         self, sb, module_id: str, cfg: dict, market: dict, tracking: dict,
-        shadow: bool = False,
     ) -> list[Signal]:
         market_id = market["market_id"]
         bracket = cfg["bracket_pattern"]
@@ -250,8 +236,7 @@ class SpikeTradingModule(BaseModule):
                 self._log(sb, module_id, "decision", "info",
                           f"{market_id} {bracket}: pending BUY orders already in flight, no re-emit")
                 return []
-            if not shadow:
-                self._open_position(sb, module_id, market, bracket, current_price)
+            self._open_position(sb, module_id, market, bracket, current_price)
             return self._build_buy_ladder(module_id, market, cfg)
 
         # ---- Position exists → run HOLD/SELL classifier ----
@@ -277,17 +262,14 @@ class SpikeTradingModule(BaseModule):
                   f"proj_final={ctx['projected_final_tweets']} → {decision} "
                   f"({ctx.get('trigger','')})")
 
-        # Skip DB mutations in shadow mode — keeps spike_positions / snapshots
-        # clean of phantom rows when the operator is just observing.
-        if not shadow:
-            self._snapshot(sb, position["id"], state, decision)
-            sb.table("spike_positions").update({
-                "state": "MONITORING",
-                "current_tweets": cum_tweets,
-                "hours_to_close": round(h_to_close, 2),
-                "last_decision": decision,
-                "last_decision_at": datetime.now(timezone.utc).isoformat(),
-            }).eq("id", position["id"]).execute()
+        self._snapshot(sb, position["id"], state, decision)
+        sb.table("spike_positions").update({
+            "state": "MONITORING",
+            "current_tweets": cum_tweets,
+            "hours_to_close": round(h_to_close, 2),
+            "last_decision": decision,
+            "last_decision_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", position["id"]).execute()
 
         if should_market_sell(decision):
             return self._build_market_sell(sb, module_id, market, position, h_to_close)
@@ -338,7 +320,6 @@ class SpikeTradingModule(BaseModule):
                     "strategy": "spike_trading",
                     "tier": tier_idx,
                     "tier_type": "buy",
-                    "shadow_mode": cfg.get("shadow_mode", False),
                     "skip_edge_check": True,
                     "target_price": target,
                     "adaptive_price": limit_price,

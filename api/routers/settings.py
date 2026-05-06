@@ -13,9 +13,10 @@ router = APIRouter()
 
 
 class RiskSettingsUpdate(BaseModel):
-    """Bounds-checked. paper_mode/shadow_mode are read at boot from ENV; setting
-    them via this endpoint is a dead write — removed to avoid false sense of
-    control (flagged in 2026-04-27 QA pass)."""
+    """Bounds-checked. paper_mode is read at boot from ENV; setting it via
+    this endpoint is a dead write — removed to avoid false sense of control
+    (flagged in 2026-04-27 QA pass). Shadow mode was removed entirely
+    2026-05-05 (use status='inactive' or PAPER_MODE=true instead)."""
     bankroll: float | None = Field(default=None, ge=0, le=1_000_000)
     max_portfolio_exposure: float | None = Field(default=None, ge=0, le=1)
     max_single_market_exposure: float | None = Field(default=None, ge=0, le=1)
@@ -251,7 +252,7 @@ async def get_all_module_configs():
     no hardcoded dispatch to truth_social.module_config."""
     from api.services.engine import engine
     sb = get_supabase()
-    modules = sb.table("modules").select("id,name,status,strategy").in_("status", ["active", "paused", "paper"]).execute()
+    modules = sb.table("modules").select("id,name,status,strategy").execute()
     result = []
     for m in modules.data or []:
         module = engine.registry.for_db_row(m)

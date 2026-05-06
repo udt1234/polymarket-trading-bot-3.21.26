@@ -91,11 +91,6 @@ DEFAULT_CONFIG = {
     "max_open_positions": 3,                  # cap concurrent positions
 
     # ---- Operational ----
-    # shadow_mode=True means decisions are logged but NOT routed to the
-    # executor at all. False means the module emits real Signals; whether
-    # they trade paper or live is determined by the engine's env PAPER_MODE.
-    # Default False so a module with DB status='paper' will paper-trade.
-    "shadow_mode": False,
     "log_decisions_to_supabase": True,        # write spike_state_snapshots
 }
 

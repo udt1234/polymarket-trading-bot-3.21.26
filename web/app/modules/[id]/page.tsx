@@ -332,7 +332,11 @@ export default function ModuleDetailPage() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">{module.name}</h1>
-          <LiveStatusBadge moduleStatus={module.status} />
+          <LiveStatusBadge
+            displayBadge={(module as any).display_badge}
+            inactiveReasonHuman={(module as any).inactive_reason_human}
+            inactiveDetail={(module as any).inactive_detail}
+          />
         </div>
         {auctions && auctions.length > 0 && (() => {
           const activeAuctions = auctions.filter((a) => a.status === "active" || a.status === "future")
@@ -392,6 +396,30 @@ export default function ModuleDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* Inactive reason banner — when module is inactive, surface why */}
+      {module.status === "inactive" && (
+        <div className="rounded-lg border border-destructive bg-destructive/10 px-4 py-3">
+          <p className="text-sm font-semibold text-destructive">
+            Module Inactive
+            {(module as any).inactive_reason_human && (
+              <span className="font-normal text-foreground/80">
+                {" — "}{(module as any).inactive_reason_human}
+              </span>
+            )}
+          </p>
+          {(module as any).inactive_detail && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {(module as any).inactive_detail}
+            </p>
+          )}
+          {(module as any).inactive_since && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Since {new Date((module as any).inactive_since).toLocaleString()}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Bot Health Banner — always visible, single-glance status */}
       <BotHealthBanner moduleId={module.id} />

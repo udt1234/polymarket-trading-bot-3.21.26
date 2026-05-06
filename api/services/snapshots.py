@@ -27,7 +27,7 @@ def _take_price_snapshot_sync():
     from api.services.engine import engine
 
     sb = get_supabase()
-    modules = sb.table("modules").select("id,name,strategy,market_slug,status").in_("status", ["active", "paper", "scaffold"]).execute()
+    modules = sb.table("modules").select("id,name,strategy,market_slug,status").neq("status", "inactive").execute()
     if not modules.data:
         return
 

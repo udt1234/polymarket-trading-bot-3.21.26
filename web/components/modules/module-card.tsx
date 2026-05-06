@@ -6,11 +6,21 @@ interface ModuleCardProps {
   name: string
   strategy: string
   status: string
+  displayBadge?: string
+  inactiveReasonHuman?: string | null
   pnl: number
   positions: number
 }
 
-export function ModuleCard({ name, strategy, status, pnl, positions }: ModuleCardProps) {
+export function ModuleCard({
+  name,
+  strategy,
+  status,
+  displayBadge,
+  inactiveReasonHuman,
+  pnl,
+  positions,
+}: ModuleCardProps) {
   return (
     <Link
       href={`/modules/${name.toLowerCase().replace(/\s+/g, "-")}`}
@@ -18,7 +28,11 @@ export function ModuleCard({ name, strategy, status, pnl, positions }: ModuleCar
     >
       <div className="flex items-start justify-between">
         <h3 className="font-semibold">{name}</h3>
-        <StatusBadge status={status} />
+        <StatusBadge
+          displayBadge={displayBadge}
+          status={status}
+          inactiveReasonHuman={inactiveReasonHuman}
+        />
       </div>
       <p className="mt-1 text-sm text-muted-foreground">{strategy}</p>
       <div className="mt-3 flex gap-4 text-sm">

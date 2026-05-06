@@ -87,7 +87,6 @@ class TradingEngine:
                 self.executor = LiveExecutor()
                 self._multi_mode = False
 
-        self.shadow_executor = PaperExecutor() if settings.shadow_mode else None
         self.registry.discover()
         self.scheduler.add_job(self._run_cycle, "interval", seconds=interval, max_instances=1)
         self.scheduler.add_job(self._run_walk_forward, "interval", hours=6, max_instances=1)
@@ -103,7 +102,7 @@ class TradingEngine:
         self.scheduler.add_job(self._run_daily_module_digest, "cron", hour=21, minute=0, max_instances=1, id="digest_5pm")
         self.scheduler.start()
         self._running = True
-        log.info(f"Engine started: interval={interval}s, paper={settings.paper_mode}, shadow={settings.shadow_mode}, multi={self._multi_mode}")
+        log.info(f"Engine started: interval={interval}s, paper={settings.paper_mode}, multi={self._multi_mode}")
 
     def stop(self):
         if not self._running:
@@ -223,9 +222,6 @@ class TradingEngine:
                             self._log_rejection(signal, result.get("reason", "executor_rejected"))
                             self._track_rejection(module.name, getattr(signal, "module_id", ""), result.get("reason", "executor_rejected"))
                             continue
-                        if self.shadow_executor:
-                            self.shadow_executor.execute(signal)
-
                         self._log_execution(signal, result)
                         try:
                             from api.services.notifications import notify_trade_executed
@@ -400,7 +396,7 @@ class TradingEngine:
             import asyncio as _asyncio
             from api.modules.shared.polymarket import fetch_order_books_for_brackets
             sb = get_supabase()
-            modules = sb.table("modules").select("id,market_slug").in_("status", ["active", "paused"]).execute()
+            modules = sb.table("modules").select("id,market_slug").neq("status", "inactive").execute()
             now = datetime.now(timezone.utc).isoformat()
             total = 0
             for m in modules.data or []:
@@ -461,7 +457,7 @@ class TradingEngine:
             from api.modules.shared.polymarket import fetch_active_tracking, fetch_xtracker_stats, get_xtracker_summary, parse_hourly_counts, compute_running_total
 
             sb = get_supabase()
-            modules = sb.table("modules").select("id,name,strategy").in_("status", ["active", "paused", "paper"]).execute()
+            modules = sb.table("modules").select("id,name,strategy").neq("status", "inactive").execute()
             now_iso = datetime.now(timezone.utc).isoformat()
             rows = []
 
@@ -606,7 +602,7 @@ class TradingEngine:
             from api.services.notifications import notify_auction_gap, notify_new_auction
 
             sb = get_supabase()
-            modules = sb.table("modules").select("id,name,strategy,market_slug").in_("status", ["active", "paused", "paper"]).execute()
+            modules = sb.table("modules").select("id,name,strategy,market_slug").neq("status", "inactive").execute()
 
             for mod in (modules.data or []):
                 module = self.registry.for_db_row(mod)

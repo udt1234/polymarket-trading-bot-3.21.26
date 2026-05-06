@@ -482,7 +482,12 @@ class RiskManager:
             mod_row = sb.table("modules").select("name,status").eq("id", module_id).single().execute()
             old_status = (mod_row.data or {}).get("status", "active")
             mod_name = (mod_row.data or {}).get("name") or module_id
-            sb.table("modules").update({"status": "paused"}).eq("id", module_id).execute()
+            sb.table("modules").update({
+                "status": "inactive",
+                "inactive_reason": "circuit_breaker",
+                "inactive_since": datetime.now(timezone.utc).isoformat(),
+                "inactive_detail": f"Auto-paused after {self.consecutive_losses} consecutive losses",
+            }).eq("id", module_id).execute()
             sb.table("logs").insert({
                 "level": "warning",
                 "message": f"Auto-kill: module paused after {self.consecutive_losses} consecutive losses",
@@ -497,8 +502,8 @@ class RiskManager:
                     module_id=module_id,
                     name=mod_name,
                     old_status=old_status,
-                    new_status="paused",
-                    reason=f"Auto-kill after {self.consecutive_losses} consecutive losses",
+                    new_status="inactive",
+                    reason=f"Circuit breaker: {self.consecutive_losses} consecutive losses",
                 ))
             except Exception:
                 pass
