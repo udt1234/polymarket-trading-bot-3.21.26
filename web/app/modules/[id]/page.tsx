@@ -154,10 +154,41 @@ export default function ModuleDetailPage() {
     id ? `/api/portfolio/positions?status=all&module_id=${id}` : null
   )
   const [activeTrackingId, setActiveTrackingId] = useState<string | null>(null)
+  const [autoSelectedOnce, setAutoSelectedOnce] = useState(false)
 
   const { data: auctions } = useApi<AuctionTab[]>(
     id ? `/api/modules/${id}/auctions` : null
   )
+
+  // Auto-select a sensible default tracking when the page first loads.
+  // Without this, the backend defaults to fetch_active_tracking(handle,...)
+  // which picks the earliest-active tracking — for Elon that's the monthly,
+  // even when the user is looking at the Spike module that targets 2-day.
+  // Priority: active 2-day > active 7-day > the soonest future 2-day > whatever's first.
+  // Only runs ONCE per page load so the user can manually override.
+  useEffect(() => {
+    if (autoSelectedOnce) return
+    if (!auctions || auctions.length === 0) return
+    if (activeTrackingId) { setAutoSelectedOnce(true); return }
+    const dur = (a: any) => {
+      try {
+        const s = new Date(a.start_date).getTime()
+        const e = new Date(a.end_date).getTime()
+        return (e - s) / 86400000
+      } catch { return 999 }
+    }
+    const isShortActive = (a: any) => a.status === "active" && dur(a) <= 8
+    const isShortFuture = (a: any) => a.status === "future" && dur(a) <= 8
+    const pick =
+      auctions.find(isShortActive) ||
+      auctions.sort((x, y) => x.start_date.localeCompare(y.start_date)).find(isShortFuture) ||
+      auctions.find((a: any) => a.status === "active") ||
+      auctions[0]
+    if (pick?.tracking_id) {
+      setActiveTrackingId(pick.tracking_id)
+    }
+    setAutoSelectedOnce(true)
+  }, [auctions, activeTrackingId, autoSelectedOnce])
   const { data: dataSources } = useApi<any>(
     id ? `/api/modules/${id}/data-sources` : null
   )
@@ -1042,6 +1073,10 @@ export default function ModuleDetailPage() {
       {(() => {
         const marketValue = openPositions.reduce((s, p) => s + p.size * (pacing?.market_prices?.[p.bracket] ?? p.avg_price), 0)
         const unrealizedPnl = marketValue - totalInvested
+        // Total shares across all open positions + weighted avg cost per share.
+        // size = shares; avg_price = $/share. So total $ / total shares = avg cost.
+        const totalShares = openPositions.reduce((s, p) => s + (p.size || 0), 0)
+        const avgCostPerShare = totalShares > 0 ? totalInvested / totalShares : 0
         const realizedPnl = closedPositions.reduce((s, p) => s + (p.realized_pnl || 0), 0)
         const fmtDollars = (n: number) => `$${Math.round(Math.abs(n)).toLocaleString()}`
         const fmtDollarsSigned = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.round(Math.abs(n)).toLocaleString()}`
@@ -1064,7 +1099,13 @@ export default function ModuleDetailPage() {
             <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Cost Basis</p>
               <p className="mt-1 text-2xl font-bold">{fmtDollars(totalInvested)}</p>
-              <p className="text-xs text-muted-foreground">{openPositions.length} open position{openPositions.length !== 1 ? "s" : ""}</p>
+              {totalShares > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {totalShares.toFixed(1)} shares @ {(avgCostPerShare * 100).toFixed(2)}¢ avg
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">{openPositions.length} open position{openPositions.length !== 1 ? "s" : ""}</p>
+              )}
             </div>
             <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Current Value</p>
