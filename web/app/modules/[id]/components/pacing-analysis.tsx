@@ -232,10 +232,14 @@ export function ConfidenceBands({ bands, allProbs }: { bands: any[] | undefined;
       {bracketOrder.length > 0 ? (
         <div className="space-y-4">
           <div className="rounded border border-primary/30 bg-primary/5 p-3 text-center">
-            <p className="text-xs text-muted-foreground">Projected Winner</p>
+            <p className="text-xs text-muted-foreground">
+              {(topBracket?.probability || 0) >= 0.999 ? "Actual Winner" : "Projected Winner"}
+            </p>
             <p className="text-xl font-bold text-primary">{topBracket?.bracket}</p>
             <p className="text-sm text-muted-foreground">
-              Confidence: {fmt((topBracket?.probability || 0) * 100)}%
+              {(topBracket?.probability || 0) >= 0.999
+                ? "Final"
+                : `Confidence: ${fmt((topBracket?.probability || 0) * 100)}%`}
             </p>
           </div>
           <div className="space-y-1.5">

@@ -954,9 +954,22 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     week_end_str = (tracking or {}).get("endDate", "")[:10]
 
     running_total = summary.get("total", 0) or (sum(d["count"] for d in daily_totals) if daily_totals else 0)
-    elapsed_days = summary.get("days_elapsed", 0) or compute_elapsed_days(week_start_str, now) if week_start_str else 0
-    remaining_days = summary.get("days_remaining", 0) or max(7.0 - elapsed_days, 0.01)
-    total_days = summary.get("days_total", 7)
+    # xTracker returns days_remaining=0 for completed auctions; the legacy
+    # `summary.get(...) or fallback` pattern treated 0 as missing and fell
+    # through to a 7-day default, producing nonsensical projections for
+    # closed/short auctions. Use explicit None checks instead.
+    _e = summary.get("days_elapsed")
+    elapsed_days = _e if _e is not None else (compute_elapsed_days(week_start_str, now) if week_start_str else 0)
+    _r = summary.get("days_remaining")
+    _t = summary.get("days_total")
+    total_days = _t if _t is not None else (
+        # Best guess from start/end dates if xTracker didn't supply
+        round(((datetime.fromisoformat(((tracking or {}).get("endDate","")).replace("Z","+00:00")) -
+                datetime.fromisoformat(((tracking or {}).get("startDate","")).replace("Z","+00:00")))
+              .total_seconds() / 86400.0)) if (tracking and tracking.get("startDate") and tracking.get("endDate")) else 7
+    )
+    remaining_days = _r if _r is not None else max(total_days - elapsed_days, 0.01)
+    is_complete = bool(summary.get("is_complete")) or remaining_days <= 0
 
     rw = recency_weighted_averages(weekly_history, half_life=cfg.get("recency_half_life", 4.0))
     hist_mean = rw["mean"] if rw["mean"] > 0 else 100.0
@@ -1064,12 +1077,28 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     # dashboard can show the more intuitive metric next to the technical one.
     ev_winner = expected_value_bracket(ensemble_avg, bracket_labels=dynamic_brackets)
 
+    # For closed auctions, the winner is no longer a projection — it's a
+    # known fact. Override the ensemble's confused extrapolation with the
+    # actual bracket containing running_total. Also collapse confidence
+    # bands so the winning bracket reads ~100% and others ~0%.
+    if is_complete and running_total > 0:
+        actual_winner = expected_value_bracket(running_total, bracket_labels=dynamic_brackets)
+        if actual_winner:
+            # Rebuild bracket_probs as a delta on the actual winner
+            bracket_probs = {b: (1.0 if b == actual_winner else 0.0)
+                             for b in (dynamic_brackets or list((bracket_probs or {}).keys()) or [actual_winner])}
+            from api.modules.shared.projection import ensemble_confidence_bands
+            conf_bands = ensemble_confidence_bands(bracket_probs, top_n=cfg.get("confidence_band_top_n", 3))
+            ensemble_avg = float(running_total)
+            ev_winner = actual_winner
+
     current_auction = {
         "period": f"{week_start_str} to {week_end_str}" if week_start_str else None,
         "title": (tracking or {}).get("title"),
         "running_total": running_total,
         "days_elapsed": round(elapsed_days, 1),
         "days_remaining": round(remaining_days, 1),
+        "is_complete": is_complete,
         "pace": summary.get("pace", round(list(model_outputs.values())[0], 0)),
         "regime": regime,
         "projected_winner": conf_bands[0]["bracket"] if conf_bands else None,

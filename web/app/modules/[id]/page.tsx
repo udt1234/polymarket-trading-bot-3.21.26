@@ -1250,13 +1250,17 @@ export default function ModuleDetailPage() {
                       )}
                       {data.projected_winner && (
                         <div className="flex justify-between border-b border-border pb-2">
-                          <span className="text-muted-foreground">Projected Winner</span>
+                          <span className="text-muted-foreground">
+                            {data.is_complete ? "Actual Winner" : "Projected Winner"}
+                          </span>
                           <span className="font-semibold text-primary">{data.projected_winner}</span>
                         </div>
                       )}
                       {data.ensemble_avg != null && (
                         <div className="flex justify-between border-b border-border pb-2">
-                          <span className="text-muted-foreground">Ensemble Avg</span>
+                          <span className="text-muted-foreground">
+                            {data.is_complete ? "Final Count" : "Ensemble Avg"}
+                          </span>
                           <span className="font-bold">{data.ensemble_avg} posts</span>
                         </div>
                       )}
