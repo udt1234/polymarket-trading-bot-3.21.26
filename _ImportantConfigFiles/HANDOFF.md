@@ -1,7 +1,26 @@
 # PolyMarket Bot — Handoff
 
-## Current State (2026-05-05)
-Bot LIVE on Trump + Elon (paper). Spike Rider v1 (PR #30) was reverted. **Spike Trading v2 (rebuild) shipped 2026-05-05** — see `spike_trading_module_spec.md` and the new `api/modules/spike_trading/` package. Module row inserted in `modules` table with `status='paper'` (id `4faba37c-906b-405f-ad49-737b12e75b16`). Migration `010_spike_positions.sql` applied to prod. Shadow mode default — no live trades until promoted.
+## Current State (2026-05-05 evening)
+Bot LIVE on Trump + Elon + Spike Trading (all paper-trading; global `PAPER_MODE=true`). Big day — many things shipped. Snapshot:
+
+### Shipped today (in commit order)
+1. **Spike Trading v2 module** — `api/modules/spike_trading/` (commits `8a4f818` → `c2fc4bd`). Module row id `4faba37c-906b-405f-ad49-737b12e75b16`. Migrations `010_spike_positions.sql` + `011_archive_trump_elon_history.sql` + `012_status_simplification.sql` applied.
+2. **Polymarket Series API discovery** (`542ccc3`) — replaces xTracker as primary auction source; sees auctions ~2 days before xTracker activates.
+3. **Adaptive prices + pacing classifier + slow-bleed exit** (`66fa41c`) — buy at 12¢/0.5¢ ladder, sell multipliers `[1.5, 2.0, 4.0, 8.0]` of fill price, auto-exit on bracket-bust extrapolation, no manual stuck-position intervention.
+4. **Status model simplified** (`b4161be`) — `paused`/`killed`/`scaffold` collapsed to `inactive` + structured `inactive_reason` + `inactive_since` + `inactive_detail`. Three badges: Real $Trades / Paper Trades / Inactive.
+5. **Trump+Elon trading history archived** (in `b4161be` migration 011) — 18 positions / 3,121 orders / 3,121 trades / 2,323 signals / 1,486 pending → `*_archive_20260505` tables. Live tables clean. **Preserved**: truth_social_posts (32,880 backfilled), post_count_snapshots, price_snapshots, logs, modules, backfill_progress.
+6. **Per-module executor routing + status dropdown** (`9142da9`) — global PAPER is override-only; module status decides paper-vs-live per signal. Single dropdown replaces Pause+Kill (Kill removed from UI; API kept).
+7. **Window-day filter for dashboard auctions** (`f5c1080`) — Spike Trading dropdown only shows 2-day Elon auctions, not the 7d/31d series.
+8. **Pacing-config crash fix** (`1b78905`) — non-ensemble modules no longer crash the page.
+9. **Schema-driven editable config** (`dda4c58`) — Spike's config is fully editable from the dashboard via `BaseModule.get_config_schema()`. New modules get free editable UI by declaring their schema. See `MODULE_ARCHITECTURE.md` for the convention.
+
+### Removed
+- `shadow_mode` config knob — was redundant with Paper Trading.
+- `paused` / `killed` / `scaffold` status values — collapsed into `inactive`.
+
+### Open work / next
+- Trump + Elon strategy recalibration on the 3.5-year parquet dataset (see TODO section below).
+- Trump + Elon ensemble config UI is still the hand-built React component; could migrate to the schema-driven form for consistency, but no functional benefit yet.
 
 ### Spike Rider v1 revert checklist (done 2026-05-05)
 - ✅ Module row deleted from `modules` table
@@ -51,113 +70,21 @@ Reference files:
 
 ---
 
-## Earlier State (2026-05-02 evening)
-Bot is LIVE & TRADING. Trump module's 4-day silence resolved (missing pending_signals table). Data Explorer + IFTTT webhook + dynamic-bracket support all shipped today.
-
-## Trump Backfill: ✅ COMPLETE (2026-05-03 00:10 EDT)
-- 32,880 total posts in `truth_social_posts` table
-- Walked back to Feb 14, 2022 (account creation)
-- Backfill ran 179 minutes locally, hit end-of-history (8 consecutive empty pages)
-- `backfill_progress.is_complete = true` for `realDonaldTrump`
-- CLAUDE.md daily reminder rule downgraded — no more daily nag
-
-## Tonight's Critical Fix (2026-05-02 ~22:10 EDT)
-**Trump module had 0 trades for 4 days** — root cause was migration 006 (`pending_signals` table) never applied to prod Supabase. Wait-for-Dip feature was deferring every signal but failing to persist them — silent drop. Fixed by creating the table; 4 deferred entries appeared on the next cycle (2026-05-03 02:09 UTC).
-- Migration 006 applied directly via SQL Editor on prod
-- Lesson logged in `_ImportantConfigFiles/lessons.md` (2026-05-02 entry)
-- `expected_value_bracket` was also imported only inside `_compute_pacing_models` scope, causing NameError in `get_pacing` — moved to module-level import
-- Pending signals visible on module page: `Pending Entries (4)` section auto-renders when rows exist
-
-## Where to Watch Pending Trades
-- **Dashboard**: Modules → Truth Social Posts → "Pending Entries (N)" card near top
-- **Direct API**: `GET /api/modules/{id}/pending-signals?status=waiting`
-- **Cancel button**: red X on each row
-
-## Trump Module Status
-- Engine running 5-min cycles ✅
-- 4 pending entries waiting for price dips (40-59, 120-139, 140-159, 180-199)
-- All target prices 45-99% below current → bot expects significant drops
-- Auto-refreshes every 30s on dashboard
-
-## What's Done This Session
-
-## What's Done This Session (May 2)
-- **Data audit**: verified storage for both modules, identified Elon raw-tweet gap
-- **CLAUDE.md daily reminder rule**: nag about Trump backfill until is_complete=true
-- **Trump backfill resumed**: was at 29,830 posts, currently ~30,349 walking back to Oct 30, 2022
-- **Elon price backfill running**: 109 historical Elon auctions being pulled from CLOB
-- **Data Explorer page** (/data-explorer) with full filters: handle, view (raw/counts/prices), date range, hour-of-day, day-of-week, source, bracket. Coverage cards + 3 result table views.
-- **IFTTT webhook** for Elon X: POST /api/webhooks/ifttt/{secret}/elon-tweet → elon_tweets table. Public endpoint, secret-authenticated. Migration 009 applied to prod.
-
-## Setup To Do (User Manual)
-1. Set `WEBHOOK_SECRET` env var on Railway (random ~32 chars)
-2. Create IFTTT applet: Twitter `New tweet by specific user (elonmusk)` → Webhooks POST
-3. Body format: see api/routers/webhooks.py docstring
-4. Optionally: leave Trump backfill running on Railway as one-shot (currently running on local machine and will stop when Claude Code closes)
-
-## Previous Session State
-Bot is LIVE (paper mode). 6 open positions on Trump, $289 invested. Major session: dashboard layout overhaul, paper executor realism, auto-kill switch, Slack notifications wired up, order TTL sweep added.
-
-## What's Done This Session (9 commits)
-- **Bracket Cap card**: Editable % of bankroll with derived dollar amount
-- **Bankroll → %**: Editable % of account, dollar amount updates live
-- **Module P&L chart**: Cumulative P&L area chart with return %, max drawdown
-- **Layout standardization**: 3 width tiers (full/half/third) via CSS grid
-- **Pacing table**: Full-width, 60/40 split with pacing chart (actual/expected/projected)
-- **Paper executor realism**: Price floor (<1¢ rejected), liquidity check, fills at best ask/bid, partial fills
-- **Auto-kill switch**: Pauses module after 5 consecutive losses (togglable in Settings)
-- **Slippage tolerance**: Bumped 0.02 → 0.05
-- **Slack trade notifications**: Wired into engine cycle
-- **Order TTL sweep**: Cancels stale submitted/live orders after 5min
-
-## What's Next
-1. **Set up Slack webhook** — add SLACK_WEBHOOK_URL env var on Railway (user will do manually)
-2. **Monitor fill quality** — check liquidity check rejection rate
-3. **Elon module test** — verify pacing chart renders with Elon data
-4. **Edge Found** — resurface in analysis section if wanted
-5. **Elon X direct fetcher (FUTURE)** — mirror the Truth Social direct fetcher for X/Twitter. Truth Social is Mastodon-based and unauthenticated, so it was easy. X requires a Twitter API v2 bearer token (paid tier for user timelines) OR a session-based scrape via Playwright. Decision pending: pay for X API ($100/mo Basic) vs build a scraper. File location when built: `api/modules/elon_tweets/x_direct.py`. CLI mirror: `scripts/verify_x_count.py`. Wire into `api/routers/modules.py` with the same `truth_social_direct` pattern (rename key to `x_direct`).
-6. **Dashboard redesign (next session)** — full module page layout overhaul. Backend post-count tracking is committed but two files are intentionally uncommitted to start fresh: `web/app/modules/[id]/page.tsx` (XTRACKER/TRUTH SOCIAL split in Current Auction card) and `web/app/modules/[id]/components/post-count-divergence-chart.tsx`. Use them as reference or discard.
-
-## Backfill Operations (added 2026-04-24)
-
-### Run migrations
-Apply `007_post_count_snapshots.sql` and `008_truth_social_posts.sql` on prod Supabase.
-
-### xTracker full backfill (~5 min, run anytime)
-```bash
-SUPABASE_URL=... SUPABASE_SERVICE_KEY=... \
-  python scripts/backfill_xtracker_history.py --handle realDonaldTrump
-SUPABASE_URL=... SUPABASE_SERVICE_KEY=... \
-  python scripts/backfill_xtracker_history.py --handle elonmusk
-```
-No rate limit; idempotent. Pulls all 26 Trump auctions + Elon's history.
-
-### Truth Social full backfill (8-24 hr, leave running)
-```bash
-SUPABASE_URL=... SUPABASE_SERVICE_KEY=... \
-  python scripts/backfill_truth_social.py --handle realDonaldTrump
-```
-- Idempotent: resumes from oldest stored post on rerun
-- Aggressive backoff (up to 15 min) on 403/429
-- Walks back to 2022 (account creation), ~33k posts total
-- Optional: set `TS_PROXY=http://user:pass@host:port` for residential proxy
-- Run with `--max-minutes 60` for time-boxed Railway cron jobs
-- Run with `--forward` for incremental (post-backfill) updates
-
-### Railway one-shot deploy for unattended Truth Social backfill
-1. SSH/connect to Railway service
-2. Set env vars: SUPABASE_URL, SUPABASE_SERVICE_KEY, optionally TS_PROXY
-3. Run: `python scripts/backfill_truth_social.py --handle realDonaldTrump`
-4. Monitor `backfill_progress` table in Supabase dashboard for live progress
-5. When `is_complete = true`, switch to `--forward` mode in a daily cron
-
 ## Key Config
-- Trump: e858d9ed-da0d-4e9a-8bef-2c2830686a5a (entry_gate=0)
-- Elon: cac300cb-5af2-4c25-a7df-3069478aefdb (entry_gate=0)
-- Slippage: 0.05 | Auto-kill: 5 losses | Order TTL: 5min
+- Trump module: `e858d9ed-da0d-4e9a-8bef-2c2830686a5a` (Truth Social Posts)
+- Elon module: `cac300cb-5af2-4c25-a7df-3069478aefdb` (Elon Tweets)
+- Spike module: `4faba37c-906b-405f-ad49-737b12e75b16` (Spike Trading)
+- Slippage tolerance: 0.05 | Auto-pause: 5 consecutive losses | Order TTL: 5min (24h for Spike BUYs)
 - Dashboard widths: full / 1/2 / 1/3 (CSS grid)
+- Daily Slack digests fire at 9 AM ET + 5 PM ET (UTC 13:00 + 21:00)
 
 ## URLs
 - Dashboard: polybot-dashboard.up.railway.app
 - API: polymarket-trading-bot-32126-production.up.railway.app
 - Prod Supabase: xdonwowgqvmtrduikaon.supabase.co
+
+## Operational notes
+- Trump backfill: ✅ complete (32,880 posts, walked to 2022). `backfill_progress.is_complete=true`.
+- IFTTT webhook for Elon X: needs `WEBHOOK_SECRET` env var; payload spec in `api/routers/webhooks.py`.
+- Backfill scripts: `scripts/backfill_xtracker_history.py` (idempotent, ~5min) and `scripts/backfill_truth_social.py` (idempotent, 8-24h, supports `--forward` for incremental).
+- Pre-2026-05-05 session history preserved in git history (`git log --before=2026-05-05`).

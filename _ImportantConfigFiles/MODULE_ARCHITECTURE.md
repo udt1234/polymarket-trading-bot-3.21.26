@@ -103,9 +103,48 @@ class MyModule(BaseModule):
     # OPTIONAL — override only if your module has a direct post counter
     def supports_direct_post_count(self) -> bool: return True
     async def count_posts_in_window(self, start, end) -> dict: ...
+
+    # OPTIONAL — return a list of field descriptors so the dashboard can
+    # render an editable config form for this module (no React work needed).
+    # Empty list = read-only fallback. Trump/Elon use the legacy hardcoded
+    # ensemble UI instead.
+    def get_config_schema(self) -> list[dict]: ...
+
+    # OPTIONAL — restrict dashboard auction lists to a single window length.
+    # e.g. Spike Trading returns 2.0 to filter out 7-day / monthly Elon
+    # auctions. Default None = accept all window sizes.
+    def get_auction_window_days(self) -> float | None: ...
 ```
 
 The engine resolves modules from Supabase rows via `engine.registry.for_db_row(row)` — never by inspecting `row["name"]` for substrings.
+
+## Schema-Driven Config Editor (added 2026-05-05)
+
+Any module can declare an editable-config schema. The dashboard auto-generates a form: typed inputs, sectioned layout, dirty-tracking, save/reset, server-side bounds validation. **No frontend code per module.**
+
+Field descriptor shape:
+```python
+{
+  "key": "buy_tier_1_price",         # cfg dict key
+  "label": "Tier 1 Buy Price",       # display
+  "type": "number",                  # number | boolean | string | select | number_list_2
+  "section": "buy",                  # general | buy | sell | risk | advanced
+  "min": 0.001, "max": 0.99, "step": 0.001,  # number bounds
+  "options": ["x", "truthsocial"],   # for type=select
+  "length": 4, "cols": 1,            # for number_list_2 (rows × cols)
+  "labels": ["T1", "T2", "T3", "T4"],
+  "help": "Aggressive primary entry",
+}
+```
+
+Server-side: `module.save_config()` should bounds-clamp against the same schema (defense-in-depth — the dashboard clamps too but a buggy/malicious client could still POST out-of-range). Reference: `api/modules/spike_trading/module_config.py:_validate_against_schema`.
+
+Endpoints:
+- `GET  /api/modules/:id/config-schema`   — schema array
+- `PUT  /api/modules/:id/config-dynamic`  — partial update (any keys)
+- `PUT  /api/modules/:id/config`          — legacy ensemble Pydantic path (Trump/Elon)
+
+Frontend branches: if `cfg.enabled_models` is an array → ensemble UI; else → `<DynamicConfigForm>`.
 
 ## Tests
 
