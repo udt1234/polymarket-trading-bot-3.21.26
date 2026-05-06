@@ -221,6 +221,51 @@ async def delete_module(module_id: str):
     return {"ok": True}
 
 
+class SetStatusBody(BaseModel):
+    """Unified status setter used by the dashboard dropdown.
+    target ∈ {'active', 'paper', 'inactive'}
+    detail (optional) is stored in inactive_detail when target='inactive'
+    """
+    target: str
+    detail: str | None = None
+    model_config = {"extra": "ignore"}
+
+
+@router.post("/{module_id}/set-status")
+async def set_module_status(module_id: str, body: SetStatusBody):
+    """Single endpoint that powers the Real / Paper / Pause dropdown.
+    Replaces the legacy /pause /resume /toggle endpoints. /pause and
+    /resume still work for backwards compat (kept below)."""
+    if body.target not in ("active", "paper", "inactive"):
+        raise HTTPException(status_code=400, detail=f"target must be active|paper|inactive, got {body.target}")
+    sb = get_supabase()
+    mod_row = sb.table("modules").select("name,status").eq("id", module_id).single().execute()
+    if not mod_row.data:
+        raise HTTPException(status_code=404, detail="Module not found")
+    old_status = mod_row.data.get("status", "active")
+    name = mod_row.data.get("name") or module_id
+
+    update: dict = {"status": body.target}
+    if body.target == "inactive":
+        update["inactive_reason"] = "manual_pause"
+        update["inactive_since"] = datetime.now(timezone.utc).isoformat()
+        update["inactive_detail"] = body.detail or "Manually paused via dashboard"
+    else:
+        # Clear inactive fields when transitioning back to active/paper
+        update["inactive_reason"] = None
+        update["inactive_since"] = None
+        update["inactive_detail"] = None
+
+    sb.table("modules").update(update).eq("id", module_id).execute()
+    try:
+        from api.services.alerts import notify_module_status_change
+        await notify_module_status_change(module_id, name, old_status, body.target,
+                                           reason=f"Dashboard: {old_status} -> {body.target}")
+    except Exception:
+        pass
+    return {"ok": True, "old_status": old_status, "new_status": body.target}
+
+
 @router.post("/{module_id}/pause")
 async def pause_module(module_id: str, detail: str | None = None):
     sb = get_supabase()

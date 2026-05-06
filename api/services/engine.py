@@ -29,6 +29,18 @@ def _run_async(coro):
     return asyncio.run(coro)
 
 
+class _ExecutorRouter:
+    """Adapter that exposes .execute(signal) but picks paper vs live based
+    on the signal's module status. Used so exit_manager can stay agnostic
+    while per-module routing is enforced.
+    """
+    def __init__(self, engine):
+        self._engine = engine
+
+    def execute(self, signal):
+        return self._engine._executor_for_signal(signal).execute(signal)
+
+
 def _fire_and_forget_async(coro):
     """Run an async coroutine in a background daemon thread without blocking.
 
@@ -71,21 +83,32 @@ class TradingEngine:
             return
         settings = get_settings()
 
-        if settings.paper_mode or settings.environment != "production":
-            self.executor = PaperExecutor()
+        # Per-module routing model (2026-05-05):
+        #   - module.status='active' AND global PAPER off  -> live executor
+        #   - module.status='paper' OR global PAPER on     -> paper executor
+        #   - non-production env always forces paper (safety)
+        # We always build the paper executor; live is built only if env allows
+        # any module to ever go live. This makes per-module status the source
+        # of truth and global PAPER an override-only safety net.
+        self.paper_executor = PaperExecutor()
+        self._force_paper = settings.paper_mode or settings.environment != "production"
+        if self._force_paper:
+            self.executor = self.paper_executor
             self._multi_mode = False
             if not settings.paper_mode and settings.environment != "production":
-                log.warning("PAPER_MODE=false but ENV != production — forcing paper mode")
+                log.warning("ENV != production — forcing paper mode for all modules regardless of status")
+            log.info("Global PAPER override ACTIVE — all modules paper-trade")
         else:
             from api.services.profiles import get_multi_exec_profiles
             multi_profiles = get_multi_exec_profiles()
             if len(multi_profiles) > 1:
                 self.executor = MultiExecutor(multi_profiles)
                 self._multi_mode = True
-                log.info(f"Multi-account mode: broadcasting to {[p['name'] for p in multi_profiles]}")
+                log.info(f"Multi-account live mode: broadcasting to {[p['name'] for p in multi_profiles]}")
             else:
                 self.executor = LiveExecutor()
                 self._multi_mode = False
+                log.info("Live executor ready — modules with status='active' will trade real money")
 
         self.registry.discover()
         self.scheduler.add_job(self._run_cycle, "interval", seconds=interval, max_instances=1)
@@ -103,6 +126,30 @@ class TradingEngine:
         self.scheduler.start()
         self._running = True
         log.info(f"Engine started: interval={interval}s, paper={settings.paper_mode}, multi={self._multi_mode}")
+
+    def _executor_for_signal(self, signal):
+        """Route a signal to the right executor based on per-module status.
+
+        Decision rules:
+          1. Global PAPER override (env) -> always paper.
+          2. Module status='paper' -> paper executor (this module is in
+             paper even when other modules are live).
+          3. Module status='active' -> live executor (self.executor).
+
+        Falls back to self.executor on any DB lookup failure (fail-safe to
+        whatever the engine was started with).
+        """
+        if self._force_paper:
+            return self.paper_executor
+        try:
+            sb = get_supabase()
+            row = sb.table("modules").select("status").eq("id", signal.module_id).single().execute()
+            status = ((row.data or {}).get("status") or "").lower()
+            if status == "paper":
+                return self.paper_executor
+        except Exception as e:
+            log.warning(f"executor routing fallback (DB error): {e}")
+        return self.executor
 
     def stop(self):
         if not self._running:
@@ -172,7 +219,10 @@ class TradingEngine:
             exits = check_exits(positions.data)
             if exits:
                 positions_by_id = {p["id"]: p for p in positions.data}
-                results = execute_exits(exits, positions_by_id, self.executor)
+                # Pass a router shim instead of a fixed executor so exits
+                # respect per-module status (a 'paper' module's stop-loss
+                # should also exit on the paper book, not the live one).
+                results = execute_exits(exits, positions_by_id, _ExecutorRouter(self))
                 for r in results:
                     log.info(f"Exit executed: {r['reason']} pnl={r.get('pnl', 0):.4f}")
         except Exception as e:
@@ -216,7 +266,7 @@ class TradingEngine:
                     if approved:
                         # Reset rejection streak on a successful approval
                         self._recent_rejections = []
-                        result = self.executor.execute(signal)
+                        result = self._executor_for_signal(signal).execute(signal)
                         if result.get("status") == "rejected":
                             log.info(f"Executor rejected: {result.get('reason')}")
                             self._log_rejection(signal, result.get("reason", "executor_rejected"))
@@ -372,7 +422,7 @@ class TradingEngine:
                 new_status = "executed" if approved else "rejected_on_unlock"
                 if approved:
                     try:
-                        result = self.executor.execute(sig)
+                        result = self._executor_for_signal(sig).execute(sig)
                         if result.get("status") == "rejected":
                             new_status = "rejected_on_unlock"
                         else:

@@ -6,7 +6,7 @@ import { useApi, useMutation } from "@/lib/hooks"
 import { apiFetch } from "@/lib/api"
 import { formatCurrency, formatDate, formatDateShort, cn } from "@/lib/utils"
 import {
-  ChevronDown, ChevronUp, RefreshCw, Pause, Play, Power,
+  ChevronDown, ChevronUp, RefreshCw,
   Save, Settings,
 } from "lucide-react"
 import { DailyPacingTable } from "./components/daily-pacing-table"
@@ -19,6 +19,7 @@ import { AuctionDeepDive } from "./components/auction-deep-dive"
 import { PnlCurve } from "./components/pnl-curve"
 import { BotHealthBanner } from "./components/bot-health-banner"
 import { LiveStatusBadge } from "./components/live-status-badge"
+import { StatusDropdown } from "./components/status-dropdown"
 import { LastAuctionsPnl } from "./components/last-auctions-pnl"
 import { PendingSignalsCard } from "./components/pending-signals-card"
 import { PostTimingGrid } from "./components/post-timing-grid"
@@ -132,7 +133,7 @@ export default function ModuleDetailPage() {
   const params = useParams()
   const moduleId = params.id as string
 
-  const { data: modules } = useApi<ModuleData[]>("/api/modules/")
+  const { data: modules, refetch: refetchModules } = useApi<ModuleData[]>("/api/modules/")
   const module = modules?.find(
     (m) => m.id === moduleId || m.name.toLowerCase().replace(/\s+/g, "-") === moduleId
   )
@@ -239,12 +240,9 @@ export default function ModuleDetailPage() {
   const { mutate: saveConfig, loading: savingConfig } = useMutation(
     id ? `/api/modules/${id}/config` : "", "PUT"
   )
-  const { mutate: togglePause } = useMutation(
-    id ? `/api/modules/${id}/toggle` : "", "POST"
-  )
-  const { mutate: killSwitch } = useMutation(
-    id ? `/api/modules/${id}/kill` : "", "POST"
-  )
+  // Status changes go through the unified /set-status endpoint via
+  // <StatusDropdown />; legacy /toggle and /kill endpoints removed from UI
+  // (kill API still exists server-side as an emergency tool).
 
   const handleSaveConfig = useCallback(async () => {
     await saveConfig(localConfig)
@@ -383,17 +381,12 @@ export default function ModuleDetailPage() {
             className="rounded-md border border-border p-1.5 hover:bg-accent">
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
-          <button onClick={() => togglePause()}
-            className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-accent">
-            {module.status === "active" ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-            {module.status === "active" ? "Pause" : "Resume"}
-          </button>
-          <button
-            onClick={() => { if (confirm("Kill this module?")) killSwitch() }}
-            className="flex items-center gap-1 rounded-md border border-destructive px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10">
-            <Power className="h-3 w-3" />
-            Kill
-          </button>
+          <StatusDropdown
+            moduleId={module.id}
+            currentStatus={module.status}
+            displayBadge={(module as any).display_badge}
+            onChange={() => { refetchModules(); refetchPacing(); }}
+          />
         </div>
       </div>
 
