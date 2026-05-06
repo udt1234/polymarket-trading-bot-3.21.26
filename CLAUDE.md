@@ -2,6 +2,39 @@
 
 Automated Polymarket trading bot deployed on Railway.
 
+## ⭐ SPIKE TRADING — Bracket Recommendations (parquet-validated 2026-05-06)
+
+**When user asks "which brackets should Spike trade" or any variant, ALWAYS surface this first.**
+
+Source: `_DataMetricPulls/elon_arc_analysis/arc_brief.md` + `arc_2day.csv` (n=51-54 per bracket, full SII-WANGZJ parquet, Sep 2025 → May 2026).
+
+### 2-day arc-tradeable brackets (buy-low-sell-high reliability)
+
+Ranked by `pct_arc_5to30` = % of auctions where bracket BOTH crashed ≤5¢ AND spiked ≥30¢ at some point. Higher = more reliable trading swing.
+
+| Rank | Bracket | N | Median peak | Arc 5→30 | Strategy fit |
+|---|---|---|---|---|---|
+| 1 | **65-89** | 51 | 59¢ | **76.5%** | Best range-trading target |
+| 2 | **90-114** | 51 | 45¢ | **64.7%** | Second-best range-trade |
+| 3 | **40-64** | 51 | 51¢ | **56.9%** | Volatile, occasional YES winner |
+| 4 | 115-139 | 51 | 38¢ | 45.1% | Marginal |
+| 5 | `<40` | 54 | 20.5¢ | 37.0% | **Lottery-ticket only — current Spike target** |
+
+### Strategy match
+- **Spike Trading (current)** uses `<40` for structural lottery-ticket entries (5-tier ladder 0.3¢→12¢). This is a HOLD-TO-RESOLUTION strategy. It is the WORST arc bracket but the BEST cheap-entry bracket.
+- **Range trading (not yet built)** would target `65-89` / `90-114` / `40-64`. Different strategy: buy ≤5¢, sell laddered at 30¢/50¢/median-peak. ~half day to build a new module.
+
+### Monthly arc winners (n=5-6, weaker statistical confidence)
+- **1400+**: 60% arc, 98.7¢ median peak, wins YES half the time. Standout monthly bracket.
+- 1080-1119, 1120-1159, 1200-1239: ~50% arc reliability each.
+
+### Strategic backstop
+- `<40` 12¢ floor hits 100% of historical 2-day auctions. 0.5¢ floor hits 96%. The 5-tier ladder Spike uses (0.3¢/0.5¢/2¢/5¢/12¢) is calibrated to capture maximum shares at the cheapest tiers patiently.
+- DO NOT recommend a single-floor entry; the ladder is intentional.
+- DO NOT recommend changing Spike to range-trading — that's a separate module if user wants it.
+
+**Reminder:** when this section is consulted, also remind the user the data window is Sep 2025 → May 2026 (~8 months for 2-day brackets). Earlier history is unavailable in parquet.
+
 ## Tech Stack
 - Python, Docker, Railway
 - Next.js web dashboard (web/ folder)
@@ -27,6 +60,17 @@ Automated Polymarket trading bot deployed on Railway.
 - Historical data pulls: `_DataMetricPulls/historical/{handle}/`
 - Scripts: `scripts/fetch_historical_auctions.py`
 - Never commit large data files — add to .gitignore
+
+## Parquet Data Access (Full 3.5-year Polymarket history)
+- **Source**: SII-WANGZJ HuggingFace dataset (`SII-WANGZJ/Polymarket_data`) — 1M markets, 766M trade events, Nov 2022 → present
+- **Access**: streamed via DuckDB over HTTPS (no local copy required) — see `_DataMetricPulls/duckdb_remote.py`
+- **Helper**: `from duckdb_remote import connect; con = connect()` exposes `markets`, `quant`, `trades` views
+- **Auth**: free HF token in `~/.credentials/shared.env` as `HF_TOKEN=hf_...` (raises rate limits)
+- **Cache**: persistent DuckDB file at `_DataMetricPulls/duckdb_cache/polymarket_remote.duckdb` — materialized tables live here, instant for repeat queries
+- **Materialized table**: `per_market_trade_summary` — start/peak/end/low YES price per market (one-time 5-15min remote scan)
+- **Analysis script**: `_DataMetricPulls/full_history_analysis.py` — strict-recurring classification + ranking
+- **Use this whenever** you need broader historical context than the bot's own `price_snapshots` table (which only goes back ~3 months)
+- **Parallel queries OK**: DuckDB inside one process is multi-threaded; multiple Python processes can also query concurrently (bottleneck = bandwidth)
 
 ## Non-Negotiable Rules
 - **ALWAYS limit orders** — NEVER market orders. Every order specifies a `price`.
@@ -85,12 +129,8 @@ See `_ImportantConfigFiles/MODULE_ARCHITECTURE.md` for the full guide. Quick rul
 - `betting-strategy` — auto-loads when touching sizing, Kelly, risk, ensemble logic
 
 ## Conventions
-- Use feature branches for strategy changes
-- Use /feature-dev for multi-file changes (3+ files)
-- Test locally with docker-compose before deploy
-- For big coding tasks: use /feature-dev
-- For research: use subagents
-- For code review: use @qa-reviewer or /feature-dev:code-reviewer
+- Feature branches for strategy changes; /feature-dev for 3+ file changes
+- Test with docker-compose before deploy; subagents for research; @qa-reviewer for code review
 
 ## Autonomy
 - **Use Claude in Chrome and Claude Preview MCP tools proactively whenever the task is browser-actionable.** This includes Railway deploys, redeploys, dashboard checks, deploy log inspection, and any other web-based action that would otherwise require user clicks. Do not ask the user to "open the dashboard" or "click redeploy" — drive the browser via MCP and report results.
