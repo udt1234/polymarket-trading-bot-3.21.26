@@ -77,6 +77,9 @@ class TradingEngine:
         # dashboard show per-module health instead of painting every page red
         # when only one module's data feed is sick.
         self._recent_errors: list[tuple[float, str, str, str]] = []
+        # Tracking IDs we've already insta-fired on, so the 1-min poll
+        # doesn't trigger _run_cycle every minute for the same auction.
+        self._instabuy_fired: set[str] = set()
 
     def start(self, interval: int = 300):
         if self._running:
@@ -115,6 +118,10 @@ class TradingEngine:
         self.scheduler.add_job(self._run_walk_forward, "interval", hours=6, max_instances=1)
         self.scheduler.add_job(self._run_resolutions, "interval", minutes=30, max_instances=1)
         self.scheduler.add_job(self._run_auction_monitor, "interval", hours=1, max_instances=1)
+        # Insta-buy: detect newly-opened auctions every 1 min and fire a
+        # _run_cycle so ladder orders post within ~60s of auction start
+        # instead of waiting up to 5 min for the next regular cycle.
+        self.scheduler.add_job(self._run_instabuy_check, "interval", minutes=1, max_instances=1)
         self.scheduler.add_job(self._run_order_ttl_sweep, "interval", minutes=5, max_instances=1)
         self.scheduler.add_job(self._run_order_book_snapshot, "interval", minutes=5, max_instances=1)
         self.scheduler.add_job(self._run_post_count_snapshot, "interval", minutes=5, max_instances=1)
@@ -735,6 +742,76 @@ class TradingEngine:
 
         except Exception as e:
             log.error(f"Auction monitor error: {e}")
+
+    def _run_instabuy_check(self):
+        """Detect newly-opened auctions and fire _run_cycle immediately so
+        ladder orders post within ~60s of auction start (vs up to 5 min).
+
+        Cheap by design: one Gamma/xTracker call per active module, no
+        evaluation unless a *new* tracking_id is detected within the last
+        ~5 min. Already-fired tracking_ids are remembered so we only fire
+        once per auction open.
+        """
+        try:
+            from api.modules.shared.polymarket import _fetch_trackings_raw
+            sb = get_supabase()
+            modules = sb.table("modules").select("id,name,strategy,market_slug").neq("status", "inactive").execute()
+            now = datetime.now(timezone.utc)
+            fresh_window_min = 5  # an auction whose startDate is within the last 5 min counts as "just opened"
+            new_auction_seen = False
+
+            for mod in (modules.data or []):
+                module = self.registry.for_db_row(mod)
+                if not module:
+                    continue
+                handle = module.get_handle()
+                platform = module.get_platform()
+                try:
+                    trackings = _run_async(_fetch_trackings_raw(handle, platform))
+                except Exception as e:
+                    log.warning(f"Insta-buy fetch failed for {handle}: {e}")
+                    continue
+                if not trackings:
+                    continue
+
+                for t in trackings:
+                    tid = str(t.get("id") or t.get("trackingId") or "")
+                    if not tid or tid in self._instabuy_fired:
+                        continue
+                    start_str = t.get("startDate", "")
+                    end_str = t.get("endDate", "")
+                    if not start_str or not end_str:
+                        continue
+                    try:
+                        s = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                        e = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                    except Exception:
+                        continue
+                    if not (s <= now <= e):
+                        continue
+                    age_min = (now - s).total_seconds() / 60.0
+                    if age_min > fresh_window_min:
+                        # Mark as already-seen so we don't keep evaluating it,
+                        # but don't fire a cycle since it's not "fresh".
+                        self._instabuy_fired.add(tid)
+                        continue
+                    log.info(f"Insta-buy: new auction detected for {handle} (tracking={tid}, age={age_min:.1f}min) — firing cycle")
+                    self._instabuy_fired.add(tid)
+                    new_auction_seen = True
+
+            if new_auction_seen:
+                # Fire a single cycle for ALL modules — cheaper than per-module
+                # firing and the cycle is idempotent (max_instances=1 prevents overlap).
+                try:
+                    self._run_cycle()
+                except Exception as e:
+                    log.error(f"Insta-buy cycle fire failed: {e}")
+
+            # Bound memory: keep only the most recent ~500 tracking IDs.
+            if len(self._instabuy_fired) > 500:
+                self._instabuy_fired = set(list(self._instabuy_fired)[-500:])
+        except Exception as e:
+            log.error(f"Insta-buy check error: {e}")
 
     def _run_daily_module_digest(self):
         """Once-daily Slack message listing modules that are not 'active'.

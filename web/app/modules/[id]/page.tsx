@@ -125,6 +125,7 @@ interface AuctionTab {
   status: "active" | "past" | "future"
   is_active: boolean
   market_link?: string
+  market_ids?: string[]
 }
 
 function fmt(n: number, decimals = 1): string {
@@ -290,8 +291,6 @@ export default function ModuleDetailPage() {
     refetchPacing()
   }, [localConfig, saveConfig, refetchConfig, refetchPacing])
 
-  const mySignals = moduleSignals || []
-
   // Use real wallet data when available, fallback to paper positions
   const moduleName = module?.name?.toLowerCase() || ""
   const isLive = walletAuctions && walletAuctions.length > 0
@@ -312,6 +311,18 @@ export default function ModuleDetailPage() {
   const selectedSlug = selectedAuction?.market_link
     ? selectedAuction.market_link.split("/").pop()?.toLowerCase() || ""
     : ""
+  // Numeric Polymarket market_ids that fired during this auction's window.
+  // Used to filter paper positions and signals so the Holdings, Why,
+  // Activity, and Confidence Bands cards all reflect ONLY the auction
+  // selected in the dropdown.
+  const selectedMarketIds = new Set<string>(selectedAuction?.market_ids || [])
+  const filterByAuction = selectedMarketIds.size > 0
+
+  // Signals scoped to the selected auction (falls back to all when no
+  // market_ids are known yet, e.g. brand-new auction with no signals).
+  const mySignals = filterByAuction
+    ? (moduleSignals || []).filter((s: any) => selectedMarketIds.has(String(s.market_id || "")))
+    : (moduleSignals || [])
 
   // Flatten wallet auction bids into position-like objects, tagged with auction slug
   const walletPositions: (Position & { auction_slug?: string })[] = relevantAuctions.flatMap((a: any) =>
@@ -332,8 +343,13 @@ export default function ModuleDetailPage() {
     ? walletPositions.filter((p) => (p as any).auction_slug === selectedSlug)
     : walletPositions
 
-  const myPositions = isLive ? filteredPositions : (paperPositions || []).filter((p: any) => p.module_id === id)
-  const allPositions = isLive ? walletPositions : (paperPositions || []).filter((p: any) => p.module_id === id)
+  // Paper positions scoped to the selected auction's markets when known.
+  const paperForModule = (paperPositions || []).filter((p: any) => p.module_id === id)
+  const paperForSelectedAuction = filterByAuction
+    ? paperForModule.filter((p: any) => selectedMarketIds.has(String(p.market_id || "")))
+    : paperForModule
+  const myPositions = isLive ? filteredPositions : paperForSelectedAuction
+  const allPositions = isLive ? walletPositions : paperForModule
   const openPositions = myPositions.filter((p) => p.status === "open")
   const closedPositions = myPositions.filter((p) => p.status !== "open")
 
@@ -1084,10 +1100,12 @@ export default function ModuleDetailPage() {
         <LastAuctionsPnl auctions={auctions || []} walletAuctions={relevantAuctions} />
       </CollapsibleCard>
 
-      {/* Module P&L Curve */}
+      {/* Module P&L Curve — filtered to selected auction's markets when known */}
       <CollapsibleCard id="module-pnl" title="Module P&L">
         <PnlCurve
-          trades={trades?.data || []}
+          trades={(trades?.data || []).filter((t: any) =>
+            !filterByAuction || selectedMarketIds.has(String(t.market_id || ""))
+          )}
           openPositions={openPositions}
           closedPositions={closedPositions}
           marketPrices={pacing?.market_prices}
@@ -1118,7 +1136,7 @@ export default function ModuleDetailPage() {
         const accountBankroll = riskSettings?.bankroll || 1000
         const budgetPct = ((module.budget / accountBankroll) * 100).toFixed(0)
 
-        const recentSignals = (moduleSignals || []).slice(0, 10)
+        const recentSignals = mySignals.slice(0, 10)
         const bestEdgeSignal = recentSignals.reduce((best: any, s: any) => (!best || (s.edge || 0) > (best.edge || 0)) ? s : best, null)
         const bestEdge = bestEdgeSignal?.edge ? `+${(bestEdgeSignal.edge * 100).toFixed(1)}%` : "—"
         const bestEdgeBracket = bestEdgeSignal?.bracket || ""
@@ -1419,9 +1437,18 @@ export default function ModuleDetailPage() {
 
               {/* Bot Status Timeline — replaces raw log dump with human-readable status */}
               <BotStatusTimeline
-                decisionLog={decisionLog || []}
+                decisionLog={(decisionLog || []).filter((row: any) => {
+                  if (!filterByAuction) return true
+                  // decision-log rows embed market_id in the message text;
+                  // match any 6-8 digit number against the selected market_ids
+                  const msg = String(row.message || "")
+                  for (const mid of Array.from(selectedMarketIds)) {
+                    if (msg.includes(mid)) return true
+                  }
+                  return false
+                })}
                 openPositions={openPositions}
-                signals={moduleSignals || []}
+                signals={mySignals}
                 regimeLabel={data?.regime?.label}
                 projectedWinner={data?.projected_winner}
                 ensembleAvg={data?.ensemble_avg}
@@ -1562,7 +1589,7 @@ export default function ModuleDetailPage() {
 
       {/* New Module Analytics Charts */}
       {(() => {
-        const allSignals = (moduleSignals || []).map((s: any) => s.bracket).filter(Boolean)
+        const allSignals = mySignals.map((s: any) => s.bracket).filter(Boolean)
         const uniqueBrackets = Array.from(new Set(allSignals)) as string[]
         // Use hourly_heatmap (avg posts/hr by hour-of-day, returned by /pacing) since
         // raw hourly_counts isn't in the payload. Overlay with current market price for top bracket.

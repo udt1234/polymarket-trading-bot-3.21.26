@@ -472,6 +472,12 @@ async def get_auctions(module_id: str, include_past: bool = True):
         and _matches_window(t, window_days)
     ]
 
+    # Pre-load this module's signals once so we can attach market_ids per
+    # auction by date-range join — lets the dashboard filter holdings,
+    # signals, activity, confidence bands by selected auction.
+    sigs = sb.table("signals").select("market_id,created_at").eq("module_id", module_id).limit(2000).execute()
+    sig_rows = sigs.data or []
+
     results = []
     for t in module_trackings:
         tid = t.get("id") or t.get("trackingId")
@@ -495,6 +501,21 @@ async def get_auctions(module_id: str, include_past: bool = True):
 
         status = "active" if is_active else ("past" if is_past else "future")
 
+        # Market IDs that fired during this auction's window.
+        market_ids: list[str] = []
+        seen_mids: set[str] = set()
+        for s in sig_rows:
+            ca = s.get("created_at") or ""
+            try:
+                cdt = datetime.fromisoformat(ca.replace("Z", "+00:00"))
+            except Exception:
+                continue
+            if start_dt <= cdt <= end_dt:
+                mid = str(s.get("market_id") or "")
+                if mid and mid not in seen_mids:
+                    seen_mids.add(mid)
+                    market_ids.append(mid)
+
         results.append({
             "tracking_id": str(tid),
             "title": t.get("title", ""),
@@ -505,6 +526,7 @@ async def get_auctions(module_id: str, include_past: bool = True):
             "status": status,
             "is_active": is_active,
             "market_link": t.get("marketLink", ""),
+            "market_ids": market_ids,
         })
 
     # Active auction stays pinned at the top; everything else (future + past)
