@@ -1014,6 +1014,42 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     hist_mean = rw["mean"] if rw["mean"] > 0 else 100.0
     hist_std = rw["std"] if rw["std"] > 0 else 30.0
 
+    # Recent-pace prior: blend in last-N-days actual posting rate to project
+    # what'll happen in the auction window. Past 2-day auction means can be
+    # months old and reflect different activity regimes; the operator's
+    # actual recent rate is a much better predictor for a FRESH auction.
+    # User-flagged 2026-05-07: bot was projecting 88 tweets for a 2-day
+    # auction when Elon's last 7-day rate was only 23/day → 46 actual.
+    from api.modules.shared.polymarket import fetch_recent_daily_post_counts
+    recent_pace_blend_days = int(cfg.get("recent_pace_blend_days", 14))
+    try:
+        recent_daily = await fetch_recent_daily_post_counts(
+            handle, _detect_platform(module.data), days=recent_pace_blend_days,
+        )
+    except Exception as _e:
+        log.warning(f"recent daily fetch failed: {_e}")
+        recent_daily = []
+    if recent_daily:
+        # Recency-weighted recent rate: most recent days weighted higher.
+        weights = [(i + 1) for i in range(len(recent_daily))]  # 1, 2, ..., N
+        wsum = sum(weights)
+        recent_avg_per_day = sum(c * w for c, w in zip(recent_daily, weights)) / wsum
+        recent_window_proj = recent_avg_per_day * (total_days or 2)
+        # Blend: when auction is fresh (≤25% elapsed), recent-pace dominates.
+        # As elapsed increases, the in-auction observed pace takes over via
+        # the bayesian model (which is unaffected by this prior).
+        # Weight = 0.85 fresh -> 0.50 mid -> 0.20 late.
+        elapsed_frac = max(0.0, min(1.0, elapsed_days / max(total_days, 0.01)))
+        recent_weight = max(0.20, 0.85 - elapsed_frac * 0.65)
+        blended = recent_weight * recent_window_proj + (1 - recent_weight) * hist_mean
+        log.info(f"pacing recent-prior blend: recent_avg/d={recent_avg_per_day:.1f}, "
+                 f"recent_proj({total_days}d)={recent_window_proj:.1f}, hist={hist_mean:.1f}, "
+                 f"weight={recent_weight:.2f} -> blended hist_mean={blended:.1f}")
+        hist_mean = blended
+        # Loosen std a bit too — recent-rate variance > parquet variance
+        if hist_std < recent_window_proj * 0.20:
+            hist_std = recent_window_proj * 0.20
+
     dow_data = []
     for d in daily_totals:
         try:

@@ -3,7 +3,7 @@ import asyncio
 import json
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
@@ -157,6 +157,53 @@ async def fetch_active_or_upcoming_tracking(
         upcoming.sort(key=lambda x: x[1])
         return upcoming[0][0]
     return None
+
+
+async def fetch_recent_daily_post_counts(
+    handle: str, platform: str = "x", days: int = 7,
+) -> list[int]:
+    """Return per-day post counts for the last `days` days (most recent last).
+
+    Used by the pacing endpoint to compute a recent-activity prior — much
+    more accurate than historical 2-day auction means for projecting fresh
+    auctions. Past 2-day auction data is months old and reflects different
+    activity regimes; the user's actual last-week rate predicts the next
+    2 days much better.
+    """
+    from collections import Counter
+    by_day: Counter = Counter()
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(
+                f"https://xtracker.polymarket.com/api/users/{handle}/posts",
+                params={"platform": platform},
+            )
+            r.raise_for_status()
+            d = r.json()
+            items = d if isinstance(d, list) else (
+                d.get("data") or d.get("posts") or d.get("items") or []
+            )
+    except Exception as e:
+        log.warning(f"fetch_recent_daily_post_counts({handle}): {e}")
+        return []
+
+    for p in items:
+        ca = p.get("createdAt", "") if isinstance(p, dict) else ""
+        if not ca:
+            continue
+        try:
+            dt = datetime.fromisoformat(ca.replace("Z", "+00:00"))
+            by_day[dt.strftime("%Y-%m-%d")] += 1
+        except (ValueError, TypeError):
+            continue
+
+    now = datetime.now(timezone.utc)
+    out = []
+    # Skip today (incomplete) — start from yesterday backwards
+    for i in range(1, days + 1):
+        day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        out.append(int(by_day.get(day, 0)))
+    return list(reversed(out))  # oldest first
 
 
 async def fetch_all_active_trackings(handle: str = "realDonaldTrump", platform: str = "truthsocial") -> list[dict]:

@@ -1463,7 +1463,11 @@ export default function ModuleDetailPage() {
         })()}
         </CollapsibleCard>
         <CollapsibleCard id="confidence-bands" title="Confidence Bands">
-          <ConfidenceBands bands={pacing?.confidence_bands} allProbs={pacing?.all_bracket_probs} />
+          <ConfidenceBands
+            bands={pacing?.confidence_bands}
+            allProbs={pacing?.all_bracket_probs}
+            marketPrices={pacing?.market_prices}
+          />
         </CollapsibleCard>
       </div>
 
