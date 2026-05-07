@@ -446,21 +446,32 @@ class TradingEngine:
             import asyncio as _asyncio
             from api.modules.shared.polymarket import fetch_order_books_for_brackets
             sb = get_supabase()
-            modules = sb.table("modules").select("id,name,strategy,market_slug,config").neq("status", "inactive").execute()
+            modules = sb.table("modules").select("id,name,strategy,market_slug").neq("status", "inactive").execute()
             now = datetime.now(timezone.utc).isoformat()
             total = 0
             for m in modules.data or []:
-                # Collect candidate slugs: legacy market_slug + any series_slug from auction_types
+                # Collect candidate slugs: legacy market_slug + any series_slug from
+                # the per-module settings row (auction_types config).
                 slugs: list[str] = []
                 if m.get("market_slug"):
                     slugs.append(m["market_slug"])
-                cfg = m.get("config") or {}
+                # Resolve via module instance so defaults are applied (saved
+                # config may be empty but module ships with sensible defaults).
+                try:
+                    module = self.registry.for_db_row(m)
+                    cfg = module.get_config(m["id"]) if module and hasattr(module, "get_config") else {}
+                except Exception:
+                    cfg = {}
                 for at in (cfg.get("auction_types") or []):
                     if not at.get("enabled", True):
                         continue
                     s = at.get("series_slug") or at.get("market_slug")
                     if s and s not in slugs:
                         slugs.append(s)
+                # Top-level series_slug (legacy single-auction config)
+                top_slug = cfg.get("series_slug")
+                if top_slug and top_slug not in slugs:
+                    slugs.append(top_slug)
                 if not slugs:
                     continue
                 bracket_set: set[str] = set()
