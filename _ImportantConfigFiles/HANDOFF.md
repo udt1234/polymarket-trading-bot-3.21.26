@@ -1,90 +1,126 @@
 # PolyMarket Bot — Handoff
 
-## Current State (2026-05-05 evening)
-Bot LIVE on Trump + Elon + Spike Trading (all paper-trading; global `PAPER_MODE=true`). Big day — many things shipped. Snapshot:
+## Current State (2026-05-07)
+Bot LIVE on Trump + Elon (ensemble) + Spike Trading (multi-auction multi-strategy plugin architecture; paper-trading via global `PAPER_MODE=true`). All on Railway.
 
-### Shipped today (in commit order)
-1. **Spike Trading v2 module** — `api/modules/spike_trading/` (commits `8a4f818` → `c2fc4bd`). Module row id `4faba37c-906b-405f-ad49-737b12e75b16`. Migrations `010_spike_positions.sql` + `011_archive_trump_elon_history.sql` + `012_status_simplification.sql` applied.
-2. **Polymarket Series API discovery** (`542ccc3`) — replaces xTracker as primary auction source; sees auctions ~2 days before xTracker activates.
-3. **Adaptive prices + pacing classifier + slow-bleed exit** (`66fa41c`) — buy at 12¢/0.5¢ ladder, sell multipliers `[1.5, 2.0, 4.0, 8.0]` of fill price, auto-exit on bracket-bust extrapolation, no manual stuck-position intervention.
-4. **Status model simplified** (`b4161be`) — `paused`/`killed`/`scaffold` collapsed to `inactive` + structured `inactive_reason` + `inactive_since` + `inactive_detail`. Three badges: Real $Trades / Paper Trades / Inactive.
-5. **Trump+Elon trading history archived** (in `b4161be` migration 011) — 18 positions / 3,121 orders / 3,121 trades / 2,323 signals / 1,486 pending → `*_archive_20260505` tables. Live tables clean. **Preserved**: truth_social_posts (32,880 backfilled), post_count_snapshots, price_snapshots, logs, modules, backfill_progress.
-6. **Per-module executor routing + status dropdown** (`9142da9`) — global PAPER is override-only; module status decides paper-vs-live per signal. Single dropdown replaces Pause+Kill (Kill removed from UI; API kept).
-7. **Window-day filter for dashboard auctions** (`f5c1080`) — Spike Trading dropdown only shows 2-day Elon auctions, not the 7d/31d series.
-8. **Pacing-config crash fix** (`1b78905`) — non-ensemble modules no longer crash the page.
-9. **Schema-driven editable config** (`dda4c58`) — Spike's config is fully editable from the dashboard via `BaseModule.get_config_schema()`. New modules get free editable UI by declaring their schema. See `MODULE_ARCHITECTURE.md` for the convention.
+## ⭐ Cross-Module Patterns (apply to ALL modules going forward)
 
-### Removed
-- `shadow_mode` config knob — was redundant with Paper Trading.
-- `paused` / `killed` / `scaffold` status values — collapsed into `inactive`.
+These are architectural patterns proven on Spike Trading. **Other modules should adopt them.** Each module's `module.py` + dashboard surface should match.
 
-### Open work / next
-- Trump + Elon strategy recalibration on the 3.5-year parquet dataset (see TODO section below).
-- Trump + Elon ensemble config UI is still the hand-built React component; could migrate to the schema-driven form for consistency, but no functional benefit yet.
+### 1. Pluggable Strategy Plugins
+- Module picks logic via a `Strategy` subclass registry (`api/modules/spike_trading/strategies/`).
+- Each strategy implements `can_enter`, `build_buy_ladder`, `classify`, `sell_targets`, `display_label`, `describe` + sets `DEFAULT_PARAMS`.
+- Auto-discovered via `__init_subclass__`. Adding a strategy = drop a file.
+- Registry pattern: `api/modules/spike_trading/strategies/__init__.py` (good model to copy).
 
-### Spike Rider v1 revert checklist (done 2026-05-05)
-- ✅ Module row deleted from `modules` table
-- ✅ `auction_series` and `position_exit_state` tables dropped
-- ✅ All `spike_rider` code reverted via revert commit on master
-- ✅ Trump + Elon modules untouched
-- See `SPIKE_RIDER_SPEC.md` for the v1 rebuild plan (informed v2 architecture)
+### 2. Multi-Auction × Multi-Profile Config
+- Each module's config has `auction_types: [...]` list — each auction type holds a `bracket_profiles` list.
+- Per profile: `strategy_name`, `bracket_max_count`, `params` overrides.
+- Module's `_evaluate_async` iterates enabled auction_types × profiles, dispatches to plugin.
+- Frontend: `<AuctionTypesEditor>` component (in spike_trading components) handles nested editing.
 
-## ⭐ NEW: Full 3.5-Year Polymarket History via Parquet (2026-05-05)
-We now have free streaming access to the **complete Polymarket trade history** (Nov 2022 → present, 766M trades, 1M markets) via the SII-WANGZJ HuggingFace dataset.
+### 3. Pacing Prior — DOW-Aware + Recent-Regime
+- **Lesson** (2026-05-07): historical "weekly_totals" averages are stale. Past 2-day Elon auction means (94.7) didn't reflect his recent 23/day rate.
+- **Fix shipped in `api/routers/modules.py:get_pacing`**: blends three priors in this order:
+  1. `recency_weighted_averages(weekly_history)` — past matching-window event totals
+  2. **Recent flat-rate** — last N days of post counts × auction window length
+  3. **DOW-aware** — for each day in the auction window, sum the historical per-DOW avg
+- Helper: `fetch_recent_post_history(handle, platform, days=30)` in `polymarket.py` returns daily counts AND by-DOW breakdown.
+- Blend weight on recent prior tapers from 0.85 (fresh) to 0.20 (late).
+- **Apply to Trump + Elon ensemble**: their pacing endpoints currently only use the historical weekly mean. Should adopt the same recent + DOW prior.
 
-**Tooling added** (in `_DataMetricPulls/`):
-- `duckdb_remote.py` — DuckDB connection helper. Streams Parquet files from HF over HTTPS, caches metadata locally, exposes `markets` / `quant` / `trades` SQL views.
-- `full_history_analysis.py` — strict-recurring classification + flip-pattern ranking using the full 3.5y dataset.
-- `duckdb_cache/polymarket_remote.duckdb` — persistent DuckDB cache (materialized tables live here, ~150MB).
-- HF token stored at `~/.credentials/shared.env` as `HF_TOKEN`.
+### 4. Polymarket-Native Bracket Discovery
+- **Always** pull bracket labels from the actual Polymarket auction (via `fetch_market_prices` + Gamma `/events` fallback for closed markets).
+- Don't hardcode bracket grids. Trump's old 11-bracket assumption was wrong for Elon.
+- Pattern: `api/routers/modules.py` lines 1080-1110 (computes `dynamic_brackets`).
 
-**vs the previous LuciferForge $9 buy** (which we kept):
-| Source | Cost | Time | Trades | Markets |
-|---|---|---|---|---|
-| LuciferForge SQLite | $9 | 30 days (Mar–Apr 2026) | 8M | 9.5K |
-| SII-WANGZJ Parquet | $0 | 3.5 years | **766M** | **1M** |
+### 5. Window-Length Filter on Historical Means
+- `fetch_historical_weekly_totals(handle, weeks, platform, target_window_days=...)` filters past trackings by matching window length (±0.5d).
+- Without this, Elon's 7-day + monthly mixed into a "weekly" mean → garbage 2-day projections.
+- Same `target_window_days` param needed in any new module that pulls historical priors.
 
-Use `duckdb_remote` whenever you need historical context beyond the bot's own `price_snapshots` table (~3 months) or the LuciferForge sample (30 days).
+### 6. Confidence Bands UI — Bot vs Polymarket
+- `<ConfidenceBands>` component shows BOT probability AND Polymarket price side-by-side per bracket.
+- Highlights edge (signed delta when ≥5pp disagreement).
+- Pattern: `web/app/modules/[id]/components/pacing-analysis.tsx`.
+- **Apply to Trump + Elon dashboards**: same component, same `marketPrices` prop.
+
+### 7. Schema-Driven Editable Config
+- `BaseModule.get_config_schema()` returns field descriptors.
+- Frontend `<DynamicConfigForm>` auto-renders editable inputs.
+- Adding a config knob = add to schema, no React work.
+
+### 8. Status Model: active / paper / inactive
+- 3 states only. `inactive` carries a structured `inactive_reason` (manual_pause / kill_switch / circuit_breaker / data_stale / error / scaffold).
+- Single dashboard dropdown: Real $Trades / Paper Trades / Pause.
+- Per-module executor routing: env `PAPER_MODE` is override-only; module status decides paper-vs-live per signal.
+
+### 9. Closed-Auction Override
+- When `is_complete=True`, projections override to actual outcome (100% on the winning bracket).
+- Lesson: never extrapolate past `remaining_days <= 0`.
+- Pattern: `api/routers/modules.py:get_pacing` — `if is_complete and running_total > 0` block.
+
+### 10. Verified-Parquet Ground Truth
+- Backtests should pull per-event winners from parquet via `verify_winrate_v2.py` pattern (group by event_stem, find winning bracket per event).
+- The `pct_resolved_yes` column in `per_bracket_end_price.csv` is **per-bracket, not per-event** — easy to misread. Always re-verify with per-event grouping.
 
 ---
 
-## TODO — Update Trump + Elon Modules with Parquet Data
-**Added: 2026-05-05**
+## Module Status
 
-We now have access to the **full SII-WANGZJ Polymarket dataset** via DuckDB+HuggingFace streaming (3.5 years of trade history, 766M trade events, 1M markets — see `_DataMetricPulls/duckdb_remote.py` and `_DataMetricPulls/full_history_analysis.py`).
+| Module | Strategy | Status | Notes |
+|---|---|---|---|
+| **Trump (truth_social)** | ensemble (legacy) | active (paper) | NOT touched per user 2026-05-06 |
+| **Elon (elon_tweets)** | ensemble (legacy) | active (paper) | NOT touched |
+| **Spike Trading** | pluggable plugins | active (paper) | New architecture (commit 75d3567 + hardening 95cbf18) |
 
-**Goal**: refit/recalibrate the existing Trump and Elon modules using this data instead of the 30-day LuciferForge sample we initially used.
+### Spike Trading Plugin Inventory
+- `Cheap_Lottery_Pacing` — 5-tier descending ladder for `<40` brackets. Pacing classifier + sellnow grid + slow-bleed.
+- `Mid_Range_Spike` — 6h delayed entry, mid-priced ladder, absolute sell targets at 30/50/70¢. For arc-tradeable brackets (65-89, 90-114, 40-64).
+- `Big_Hold_Monthly` — week-1-only entry, hold to resolution, very loose stop. For monthly 1400+.
 
-Specific tasks:
-1. **Re-run Elon `<40` flip analysis** on full 3.5-year history — confirm or refute the +194% median peak finding from the 19-auction sample.
-2. **Recalibrate sell rule thresholds** for Elon module — the Target 2× rule was tuned on 30 days; verify on 3.5 years.
-3. **Recompute Trump bracket-level priors** using the full historical price data — feed into ensemble model weights.
-4. **Build a "pacing-aware sell rule"** using the full per-trade timestamps (we couldn't do this with 15-min snapshots).
-5. **Backfill Trump+Elon `price_snapshots` table** with longer history (currently only Feb-May 2026 for Trump; Mar-May 2026 for Elon) — 3+ years of additional bracket prices available from parquet.
+Adding a strategy = new file in `api/modules/spike_trading/strategies/`.
 
-Reference files:
-- `_DataMetricPulls/duckdb_remote.py` — DuckDB connection helper with HF token
-- `_DataMetricPulls/full_history_analysis.py` — strict-recurring classification + ranking
-- `_DataMetricPulls/full_history/STRICT_recurring_full_ranked.csv` — output (when run completes)
-- HF token: stored in `~/.credentials/shared.env` as `HF_TOKEN`
+---
+
+## Open Work
+
+### High priority
+- **Apply patterns 3 + 6 to Trump + Elon ensemble modules.** Their pacing prior is stale and their Confidence Bands don't show Polymarket prices. ETA: ~1 day.
+- **Bot vs market disagreement gating.** When the bot's top bracket diverges sharply (>30pp) from Polymarket's top, log a warning and reduce signal confidence. Right now we trust the model unconditionally.
+
+### Medium priority
+- **Migrate Trump + Elon to multi-auction config**. Currently single-bracket. Could enable Trump-7day-multi-bracket trading with the same architecture.
+- **Bracket arc analysis for monthly auctions** — only 6 monthly samples in cache, need more before relying on monthly priors.
+
+### Low priority
+- Cache `_first_enabled_auction()` in spike module (QA-flagged perf).
+- ThreadPoolExecutor + asyncio refactor (pre-existing structural risk).
+- Auth on `/modules/*` router (pre-existing security gap).
 
 ---
 
 ## Key Config
-- Trump module: `e858d9ed-da0d-4e9a-8bef-2c2830686a5a` (Truth Social Posts)
-- Elon module: `cac300cb-5af2-4c25-a7df-3069478aefdb` (Elon Tweets)
-- Spike module: `4faba37c-906b-405f-ad49-737b12e75b16` (Spike Trading)
-- Slippage tolerance: 0.05 | Auto-pause: 5 consecutive losses | Order TTL: 5min (24h for Spike BUYs)
-- Dashboard widths: full / 1/2 / 1/3 (CSS grid)
-- Daily Slack digests fire at 9 AM ET + 5 PM ET (UTC 13:00 + 21:00)
+
+| | Value |
+|---|---|
+| Trump module ID | `e858d9ed-da0d-4e9a-8bef-2c2830686a5a` (Truth Social Posts) |
+| Elon module ID | `cac300cb-5af2-4c25-a7df-3069478aefdb` (Elon Tweets) |
+| Spike module ID | `4faba37c-906b-405f-ad49-737b12e75b16` (Spike Trading) |
+| Slippage tolerance | 0.05 |
+| Auto-pause threshold | 5 consecutive losses |
+| Order TTL | 5min default; 24h for Spike BUYs |
+| Dashboard widths | full / 1/2 / 1/3 (CSS grid) |
+| Daily Slack digests | 9 AM ET + 5 PM ET (UTC 13:00 + 21:00) |
 
 ## URLs
 - Dashboard: polybot-dashboard.up.railway.app
 - API: polymarket-trading-bot-32126-production.up.railway.app
 - Prod Supabase: xdonwowgqvmtrduikaon.supabase.co
 
-## Operational notes
+## Operational
 - Trump backfill: ✅ complete (32,880 posts, walked to 2022). `backfill_progress.is_complete=true`.
 - IFTTT webhook for Elon X: needs `WEBHOOK_SECRET` env var; payload spec in `api/routers/webhooks.py`.
-- Backfill scripts: `scripts/backfill_xtracker_history.py` (idempotent, ~5min) and `scripts/backfill_truth_social.py` (idempotent, 8-24h, supports `--forward` for incremental).
-- Pre-2026-05-05 session history preserved in git history (`git log --before=2026-05-05`).
+- Backfill scripts: `scripts/backfill_xtracker_history.py` (idempotent, ~5min) + `scripts/backfill_truth_social.py` (idempotent, 8-24h, `--forward` for incremental).
+- Parquet historical: streamed via `_DataMetricPulls/duckdb_remote.py` — HF token in `~/.credentials/shared.env`.
+- Pre-2026-05-05 session history preserved in git (`git log --before=2026-05-05`).

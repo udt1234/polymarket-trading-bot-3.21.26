@@ -159,18 +159,24 @@ async def fetch_active_or_upcoming_tracking(
     return None
 
 
-async def fetch_recent_daily_post_counts(
-    handle: str, platform: str = "x", days: int = 7,
-) -> list[int]:
-    """Return per-day post counts for the last `days` days (most recent last).
+async def fetch_recent_post_history(
+    handle: str, platform: str = "x", days: int = 30,
+) -> dict:
+    """Return rich recent-history breakdown for pacing priors.
 
-    Used by the pacing endpoint to compute a recent-activity prior — much
-    more accurate than historical 2-day auction means for projecting fresh
-    auctions. Past 2-day auction data is months old and reflects different
-    activity regimes; the user's actual last-week rate predicts the next
-    2 days much better.
+    Returns:
+      {
+        "daily_counts": list[int],     # last N days, oldest first, today excluded
+        "by_dow": dict[int, list[int]], # DOW (0=Mon..6=Sun) -> list of daily counts
+        "n_days": int,
+      }
+
+    Used by the pacing endpoint to compute:
+      (a) recent-activity rate prior (sum / n_days)
+      (b) DOW-aware projection — for an auction running Wed→Fri, weight
+          Wed/Thu/Fri historical averages instead of a flat per-day rate.
     """
-    from collections import Counter
+    from collections import Counter, defaultdict
     by_day: Counter = Counter()
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -184,8 +190,8 @@ async def fetch_recent_daily_post_counts(
                 d.get("data") or d.get("posts") or d.get("items") or []
             )
     except Exception as e:
-        log.warning(f"fetch_recent_daily_post_counts({handle}): {e}")
-        return []
+        log.warning(f"fetch_recent_post_history({handle}): {e}")
+        return {"daily_counts": [], "by_dow": {}, "n_days": 0}
 
     for p in items:
         ca = p.get("createdAt", "") if isinstance(p, dict) else ""
@@ -198,12 +204,28 @@ async def fetch_recent_daily_post_counts(
             continue
 
     now = datetime.now(timezone.utc)
-    out = []
-    # Skip today (incomplete) — start from yesterday backwards
-    for i in range(1, days + 1):
-        day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
-        out.append(int(by_day.get(day, 0)))
-    return list(reversed(out))  # oldest first
+    daily_counts = []
+    by_dow: dict[int, list[int]] = defaultdict(list)
+    for i in range(1, days + 1):  # Skip today (incomplete)
+        d = now - timedelta(days=i)
+        key = d.strftime("%Y-%m-%d")
+        c = int(by_day.get(key, 0))
+        daily_counts.append(c)
+        by_dow[d.weekday()].append(c)
+
+    return {
+        "daily_counts": list(reversed(daily_counts)),  # oldest first
+        "by_dow": {dow: counts for dow, counts in by_dow.items()},
+        "n_days": days,
+    }
+
+
+async def fetch_recent_daily_post_counts(
+    handle: str, platform: str = "x", days: int = 7,
+) -> list[int]:
+    """Backwards-compatible wrapper. Prefer fetch_recent_post_history()."""
+    h = await fetch_recent_post_history(handle, platform, days)
+    return h.get("daily_counts", [])
 
 
 async def fetch_all_active_trackings(handle: str = "realDonaldTrump", platform: str = "truthsocial") -> list[dict]:

@@ -1014,39 +1014,74 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     hist_mean = rw["mean"] if rw["mean"] > 0 else 100.0
     hist_std = rw["std"] if rw["std"] > 0 else 30.0
 
-    # Recent-pace prior: blend in last-N-days actual posting rate to project
-    # what'll happen in the auction window. Past 2-day auction means can be
-    # months old and reflect different activity regimes; the operator's
-    # actual recent rate is a much better predictor for a FRESH auction.
-    # User-flagged 2026-05-07: bot was projecting 88 tweets for a 2-day
-    # auction when Elon's last 7-day rate was only 23/day → 46 actual.
-    from api.modules.shared.polymarket import fetch_recent_daily_post_counts
-    recent_pace_blend_days = int(cfg.get("recent_pace_blend_days", 14))
+    # Recent-history prior with DOW awareness. Two sub-priors:
+    #  (a) flat-rate: avg posts/day over last 30 days × auction window length
+    #  (b) DOW-aware: for each day in the auction window, sum the historical
+    #      avg for that DOW. Better when the auction window covers atypical
+    #      DOWs (Sat/Sun activity differs from Wed). User flagged 2026-05-07:
+    #      "if the 2 day auction ends on monday to tuesday vs saturday to
+    #      sunday it can give us dramatically different results."
+    # Final blended prior overrides hist_mean from past-event totals (which
+    # can be regime-stale).
+    from api.modules.shared.polymarket import fetch_recent_post_history
+    recent_pace_blend_days = int(cfg.get("recent_pace_blend_days", 30))
     try:
-        recent_daily = await fetch_recent_daily_post_counts(
+        recent_hist = await fetch_recent_post_history(
             handle, _detect_platform(module.data), days=recent_pace_blend_days,
         )
     except Exception as _e:
-        log.warning(f"recent daily fetch failed: {_e}")
-        recent_daily = []
+        log.warning(f"recent history fetch failed: {_e}")
+        recent_hist = {"daily_counts": [], "by_dow": {}, "n_days": 0}
+
+    recent_daily = recent_hist.get("daily_counts", [])
+    by_dow_recent = recent_hist.get("by_dow", {})
     if recent_daily:
-        # Recency-weighted recent rate: most recent days weighted higher.
-        weights = [(i + 1) for i in range(len(recent_daily))]  # 1, 2, ..., N
+        # (a) flat-rate prior — recency-weighted avg/day
+        weights = [(i + 1) for i in range(len(recent_daily))]
         wsum = sum(weights)
         recent_avg_per_day = sum(c * w for c, w in zip(recent_daily, weights)) / wsum
-        recent_window_proj = recent_avg_per_day * (total_days or 2)
-        # Blend: when auction is fresh (≤25% elapsed), recent-pace dominates.
-        # As elapsed increases, the in-auction observed pace takes over via
-        # the bayesian model (which is unaffected by this prior).
-        # Weight = 0.85 fresh -> 0.50 mid -> 0.20 late.
+        flat_rate_proj = recent_avg_per_day * (total_days or 2)
+
+        # (b) DOW-aware prior — walk the actual days in the auction window
+        dow_avg = {dow: (sum(counts) / max(len(counts), 1)) if counts else None
+                   for dow, counts in by_dow_recent.items()}
+        # Fallback to flat avg for any DOW not represented
+        flat_avg = recent_avg_per_day
+        try:
+            window_start = (
+                datetime.fromisoformat(tracking["startDate"].replace("Z", "+00:00"))
+                if tracking and tracking.get("startDate") else now
+            )
+        except Exception:
+            window_start = now
+        dow_proj = 0.0
+        # Project for each whole day in the auction window
+        n_days_to_project = max(int(round(total_days)), 1)
+        for i in range(n_days_to_project):
+            d = window_start + timedelta(days=i)
+            dow_proj += dow_avg.get(d.weekday(), flat_avg) or flat_avg
+
+        # Blend the two — DOW-aware gets 0.6 weight when we have ≥3 days
+        # of data per relevant DOW, else 0.3 (still useful but noisier).
+        relevant_dows = set((window_start + timedelta(days=i)).weekday()
+                            for i in range(n_days_to_project))
+        sample_per_dow = min(len(by_dow_recent.get(d, [])) for d in relevant_dows) if relevant_dows else 0
+        dow_weight = 0.6 if sample_per_dow >= 3 else 0.3
+        recent_window_proj = dow_weight * dow_proj + (1 - dow_weight) * flat_rate_proj
+
+        # Blend recent_window_proj over hist_mean. Weight high when fresh,
+        # low when auction has its own observed data.
         elapsed_frac = max(0.0, min(1.0, elapsed_days / max(total_days, 0.01)))
         recent_weight = max(0.20, 0.85 - elapsed_frac * 0.65)
         blended = recent_weight * recent_window_proj + (1 - recent_weight) * hist_mean
-        log.info(f"pacing recent-prior blend: recent_avg/d={recent_avg_per_day:.1f}, "
-                 f"recent_proj({total_days}d)={recent_window_proj:.1f}, hist={hist_mean:.1f}, "
-                 f"weight={recent_weight:.2f} -> blended hist_mean={blended:.1f}")
+        log.info(
+            f"pacing prior blend: recent_avg/d={recent_avg_per_day:.1f}, "
+            f"flat_proj({total_days}d)={flat_rate_proj:.1f}, dow_proj={dow_proj:.1f} "
+            f"(dow_weight={dow_weight:.1f}, sample/dow={sample_per_dow}), "
+            f"recent_proj={recent_window_proj:.1f}, hist={hist_mean:.1f}, "
+            f"weight={recent_weight:.2f} → blended={blended:.1f}"
+        )
         hist_mean = blended
-        # Loosen std a bit too — recent-rate variance > parquet variance
         if hist_std < recent_window_proj * 0.20:
             hist_std = recent_window_proj * 0.20
 
