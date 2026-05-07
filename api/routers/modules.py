@@ -1,4 +1,5 @@
 import asyncio
+import httpx
 import logging
 import math
 from collections import defaultdict
@@ -10,7 +11,7 @@ log = logging.getLogger(__name__)
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from api.dependencies import get_supabase
-from api.modules.shared.polymarket import _fetch_trackings_raw
+from api.modules.shared.polymarket import _fetch_trackings_raw, GAMMA_BASE, normalize_bracket
 from api.modules.shared.enhanced_pacing import (
     recency_weighted_averages, dow_variance, pace_acceleration,
     dow_deviation, ensemble_confidence_bands, floor_bracket_probs,
@@ -1024,13 +1025,47 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
 
     accel = pace_acceleration(hourly_counts)
 
-    # Fetch dynamic brackets from Gamma API for non-Trump modules
+    # Always pull bracket labels from the actual Polymarket auction. The
+    # legacy hardcoded 11-bracket Trump grid (0-19, 20-39, ..., 200+) is
+    # WRONG for Elon and any future module. Elon's 2-day market uses
+    # <40 / 40-64 / 65-89 / ... / 240+ (10 brackets); the monthly uses
+    # ~60 brackets. Pacing algorithm now distributes probability mass over
+    # WHATEVER brackets Polymarket actually lists.
+    def _bracket_lo(b: str) -> int:
+        if b.startswith("<"):
+            return 0
+        if b.endswith("+"):
+            try: return int(b[:-1])
+            except ValueError: return 99999
+        if "-" in b:
+            try: return int(b.split("-", 1)[0])
+            except ValueError: return 0
+        try: return int(b)
+        except ValueError: return 0
+
     dynamic_brackets = None
     slug_for_brackets = extract_slug_from_tracking(tracking) if tracking else None
     if slug_for_brackets:
+        # First try: live market prices (only present on open markets).
         market_prices_early = await fetch_market_prices(slug_for_brackets)
-        if market_prices_early and len(market_prices_early) > 11:
-            dynamic_brackets = sorted(market_prices_early.keys(), key=lambda b: int(b.split("-")[0].replace("<", "0").replace("+", "")) if any(c.isdigit() for c in b) else 0)
+        labels = list(market_prices_early.keys()) if market_prices_early else []
+        # Fallback: pull bracket labels directly from Gamma events when
+        # the market is closed (resolved markets have prices=0/1 which
+        # fetch_market_prices filters out, leaving an empty dict).
+        if not labels:
+            try:
+                async with httpx.AsyncClient(timeout=10) as _c:
+                    _r = await _c.get(f"{GAMMA_BASE}/events", params={"slug": slug_for_brackets})
+                    _ev = _r.json()
+                    if isinstance(_ev, list) and _ev:
+                        for _m in _ev[0].get("markets", []):
+                            _label = normalize_bracket(_m.get("groupItemTitle", _m.get("question", "")))
+                            if _label:
+                                labels.append(_label)
+            except Exception as _e:
+                log.warning(f"bracket label fallback fetch failed: {_e}")
+        if labels:
+            dynamic_brackets = sorted(set(labels), key=_bracket_lo)
 
     model_outputs, weights, conf_bands, ensemble_avg, hourly_avgs, dow_weights_map, bracket_probs = _compute_pacing_models(
         running_total, elapsed_days, remaining_days, total_days,
