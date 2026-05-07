@@ -1103,8 +1103,17 @@ export default function ModuleDetailPage() {
         const totalShares = openPositions.reduce((s, p) => s + (p.size || 0), 0)
         const avgCostPerShare = totalShares > 0 ? totalInvested / totalShares : 0
         const realizedPnl = closedPositions.reduce((s, p) => s + (p.realized_pnl || 0), 0)
-        const fmtDollars = (n: number) => `$${Math.round(Math.abs(n)).toLocaleString()}`
-        const fmtDollarsSigned = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.round(Math.abs(n)).toLocaleString()}`
+        const fmtDollars = (n: number) => {
+          const abs = Math.abs(n)
+          if (abs < 1000) return `$${abs.toFixed(2)}`
+          return `$${Math.round(abs).toLocaleString()}`
+        }
+        const fmtDollarsSigned = (n: number) => {
+          const abs = Math.abs(n)
+          const sign = n >= 0 ? "+" : "-"
+          if (abs < 1000) return `${sign}$${abs.toFixed(2)}`
+          return `${sign}$${Math.round(abs).toLocaleString()}`
+        }
         const totalTrades = openPositions.length + closedPositions.length
         const accountBankroll = riskSettings?.bankroll || 1000
         const budgetPct = ((module.budget / accountBankroll) * 100).toFixed(0)
@@ -1126,7 +1135,7 @@ export default function ModuleDetailPage() {
               <p className="mt-1 text-2xl font-bold">{fmtDollars(totalInvested)}</p>
               {totalShares > 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  {totalShares.toFixed(1)} shares @ {(avgCostPerShare * 100).toFixed(2)}¢ avg
+                  {totalShares.toFixed(1)} shares across {openPositions.length} entr{openPositions.length !== 1 ? "ies" : "y"}
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">{openPositions.length} open position{openPositions.length !== 1 ? "s" : ""}</p>
