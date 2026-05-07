@@ -963,10 +963,27 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     summary = get_xtracker_summary(raw_data)
     hourly_counts = parse_hourly_counts(raw_data)
     daily_totals = parse_daily_totals(raw_data)
-    weekly_history = await fetch_historical_weekly_totals(handle, weeks=cfg.get("historical_periods", 9))
 
     week_start_str = (tracking or {}).get("startDate", "")[:10]
     week_end_str = (tracking or {}).get("endDate", "")[:10]
+
+    # Compute the actual window length so we only blend matching-window
+    # trackings into the historical prior. Without this, Elon's 7-day and
+    # monthly trackings would inflate the 2-day prior into nonsense
+    # (~322 weekly avg → 297 projected for 2-day → '200+ at 74%' garbage).
+    _hist_window_days = None
+    try:
+        if tracking and tracking.get("startDate") and tracking.get("endDate"):
+            _sd = datetime.fromisoformat(tracking["startDate"].replace("Z", "+00:00"))
+            _ed = datetime.fromisoformat(tracking["endDate"].replace("Z", "+00:00"))
+            _hist_window_days = (_ed - _sd).total_seconds() / 86400.0
+    except Exception:
+        pass
+    weekly_history = await fetch_historical_weekly_totals(
+        handle, weeks=cfg.get("historical_periods", 9),
+        platform=_detect_platform(module.data),
+        target_window_days=_hist_window_days,
+    )
 
     running_total = summary.get("total", 0) or (sum(d["count"] for d in daily_totals) if daily_totals else 0)
     # xTracker returns days_remaining=0 for completed auctions; the legacy
@@ -984,6 +1001,12 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
               .total_seconds() / 86400.0)) if (tracking and tracking.get("startDate") and tracking.get("endDate")) else 7
     )
     remaining_days = _r if _r is not None else max(total_days - elapsed_days, 0.01)
+    # Pre-launch sanity: xTracker reports days_remaining counting from NOW
+    # to endDate, but tweet counting only starts at startDate. For a fresh
+    # auction listed before start, days_remaining can exceed days_total.
+    # Clamp so downstream pacing math never sees remaining > total.
+    if total_days > 0:
+        remaining_days = min(remaining_days, total_days)
     is_complete = bool(summary.get("is_complete")) or remaining_days <= 0
 
     rw = recency_weighted_averages(weekly_history, half_life=cfg.get("recency_half_life", 4.0))
@@ -1102,7 +1125,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
             # Rebuild bracket_probs as a delta on the actual winner
             bracket_probs = {b: (1.0 if b == actual_winner else 0.0)
                              for b in (dynamic_brackets or list((bracket_probs or {}).keys()) or [actual_winner])}
-            from api.modules.shared.projection import ensemble_confidence_bands
+            # ensemble_confidence_bands already imported at module top
             conf_bands = ensemble_confidence_bands(bracket_probs, top_n=cfg.get("confidence_band_top_n", 3))
             ensemble_avg = float(running_total)
             ev_winner = actual_winner

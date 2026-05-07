@@ -399,14 +399,44 @@ async def fetch_market_prices_auto(handle: str = "realDonaldTrump", platform: st
     return prices, slug
 
 
-async def fetch_historical_weekly_totals(handle: str = "realDonaldTrump", weeks: int = 12, platform: str = "truthsocial") -> list[float]:
+async def fetch_historical_weekly_totals(
+    handle: str = "realDonaldTrump",
+    weeks: int = 12,
+    platform: str = "truthsocial",
+    target_window_days: float | None = None,
+) -> list[float]:
+    """Return per-period totals for the most recent N completed periods.
+
+    `target_window_days`: when set, ONLY include past trackings whose
+    window length matches (within ±0.5 days). This prevents the pacing
+    model from blending Elon's 7-day/monthly auctions into the prior
+    for a 2-day auction (which produced absurdly high projections —
+    e.g. 200+ at 74% confidence on a fresh 2-day market).
+    Without this filter, callers get a mixed-window mean that's only
+    valid for whatever the dominant series in the recent history is.
+    """
     # Try local historical data first (from import scripts — more complete)
-    local = _load_local_weekly_totals(handle, weeks)
+    local = _load_local_weekly_totals(handle, weeks, target_window_days=target_window_days)
     if local:
         return local
 
-    # Fallback: fetch live from xTracker API (uses retry+cache)
     trackings = await _fetch_trackings_raw(handle, platform)
+
+    if target_window_days is not None:
+        filtered = []
+        for t in trackings:
+            s, e = t.get("startDate", ""), t.get("endDate", "")
+            if not (s and e):
+                continue
+            try:
+                sd = datetime.fromisoformat(s.replace("Z", "+00:00"))
+                ed = datetime.fromisoformat(e.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                continue
+            wd = (ed - sd).total_seconds() / 86400.0
+            if abs(wd - target_window_days) <= 0.5:
+                filtered.append(t)
+        trackings = filtered
 
     weekly_totals = []
     for t in trackings[:weeks]:
@@ -420,10 +450,22 @@ async def fetch_historical_weekly_totals(handle: str = "realDonaldTrump", weeks:
             if target and isinstance(target, (int, float)):
                 weekly_totals.append(float(target))
 
-    return list(reversed(weekly_totals)) if weekly_totals else [100.0] * 4
+    if weekly_totals:
+        return list(reversed(weekly_totals))
+
+    # No matching-window samples. If a target window was specified but no
+    # samples exist for it (e.g. only 1-2 monthly auctions in the local
+    # cache), scale from the unfiltered mean by window ratio. Conservative
+    # fallback: use 7-day-equivalent default (100/week) and scale.
+    if target_window_days is not None and target_window_days > 0:
+        scaled = 100.0 * (target_window_days / 7.0)
+        return [scaled] * 4
+    return [100.0] * 4
 
 
-def _load_local_weekly_totals(handle: str, weeks: int) -> list[float] | None:
+def _load_local_weekly_totals(
+    handle: str, weeks: int, target_window_days: float | None = None,
+) -> list[float] | None:
     import json as _json
     from pathlib import Path as _Path
 
@@ -437,11 +479,23 @@ def _load_local_weekly_totals(handle: str, weeks: int) -> list[float] | None:
         if not data:
             return None
 
+        # Window filter: if a specific auction window is requested, only
+        # include past trackings of matching window length. Without this,
+        # Elon's mixed-window history (2d/7d/monthly) corrupts the prior
+        # for any specific-window pacing model.
+        if target_window_days is not None:
+            data = [
+                e for e in data
+                if isinstance(e.get("days"), (int, float))
+                and abs(e["days"] - target_window_days) <= 0.5
+            ]
+
         totals = [entry.get("total", 0) for entry in data if entry.get("total", 0) > 0]
         if len(totals) < 4:
+            # Not enough matching-window samples — caller falls back to live xTracker
+            # (which now also applies the window filter).
             return None
 
-        # Return the most recent N weeks
         return totals[-weeks:]
     except Exception:
         return None
