@@ -446,25 +446,32 @@ class TradingEngine:
             import asyncio as _asyncio
             from api.modules.shared.polymarket import fetch_order_books_for_brackets
             sb = get_supabase()
-            modules = sb.table("modules").select("id,market_slug").neq("status", "inactive").execute()
+            modules = sb.table("modules").select("id,name,strategy,market_slug,config").neq("status", "inactive").execute()
             now = datetime.now(timezone.utc).isoformat()
             total = 0
             for m in modules.data or []:
-                slug = m.get("market_slug")
-                if not slug:
+                # Collect candidate slugs: legacy market_slug + any series_slug from auction_types
+                slugs: list[str] = []
+                if m.get("market_slug"):
+                    slugs.append(m["market_slug"])
+                cfg = m.get("config") or {}
+                for at in (cfg.get("auction_types") or []):
+                    if not at.get("enabled", True):
+                        continue
+                    s = at.get("series_slug") or at.get("market_slug")
+                    if s and s not in slugs:
+                        slugs.append(s)
+                if not slugs:
                     continue
                 bracket_set: set[str] = set()
-                # Brackets where we hold open positions — must always have order book data
                 open_pos = sb.table("positions").select("bracket").eq("module_id", m["id"]).eq("status", "open").execute()
                 for p in (open_pos.data or []):
                     if p.get("bracket"):
                         bracket_set.add(p["bracket"])
-                # Brackets with recent signal activity
                 recent_signals = sb.table("signals").select("bracket").eq("module_id", m["id"]).order("created_at", desc=True).limit(50).execute()
                 for s in (recent_signals.data or []):
                     if s.get("bracket"):
                         bracket_set.add(s["bracket"])
-                # Fallback when nothing fresh: pull all brackets ever seen in signals so chart isn't empty
                 if not bracket_set:
                     all_signals = sb.table("signals").select("bracket").eq("module_id", m["id"]).limit(500).execute()
                     for s in (all_signals.data or []):
@@ -473,25 +480,26 @@ class TradingEngine:
                 brackets = list(bracket_set)
                 if not brackets:
                     continue
-                try:
-                    books = _run_async(fetch_order_books_for_brackets(slug, brackets))
-                except Exception as e:
-                    log.warning(f"Order book snapshot fetch failed for {slug}: {e}")
-                    continue
                 rows = []
-                for bracket, book in (books or {}).items():
-                    rows.append({
-                        "module_id": m["id"],
-                        "market_id": slug,
-                        "bracket": bracket,
-                        "best_bid": book.get("best_bid"),
-                        "best_ask": book.get("best_ask"),
-                        "spread": book.get("spread"),
-                        "bid_depth_5": book.get("bid_depth_5"),
-                        "ask_depth_5": book.get("ask_depth_5"),
-                        "midpoint": book.get("midpoint"),
-                        "snapshot_at": now,
-                    })
+                for slug in slugs:
+                    try:
+                        books = _run_async(fetch_order_books_for_brackets(slug, brackets))
+                    except Exception as e:
+                        log.warning(f"Order book snapshot fetch failed for {slug}: {e}")
+                        continue
+                    for bracket, book in (books or {}).items():
+                        rows.append({
+                            "module_id": m["id"],
+                            "market_id": slug,
+                            "bracket": bracket,
+                            "best_bid": book.get("best_bid"),
+                            "best_ask": book.get("best_ask"),
+                            "spread": book.get("spread"),
+                            "bid_depth_5": book.get("bid_depth_5"),
+                            "ask_depth_5": book.get("ask_depth_5"),
+                            "midpoint": book.get("midpoint"),
+                            "snapshot_at": now,
+                        })
                 if rows:
                     sb.table("order_book_snapshots").insert(rows).execute()
                     total += len(rows)

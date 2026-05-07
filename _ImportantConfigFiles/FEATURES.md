@@ -75,6 +75,15 @@
 - `scripts/fetch_historical_auctions.py` — all past xTracker auctions
 - `scripts/import_historical.py` — generic CSV/JSON importer
 
+## Parquet History Tooling (added 2026-05-05)
+**Streamed full Polymarket history (3.5y, 766M trades, 1M markets) via DuckDB+HuggingFace.**
+- `_DataMetricPulls/duckdb_remote.py` — connection helper exposing `markets`/`quant`/`trades` SQL views over remote Parquet
+- `_DataMetricPulls/full_history_analysis.py` — strict-recurring classification + flip-pattern ranking
+- `_DataMetricPulls/duckdb_cache/polymarket_remote.duckdb` — persistent cache of materialized aggregations
+- HF token at `~/.credentials/shared.env` (`HF_TOKEN=hf_…`)
+- **Use this for**: cross-market backtesting, longer-than-3-month historical context, strategy calibration
+- **vs LuciferForge $9 SQLite**: 96× more time, 94× more trades, $0 cost
+
 ## Frontend (9 Pages)
 Dashboard | Modules | Portfolio | Trades | Backtest | Analytics | Notes | Logs | Settings
 

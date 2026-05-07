@@ -241,8 +241,7 @@ export function ConfidenceBands({
         Confidence Bands
       </h2>
       <p className="mt-1 mb-3 text-xs text-muted-foreground">
-        Bot probability vs Polymarket price for each bracket. Disagreements highlight tradeable edge.
-        Bar color shows BOT rank: red = most likely, orange = 2nd, yellow = 3rd, grey = unlikely.
+        Bot probability vs Polymarket price per bracket. Edge = bot − market: positive (green) means bot thinks underpriced; negative (red) means bot thinks overpriced.
       </p>
       {bracketOrder.length > 0 ? (
         <div className="space-y-4">
@@ -268,18 +267,19 @@ export function ConfidenceBands({
               </div>
             )}
           </div>
-          {showMarket && (
-            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <span className="inline-block h-1.5 w-3 rounded-full bg-primary/70" /> Bot prob
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block h-1.5 w-3 rounded-full bg-amber-400/70" /> Polymarket
-              </span>
-              <span className="ml-auto italic">edge = bot − market</span>
-            </div>
-          )}
-          <div className="space-y-2">
+
+          {/* Column header */}
+          <div className={cn(
+            "grid items-center gap-2 border-b border-border/60 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground",
+            showMarket ? "grid-cols-[60px_1fr_1fr_50px]" : "grid-cols-[60px_1fr]",
+          )}>
+            <div>Bracket</div>
+            <div>Bot prob</div>
+            {showMarket && <div>Polymarket</div>}
+            {showMarket && <div className="text-right">Edge</div>}
+          </div>
+
+          <div className="space-y-1">
             {bracketOrder.map((b, i) => {
               const botPct = b.probability * 100
               const mktPct = showMarket ? (marketPrices![b.bracket] ?? 0) * 100 : 0
@@ -287,45 +287,76 @@ export function ConfidenceBands({
               const color = probColor(rank)
               const edge = botPct - mktPct
               return (
-                <div key={i} className="space-y-0.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className={cn("font-medium", rank === 0 && "font-bold")}>{b.bracket}</span>
-                    <div className="flex items-center gap-2 font-mono text-xs">
-                      <span style={{ color }} title="Bot probability">{fmt(botPct)}%</span>
-                      {showMarket && (
-                        <>
-                          <span className="text-muted-foreground/50">/</span>
-                          <span className="text-amber-500" title="Polymarket price">{fmt(mktPct)}¢</span>
-                          {Math.abs(edge) >= 5 && (
-                            <span className={cn(
-                              "text-[10px] font-semibold",
-                              edge > 0 ? "text-success" : "text-destructive",
-                            )} title={edge > 0 ? "Bot thinks underpriced" : "Bot thinks overpriced"}>
-                              {edge > 0 ? "+" : ""}{fmt(edge)}
-                            </span>
+                <div
+                  key={i}
+                  className={cn(
+                    "grid items-center gap-2 rounded py-1 text-xs hover:bg-accent/30",
+                    showMarket ? "grid-cols-[60px_1fr_1fr_50px]" : "grid-cols-[60px_1fr]",
+                  )}
+                >
+                  {/* Bracket label */}
+                  <div className={cn("font-medium", rank === 0 && "font-bold text-foreground")}>
+                    {b.bracket}
+                  </div>
+
+                  {/* Bot prob: bar + % together */}
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(botPct * 1.5, 100)}%`, backgroundColor: color, opacity: 0.9 }}
+                      />
+                    </div>
+                    <span className="w-12 text-right font-mono" style={{ color }}>
+                      {fmt(botPct)}%
+                    </span>
+                  </div>
+
+                  {/* Polymarket: bar + ¢ together */}
+                  {showMarket && (
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-amber-400 transition-all"
+                          style={{ width: `${Math.min(mktPct * 1.5, 100)}%`, opacity: 0.9 }}
+                        />
+                      </div>
+                      <span className="w-12 text-right font-mono text-amber-500">
+                        {fmt(mktPct)}¢
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Edge */}
+                  {showMarket && (
+                    <div className="text-right font-mono">
+                      {Math.abs(edge) >= 1 ? (
+                        <span
+                          className={cn(
+                            "text-[11px] font-semibold",
+                            edge > 0 ? "text-success" : "text-destructive",
                           )}
-                        </>
+                          title={edge > 0 ? "Bot thinks underpriced (buy candidate)" : "Bot thinks overpriced (avoid)"}
+                        >
+                          {edge > 0 ? "+" : ""}{fmt(edge)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
                       )}
                     </div>
-                  </div>
-                  <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
-                    {/* Bot probability bar (primary color, full opacity) */}
-                    <div
-                      className="absolute left-0 top-0 h-full rounded-full transition-all"
-                      style={{ width: `${Math.min(botPct * 1.5, 100)}%`, backgroundColor: color, opacity: 0.85 }}
-                    />
-                    {/* Polymarket price line (amber) - only the right edge of where it would end */}
-                    {showMarket && mktPct > 0 && (
-                      <div
-                        className="absolute top-0 h-full w-0.5 bg-amber-400"
-                        style={{ left: `${Math.min(mktPct * 1.5, 99.5)}%` }}
-                        title={`Polymarket: ${fmt(mktPct)}¢`}
-                      />
-                    )}
-                  </div>
+                  )}
                 </div>
               )
             })}
+          </div>
+
+          <div className="flex items-center gap-3 border-t border-border/60 pt-2 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-1.5 w-3 rounded-full bg-primary/70" /> Bot rank colors: red=1st, orange=2nd, yellow=3rd
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-1.5 w-3 rounded-full bg-amber-400/70" /> Polymarket
+            </span>
           </div>
         </div>
       ) : (

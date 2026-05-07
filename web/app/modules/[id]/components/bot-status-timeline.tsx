@@ -142,25 +142,46 @@ export function BotStatusTimeline({
 
         {/* Holdings list shown only when holding */}
         {nowState === "holding" && holdingsLines.length > 0 && (
-          <div className="mt-2 ml-7 space-y-1.5">
-            {holdingsLines.map((h, i) => (
-              <div key={i} className="flex items-start justify-between text-xs">
+          <div className="mt-2 ml-7 space-y-2">
+            {/* Subheader row so the user can decode the columns */}
+            <div className="grid grid-cols-[1fr_auto_auto] gap-3 text-[9px] uppercase tracking-wider text-muted-foreground/70">
+              <span>Bracket</span>
+              <span className="text-right">Cost basis</span>
+              <span className="text-right">Unrealized P&amp;L</span>
+            </div>
+            {holdingsLines.map((h, i) => {
+              // Format avg-price: prices < $0.01 (1¢) often display as "0.80¢"
+              // which reads like "80 cents" — ambiguous. Use $/share for clarity
+              // when sub-cent.
+              const cents = h.avgPrice * 100
+              const avgLabel = cents < 1
+                ? `$${h.avgPrice.toFixed(4)}/sh (${cents.toFixed(2)}¢)`
+                : `${cents.toFixed(2)}¢/sh`
+              return (
+              <div key={i} className="grid grid-cols-[1fr_auto_auto] items-start gap-3 text-xs">
                 <div className="flex flex-col">
                   <span className="font-medium text-foreground">{h.bracket}</span>
                   <span className="text-[10px] text-muted-foreground">
-                    {h.shares.toFixed(1)} shares @ {(h.avgPrice * 100).toFixed(2)}¢
+                    {h.shares.toFixed(1)} shares @ {avgLabel}
                   </span>
                 </div>
-                <div className="flex items-center gap-3 text-muted-foreground">
-                  <span>${h.cost.toFixed(2)} cost</span>
+                <div className="text-right text-muted-foreground">
+                  <div>${h.cost.toFixed(2)}</div>
+                  <div className="text-[9px] text-muted-foreground/70">paid</div>
+                </div>
+                <div className="text-right">
                   {h.pnl != null && (
-                    <span className={cn("font-medium", h.pnl >= 0 ? "text-success" : "text-destructive")}>
+                    <>
+                    <div className={cn("font-medium", h.pnl >= 0 ? "text-success" : "text-destructive")}>
                       {h.pnl >= 0 ? "+" : ""}${h.pnl.toFixed(2)}
-                    </span>
+                    </div>
+                    <div className="text-[9px] text-muted-foreground/70">vs current price</div>
+                    </>
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
