@@ -85,3 +85,35 @@ class BaseModule(ABC):
         """Direct post-count implementation. Only required when
         supports_direct_post_count() returns True."""
         raise NotImplementedError(f"{self.name} does not support direct post counting")
+
+    # --- Bracket Analysis card support (spec: WHALE_BRACKET_CARDS_SPEC.md) ---
+
+    def get_brackets(self) -> list[str]:
+        """Bracket labels this module trades, in display order.
+
+        Used by the Bracket Analysis card to render rows even when no
+        signals exist yet. Override per-module. Default empty list -> the
+        card derives brackets from observed signal data instead."""
+        return []
+
+    # Bracket-card config defaults. Per-module overrides go in the
+    # module's module_config.DEFAULT_CONFIG; these are the fallbacks the
+    # endpoint applies when a module hasn't customised them.
+    BRACKET_CARD_DEFAULTS: dict = {
+        "bracket_card_window": "last_10",   # last_5 | last_10 | all_time
+        "bracket_card_mode": "all_signals", # all_signals | spike_only
+        "bracket_card_reserve_pct": 25,     # 0-100, integer percent
+    }
+
+    def get_bracket_card_config(self, module_id: str) -> dict:
+        """Resolved bracket-card config (own config overrides class defaults)."""
+        cfg = {}
+        try:
+            cfg = self.get_config(module_id) or {}
+        except Exception:
+            pass
+        out = dict(self.BRACKET_CARD_DEFAULTS)
+        for k in out:
+            if k in cfg and cfg[k] is not None:
+                out[k] = cfg[k]
+        return out

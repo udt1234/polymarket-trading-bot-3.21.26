@@ -76,6 +76,9 @@ class TruthSocialModule(BaseModule):
     def get_platform(self) -> str:
         return "truthsocial"
 
+    def get_brackets(self) -> list[str]:
+        return list(self.BRACKETS)
+
     def get_display_keywords(self) -> list[str]:
         return ["truth", "trump"]
 

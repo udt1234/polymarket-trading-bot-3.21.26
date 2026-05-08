@@ -438,7 +438,7 @@ class SpikeTradingModule(BaseModule):
                 best_bid=bid,
                 best_ask=ask,
                 metadata={
-                    "strategy": "spike_trading",
+                    "strategy": "spike_trading", "signal_type": "spike",
                     "strategy_name": strategy.name,
                     "profile_label": profile.get("label"),
                     "tier": tier.get("tier"),
@@ -483,7 +483,7 @@ class SpikeTradingModule(BaseModule):
                 confidence=0.5,
                 best_bid=bid, best_ask=ask,
                 metadata={
-                    "strategy": "spike_trading", "tier": tier_idx, "tier_label": label,
+                    "strategy": "spike_trading", "signal_type": "spike", "tier": tier_idx, "tier_label": label,
                     "tier_type": "buy", "skip_edge_check": True,
                     "target_price": target, "adaptive_price": limit_price,
                 },
@@ -528,7 +528,7 @@ class SpikeTradingModule(BaseModule):
                 best_bid=bid,
                 best_ask=ask,
                 metadata={
-                    "strategy": "spike_trading",
+                    "strategy": "spike_trading", "signal_type": "spike",
                     "tier_type": "slow_bleed",
                     "reason": "SELL-NOW thin book — auto slow-bleed",
                     "position_id": position["id"],
@@ -550,7 +550,7 @@ class SpikeTradingModule(BaseModule):
             best_bid=bid,
             best_ask=ask,
             metadata={
-                "strategy": "spike_trading",
+                "strategy": "spike_trading", "signal_type": "spike",
                 "tier_type": "market_sell",
                 "reason": "SELL-NOW classifier triggered",
                 "position_id": position["id"],
