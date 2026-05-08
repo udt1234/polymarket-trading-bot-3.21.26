@@ -1617,6 +1617,93 @@ async def price_history(
     return {"series": series, "trades": trades}
 
 
+@router.get("/{module_id}/brackets")
+async def get_brackets(
+    module_id: str,
+    mode: str = Query(default="all_signals", regex="^(all_signals|spike_only)$"),
+    window: str = Query(default="last_10", regex="^(last_5|last_10|all_time)$"),
+    reserve_pct: int = Query(default=25, ge=0, le=100),
+):
+    """Bracket Analysis card payload.
+
+    Spec: WHALE_BRACKET_CARDS_SPEC.md. Per-bracket signal/trade/win stats,
+    recent-vs-all-time comparison, deterministic headline, and the
+    allocation recommendation. Module-id-driven; no per-module branching.
+    """
+    from api.services.bracket_stats import compute_bracket_stats, allocate
+    from api.services.rules_engine import render_bracket_headline
+
+    module = _resolve_module(module_id)
+    # Module-level config can override the request defaults if the user
+    # hasn't picked an explicit value via query string. Defaults live on
+    # BaseModule.BRACKET_CARD_DEFAULTS so each module owns its own.
+    if module is not None:
+        try:
+            cfg = module.get_bracket_card_config(module_id)
+        except Exception:
+            cfg = {}
+        # request value wins over config
+        if mode == "all_signals" and cfg.get("bracket_card_mode"):
+            mode = cfg["bracket_card_mode"]
+        if window == "last_10" and cfg.get("bracket_card_window"):
+            window = cfg["bracket_card_window"]
+        if reserve_pct == 25 and cfg.get("bracket_card_reserve_pct") is not None:
+            reserve_pct = int(cfg["bracket_card_reserve_pct"])
+
+    stats = compute_bracket_stats(module_id, window=window, mode=mode)
+    rows = stats["rows"]
+
+    # If module declares brackets it expects to trade, ensure each appears
+    # in the table even with zero signals — gives the user "never tested" rows.
+    if module is not None:
+        try:
+            declared = module.get_brackets() or []
+        except Exception:
+            declared = []
+        existing = {r["bracket"] for r in rows}
+        for b in declared:
+            if b not in existing:
+                rows.append({
+                    "bracket": b,
+                    "signals_count": 0,
+                    "trades_count": 0,
+                    "won_count": 0,
+                    "events_count": 0,
+                    "win_rate_pct": 0.0,
+                    "avg_entry_price": 0.0,
+                    "avg_roi_pct": 0.0,
+                    "ev_per_trade_usd": 0.0,
+                    "last_5_results": "",
+                    "annotation": "never_tested",
+                    "trade_share_pct": 0.0,
+                })
+
+    allocation = allocate(rows, reserve_pct=reserve_pct)
+    headline = render_bracket_headline(
+        rows=rows,
+        comparison=stats["comparison"],
+        allocation=allocation,
+        mode=mode,
+        n_auctions=stats["n_auctions"],
+        data_quality=stats["data_quality"],
+        window_label=window,
+    )
+
+    return {
+        "headline": {"lines": headline},
+        "rows": rows,
+        "comparison": stats["comparison"],
+        "allocation": allocation,
+        "n_auctions": stats["n_auctions"],
+        "data_quality": stats["data_quality"],
+        "config": {
+            "mode": mode,
+            "window": window,
+            "reserve_pct": reserve_pct,
+        },
+    }
+
+
 @router.get("/{module_id}/post-count-history")
 async def post_count_history(
     module_id: str,

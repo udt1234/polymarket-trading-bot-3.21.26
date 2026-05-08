@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { DailyPacingTable } from "./components/daily-pacing-table"
 import { DowHeatmap, HourlyHeatmap, ConfidenceBands, EnsembleBreakdown } from "./components/pacing-analysis"
+import { BracketAnalysisCard } from "./components/bracket-analysis-card"
 import { PriceByDowHourHeatmap, PriceByElapsedDayHeatmap } from "./components/price-heatmaps"
 import { PositionsTable } from "./components/positions-table"
 import { SignalsTable } from "./components/signals-table"
@@ -1507,6 +1508,12 @@ export default function ModuleDetailPage() {
           />
         </CollapsibleCard>
       </div>
+
+      {/* Bracket Analysis (per spec WHALE_BRACKET_CARDS_SPEC.md) — full width,
+          generic across all modules. Headline above the card box. */}
+      <CollapsibleCard id="bracket-analysis" title="Bracket Analysis">
+        <BracketAnalysisCard moduleId={module.id} />
+      </CollapsibleCard>
 
       {/* Open Positions */}
       <CollapsibleCard id="open-positions" title="Open Positions">
