@@ -457,30 +457,55 @@ class TradingEngine:
             now = datetime.now(timezone.utc).isoformat()
             total = 0
             for m in modules.data or []:
-                # Collect candidate slugs: legacy market_slug + any series_slug from
-                # the per-module settings row (auction_types config).
-                slugs: list[str] = []
-                if m.get("market_slug"):
-                    slugs.append(m["market_slug"])
-                # Resolve via module instance so defaults are applied (saved
-                # config may be empty but module ships with sensible defaults).
+                # Polymarket /events?slug= expects an EVENT slug (per-auction),
+                # not a SERIES slug. Build the event-slug list:
+                #   1. Legacy modules.market_slug (if set)
+                #   2. Each enabled auction_types[].market_slug (if set)
+                #   3. Live event slugs resolved from each series_slug via
+                #      fetch_active_auctions_from_series.
+                event_slugs: list[str] = []
+
+                def _add(s: str | None):
+                    if s and s not in event_slugs:
+                        event_slugs.append(s)
+
+                _add(m.get("market_slug"))
+
                 try:
                     module = self.registry.for_db_row(m)
                     cfg = module.get_config(m["id"]) if module and hasattr(module, "get_config") else {}
                 except Exception:
                     cfg = {}
+
+                series_slugs: list[str] = []
                 for at in (cfg.get("auction_types") or []):
                     if not at.get("enabled", True):
                         continue
-                    s = at.get("series_slug") or at.get("market_slug")
-                    if s and s not in slugs:
-                        slugs.append(s)
-                # Top-level series_slug (legacy single-auction config)
-                top_slug = cfg.get("series_slug")
-                if top_slug and top_slug not in slugs:
-                    slugs.append(top_slug)
-                if not slugs:
+                    _add(at.get("market_slug"))
+                    ss = at.get("series_slug")
+                    if ss and ss not in series_slugs:
+                        series_slugs.append(ss)
+                top_series = cfg.get("series_slug")
+                if top_series and top_series not in series_slugs:
+                    series_slugs.append(top_series)
+
+                # Resolve series_slug -> active event slugs via Gamma /series.
+                if series_slugs:
+                    try:
+                        from api.modules.spike_trading.data import fetch_active_auctions_from_series
+                        for ss in series_slugs:
+                            evts = _run_async(fetch_active_auctions_from_series(ss))
+                            for e in evts or []:
+                                link = e.get("marketLink", "")
+                                # marketLink looks like https://polymarket.com/event/<slug>
+                                if "/event/" in link:
+                                    _add(link.split("/event/", 1)[1].strip("/").split("?")[0])
+                    except Exception as e:
+                        log.warning(f"Series resolve failed for module {m.get('id')}: {e}")
+
+                if not event_slugs:
                     continue
+                slugs = event_slugs
                 bracket_set: set[str] = set()
                 open_pos = sb.table("positions").select("bracket").eq("module_id", m["id"]).eq("status", "open").execute()
                 for p in (open_pos.data or []):

@@ -210,7 +210,8 @@ export default function ModuleDetailPage() {
     id ? `/api/modules/${id}/strategy-metadata` : null
   )
   const { data: priceHeatmaps } = useApi<any>(
-    id ? `/api/modules/${id}/price-heatmaps` : null
+    id ? `/api/modules/${id}/price-heatmaps${activeTrackingId ? `?tracking_id=${activeTrackingId}` : ""}` : null,
+    [activeTrackingId]
   )
   const { data: auctionHistory } = useApi<any[]>(
     id ? `/api/modules/${id}/auction-history?limit=20` : null,
@@ -1637,7 +1638,7 @@ export default function ModuleDetailPage() {
             </CollapsibleCard>
             {uniqueBrackets.length > 0 && (
               <CollapsibleCard id="price-over-time" title="Price Over Time">
-                <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} />
+                <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} trackingId={activeTrackingId} />
               </CollapsibleCard>
             )}
             {(moduleName.includes("truth") || moduleName.includes("trump")) && (

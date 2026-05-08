@@ -7,11 +7,12 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceL
 interface PriceSeries { bracket: string; price: number; snapshot_hour: string }
 interface Trade { bracket: string; side: string; price: number; executed_at: string }
 
-export function PriceOverTimeChart({ moduleId, brackets }: { moduleId: string; brackets: string[] }) {
+export function PriceOverTimeChart({ moduleId, brackets, trackingId }: { moduleId: string; brackets: string[]; trackingId?: string | null }) {
   const [selected, setSelected] = useState<string>(brackets[0] || "")
+  const tidParam = trackingId ? `&tracking_id=${trackingId}` : ""
   const { data } = useApi<{ series: PriceSeries[]; trades: Trade[] }>(
-    moduleId && selected ? `/api/modules/${moduleId}/price-history?bracket=${encodeURIComponent(selected)}&limit=200` : null,
-    [selected]
+    moduleId && selected ? `/api/modules/${moduleId}/price-history?bracket=${encodeURIComponent(selected)}&limit=200${tidParam}` : null,
+    [selected, trackingId]
   )
 
   const chartData = (data?.series || []).map((s) => ({

@@ -48,15 +48,43 @@ def _take_price_snapshot_sync():
         slug = None
         active_tracking = None
 
+        # Window-aware tracking pick: a module like Spike (2-day) must NOT
+        # log monthly's brackets. xTracker's first-active is whichever was
+        # created earliest, which for Elon is always the monthly tracking.
+        pref_w = None
+        try:
+            pref_w = module.get_auction_window_days()
+        except Exception:
+            pass
         try:
             res = client.get(f"{XTRACKER}/users/{handle}/trackings", params={"platform": platform})
             data = res.json()
             trackings = data.get("data", data) if isinstance(data, dict) else data
             if isinstance(trackings, dict):
                 trackings = trackings.get("trackings", [])
-            active = [t for t in trackings if t.get("isActive")]
-            if active:
-                active_tracking = active[0]
+            now_dt = now
+            active_pairs = []
+            for t in trackings:
+                s_str, e_str = t.get("startDate", ""), t.get("endDate", "")
+                if not (s_str and e_str):
+                    continue
+                try:
+                    s_dt = datetime.fromisoformat(s_str.replace("Z", "+00:00"))
+                    e_dt = datetime.fromisoformat(e_str.replace("Z", "+00:00"))
+                except Exception:
+                    continue
+                if s_dt <= now_dt <= e_dt:
+                    active_pairs.append((t, s_dt, e_dt))
+            if pref_w is not None:
+                matched = [
+                    p for p in active_pairs
+                    if abs((p[2] - p[1]).total_seconds() / 86400.0 - pref_w) <= 0.15
+                ]
+                if matched:
+                    active_pairs = matched
+            active_pairs.sort(key=lambda x: x[1])
+            if active_pairs:
+                active_tracking = active_pairs[0][0]
                 slug = extract_slug_from_tracking(active_tracking)
         except Exception:
             pass

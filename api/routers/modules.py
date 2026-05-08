@@ -1324,11 +1324,17 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
 
 
 @router.get("/{module_id}/price-heatmaps")
-async def get_price_heatmaps(module_id: str):
+async def get_price_heatmaps(module_id: str, tracking_id: str | None = Query(default=None)):
+    """Bracket-price heatmaps. Scope to a specific tracking when provided so
+    the dashboard's auction dropdown can filter the view to the current
+    auction instead of bleeding past+monthly snapshots into the table."""
     sb = get_supabase()
-    rows = sb.table("price_snapshots").select(
-        "bracket,price,dow,hour_of_day,elapsed_days"
-    ).eq("module_id", module_id).order("snapshot_hour").execute()
+    q = sb.table("price_snapshots").select(
+        "bracket,price,dow,hour_of_day,elapsed_days,tracking_id"
+    ).eq("module_id", module_id)
+    if tracking_id:
+        q = q.eq("tracking_id", tracking_id)
+    rows = q.order("snapshot_hour").execute()
 
     if not rows.data:
         return {"by_dow_hour": [], "by_elapsed_day": [], "snapshot_count": 0}
@@ -1588,15 +1594,22 @@ async def parquet_preview(module_id: str):
 
 
 @router.get("/{module_id}/price-history")
-async def price_history(module_id: str, bracket: str | None = None, limit: int = 200):
+async def price_history(
+    module_id: str,
+    bracket: str | None = None,
+    tracking_id: str | None = Query(default=None),
+    limit: int = 200,
+):
     sb = get_supabase()
-    q = sb.table("price_snapshots").select("bracket,price,volume,snapshot_hour").eq("module_id", module_id)
+    q = sb.table("price_snapshots").select("bracket,price,volume,snapshot_hour,tracking_id").eq("module_id", module_id)
     if bracket:
         q = q.eq("bracket", bracket)
+    if tracking_id:
+        q = q.eq("tracking_id", tracking_id)
     result = q.order("snapshot_hour", desc=False).limit(limit).execute()
     series = result.data or []
 
-    trades_result = sb.table("trades").select("bracket,side,price,size,executed_at").eq("module_id", module_id).order("executed_at", desc=False).limit(100).execute()
+    trades_result = sb.table("trades").select("bracket,side,price,size,executed_at,market_id").eq("module_id", module_id).order("executed_at", desc=False).limit(100).execute()
     trades = trades_result.data or []
     if bracket:
         trades = [t for t in trades if t.get("bracket") == bracket]
