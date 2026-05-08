@@ -1,16 +1,18 @@
-"""Per-bracket signal/trade/win statistics for the Bracket Analysis card.
+"""Per-bracket signal/trade/win statistics for the Bracket Analysis card (v2).
 
 Spec: _ImportantConfigFiles/WHALE_BRACKET_CARDS_SPEC.md
 
+v2 (2026-05-08): primary data source is auction_archive (one row per
+resolved auction with bracket_outcomes) instead of positions. This unlocks
+the "all-time win%" column with thousands of historical auctions. Bot-only
+metrics (signals_count, trades_count, ev_per_trade, last_5_results) still
+come from signals/positions/trades.
+
 Pure-function module-id-driven analytics. No side effects, no per-module
-branching. The `mode` filter (spike_only vs all_signals) reads
-signals.signal_type which is populated by the 013_signal_type migration.
-If signal_type is missing on a row (e.g. migration not yet run), we treat
-it as 'baseline'.
+branching.
 """
 from __future__ import annotations
 from collections import defaultdict
-from datetime import datetime, timezone
 from typing import Literal
 
 from api.dependencies import get_supabase
@@ -27,33 +29,71 @@ def _window_size(window: str) -> int | None:
     return None
 
 
-def _bracket_won(positions: list[dict]) -> bool:
-    """A bracket 'won' for an auction iff at least one closed position with
-    realized_pnl > 0 exists. Open positions don't count toward win rate yet."""
-    return any(
-        (p.get("status") != "open") and ((p.get("realized_pnl") or 0) > 0)
-        for p in positions
-    )
-
-
-def _ev_per_trade(trades: list[dict], realized_pnl_total: float) -> float:
-    """Expected value per trade. Uses realized P&L for closed positions and
-    average fill cost as the denominator. Returns 0 if no trades."""
-    if not trades:
+def _ev_per_trade(trades_count: int, realized_pnl_total: float) -> float:
+    if not trades_count:
         return 0.0
-    return round(realized_pnl_total / len(trades), 2)
+    return round(realized_pnl_total / trades_count, 2)
 
 
-def _last_5_results(positions: list[dict]) -> str:
-    """Compress recent closed-position outcomes to a 'WLWLW' string. W = pnl>0,
-    L = pnl<=0. Open positions skipped. Most recent first up to 5 chars."""
-    closed = [p for p in positions if p.get("status") != "open"]
-    closed.sort(key=lambda p: p.get("closed_at") or p.get("opened_at") or "", reverse=True)
-    out = []
-    for p in closed[:5]:
-        pnl = p.get("realized_pnl") or 0
-        out.append("W" if pnl > 0 else "L")
-    return "".join(out)
+def _resolve_module_meta(module_id: str) -> tuple[str | None, float | None]:
+    """Return (handle, window_days) for a module. Used to scope auction_archive
+    rows to the right handle + window."""
+    try:
+        from api.services.engine import engine
+    except Exception:
+        engine = None
+    sb = get_supabase()
+    row = sb.table("modules").select("id,name,strategy").eq("id", module_id).single().execute().data or {}
+    if not row or engine is None:
+        return None, None
+    # Ensure registry has discovered modules. Idempotent.
+    try:
+        if not engine.registry.all_modules():
+            engine.registry.discover()
+    except Exception:
+        pass
+    module = engine.registry.for_db_row(row)
+    if module is None:
+        return None, None
+    try:
+        handle = module.get_handle()
+    except Exception:
+        handle = None
+    try:
+        window_days = module.get_auction_window_days()
+    except Exception:
+        window_days = None
+    return handle, window_days
+
+
+def _archive_rows_for_module(module_id: str, window: str) -> list[dict]:
+    """Pull auction_archive rows for the module's handle + window-days.
+
+    Falls back to all rows for the handle if window_days isn't declared.
+    """
+    handle, win_days = _resolve_module_meta(module_id)
+    sb = get_supabase()
+    if not handle:
+        return []
+    q = sb.table("auction_archive").select(
+        "id,auction_slug,window_days,end_date,winning_bracket,"
+        "bracket_outcomes,bracket_end_prices,bot_traded,bot_brackets,"
+        "bot_pnl,bot_signals_count,bot_won_brackets"
+    ).eq("handle", handle)
+    # Tolerance: ±0.5 day on the window match. Spike (2-day) only sees 2-day
+    # auctions; Trump (7-day) only sees 7-day. Modules that don't declare a
+    # window get all rows.
+    if win_days is not None:
+        q = q.gte("window_days", float(win_days) - 0.5).lte(
+            "window_days", float(win_days) + 0.5
+        )
+    res = q.order("end_date", desc=True).limit(2000).execute()
+    rows = res.data or []
+
+    n_window = _window_size(window)
+    if n_window is not None and len(rows) > n_window:
+        rows = rows[:n_window]
+    return rows
 
 
 def compute_bracket_stats(
@@ -63,28 +103,29 @@ def compute_bracket_stats(
 ) -> dict:
     """Return per-bracket stats for the Bracket Analysis card.
 
-    Shape matches the spec's API response (rows + comparison + n_auctions).
-    Allocation is computed by the caller via allocate().
+    Truth source: auction_archive (one row per resolved auction). Bot-only
+    fields (signals/trades/ev) layer in from signals + positions + trades.
     """
     sb = get_supabase()
+    handle, _ = _resolve_module_meta(module_id)
 
-    # 1. Pull ALL signals for this module (we'll bucket by tracking later via
-    #    market_id since market_id corresponds 1:1 with an auction).
-    # signal_type may not exist yet (migration runs separately) — try with it,
-    # fall back to deriving from metadata if the column is missing.
+    # 1. Window-scoped archive rows = recent ground truth
+    window_rows = _archive_rows_for_module(module_id, window)
+    n_auctions = len(window_rows)
+
+    # 2. All-time archive rows for the comparison column
+    all_time_rows = _archive_rows_for_module(module_id, "all_time")
+
+    # 3. Bot signals + trades + positions (per-module — auction-archive doesn't
+    #    expand to per-fill granularity).
     try:
-        sig_q = sb.table("signals").select(
+        sig_rows = sb.table("signals").select(
             "id,bracket,market_id,signal_type,metadata,created_at"
-        ).eq("module_id", module_id).limit(5000)
-        sig_rows = (sig_q.execute().data or [])
+        ).eq("module_id", module_id).limit(5000).execute().data or []
     except Exception:
-        sig_q = sb.table("signals").select(
+        sig_rows = sb.table("signals").select(
             "id,bracket,market_id,metadata,created_at"
-        ).eq("module_id", module_id).limit(5000)
-        sig_rows = (sig_q.execute().data or [])
-
-    # Backfill signal_type in-memory if column not yet populated, so the card
-    # works correctly even before the migration runs.
+        ).eq("module_id", module_id).limit(5000).execute().data or []
     for s in sig_rows:
         if not s.get("signal_type"):
             md = s.get("metadata") or {}
@@ -93,80 +134,63 @@ def compute_bracket_stats(
                 or ("spike" if md.get("strategy") == "spike_trading" else "baseline")
             )
 
-    # 2. Pull positions + trades for the same window
-    pos_rows = (sb.table("positions").select(
+    pos_rows = sb.table("positions").select(
         "id,bracket,market_id,size,avg_price,exit_price,realized_pnl,unrealized_pnl,status,opened_at,closed_at"
-    ).eq("module_id", module_id).limit(5000).execute().data or [])
+    ).eq("module_id", module_id).limit(5000).execute().data or []
 
-    trade_rows = (sb.table("trades").select(
+    trade_rows = sb.table("trades").select(
         "id,bracket,market_id,size,price,side,executed_at"
-    ).eq("module_id", module_id).limit(5000).execute().data or [])
+    ).eq("module_id", module_id).limit(5000).execute().data or []
 
-    # 3. Window filter: by distinct market_id (each market_id = one auction).
-    distinct_markets = sorted({p.get("market_id") for p in pos_rows if p.get("market_id")})
-    n_window = _window_size(window)
-    if n_window is not None:
-        # Sort markets by most-recent position close/open for that market
-        latest_per_market = {}
-        for p in pos_rows:
-            mid = p.get("market_id")
-            if not mid:
-                continue
-            ts = p.get("closed_at") or p.get("opened_at") or ""
-            if ts > latest_per_market.get(mid, ""):
-                latest_per_market[mid] = ts
-        ordered = sorted(distinct_markets, key=lambda m: latest_per_market.get(m, ""), reverse=True)
-        in_window = set(ordered[:n_window])
-    else:
-        in_window = set(distinct_markets)
+    # 4. Apply mode filter to bot signals (spike_only or all_signals)
+    if mode == "spike_only":
+        sig_rows = [s for s in sig_rows if s.get("signal_type") == "spike"]
 
-    # 4. Apply window + mode filters
-    def _sig_passes(s):
-        if s.get("market_id") not in in_window and in_window:
-            return False
-        if mode == "spike_only":
-            return s.get("signal_type") == "spike"
-        return True
+    # 5. Build per-bracket aggregates
+    archive_brackets: set[str] = set()
+    for r in window_rows:
+        outcomes = r.get("bracket_outcomes") or {}
+        archive_brackets.update(outcomes.keys())
 
-    sig_w = [s for s in sig_rows if _sig_passes(s)]
-    pos_w = [p for p in pos_rows if (p.get("market_id") in in_window) or not in_window]
-    trade_w = [t for t in trade_rows if (t.get("market_id") in in_window) or not in_window]
+    # Win events from archive (primary source of win rate)
+    events_count: dict[str, int] = defaultdict(int)
+    won_count: dict[str, int] = defaultdict(int)
+    for r in window_rows:
+        outcomes = r.get("bracket_outcomes") or {}
+        for b, won in outcomes.items():
+            events_count[b] += 1
+            if won:
+                won_count[b] += 1
 
-    # 5. Bucket by bracket
-    sigs_by_b = defaultdict(list)
-    pos_by_b = defaultdict(list)
-    trades_by_b = defaultdict(list)
-    for s in sig_w:
+    # Bot-side counts
+    sigs_by_b: dict[str, list] = defaultdict(list)
+    pos_by_b: dict[str, list] = defaultdict(list)
+    trades_by_b: dict[str, list] = defaultdict(list)
+    for s in sig_rows:
         if s.get("bracket"):
             sigs_by_b[s["bracket"]].append(s)
-    for p in pos_w:
+    for p in pos_rows:
         if p.get("bracket"):
             pos_by_b[p["bracket"]].append(p)
-    for t in trade_w:
+    for t in trade_rows:
         if t.get("bracket"):
             trades_by_b[t["bracket"]].append(t)
 
-    # 6. Build rows. One row per bracket that has any signal/position/trade.
-    all_brackets = sorted(set(sigs_by_b) | set(pos_by_b) | set(trades_by_b))
+    # 6. Build rows. Union of archive-observed brackets + bot-touched brackets.
+    all_brackets = sorted(archive_brackets | set(sigs_by_b) | set(pos_by_b) | set(trades_by_b))
     total_trades = sum(len(trades_by_b[b]) for b in all_brackets)
+
     rows = []
     for b in all_brackets:
         sigs = sigs_by_b[b]
         positions = pos_by_b[b]
         trades = trades_by_b[b]
 
-        # Aggregate per-market: each market_id-bracket is one "event".
-        per_market_pos = defaultdict(list)
-        for p in positions:
-            per_market_pos[p["market_id"]].append(p)
-        events = list(per_market_pos.values())
+        n_events = events_count.get(b, 0)
+        n_won = won_count.get(b, 0)
+        win_rate = round((n_won / n_events) * 100, 1) if n_events > 0 else 0.0
 
-        won = sum(1 for ev in events if _bracket_won(ev))
-        # Trades count = actual fills count (multiple trades per position OK).
-        trades_count = len(trades)
-        signals_count = len(sigs)
-
-        # Avg entry price: weighted by trade size, BUYs only.
+        # Avg entry price: weighted by trade size, BUYs only
         buy_trades = [t for t in trades if t.get("side") == "BUY"]
         if buy_trades:
             tot_cost = sum((t.get("price") or 0) * (t.get("size") or 0) for t in buy_trades)
@@ -175,45 +199,60 @@ def compute_bracket_stats(
         else:
             avg_entry = 0.0
 
-        # Realized + unrealized P&L summed per bracket.
         realized = sum(p.get("realized_pnl") or 0 for p in positions if p.get("status") != "open")
         unrealized = sum(p.get("unrealized_pnl") or 0 for p in positions if p.get("status") == "open")
         total_pnl = realized + unrealized
         cost_basis = sum((p.get("avg_price") or 0) * (p.get("size") or 0) for p in positions)
-        avg_roi_pct = round((total_pnl / cost_basis) * 100, 1) if cost_basis > 0 else 0.0
-        ev_per_trade = _ev_per_trade(trades, realized)
+        avg_roi = round((total_pnl / cost_basis) * 100, 1) if cost_basis > 0 else 0.0
+        ev = _ev_per_trade(len(trades), realized)
 
-        win_rate = round((won / len(events)) * 100, 1) if events else 0.0
+        # Last-5 W/L: derived from archive (most recent auctions where this bracket appeared).
+        l5 = []
+        for r in window_rows[:5]:
+            outcomes = r.get("bracket_outcomes") or {}
+            if b in outcomes:
+                l5.append("W" if outcomes[b] else "L")
+        last_5 = "".join(l5)
 
         annotation = None
-        trade_share_pct = round((trades_count / total_trades) * 100, 1) if total_trades > 0 else 0.0
-        if win_rate >= 65 and trade_share_pct < 20 and signals_count >= 10:
+        share = round((len(trades) / total_trades) * 100, 1) if total_trades > 0 else 0.0
+        if win_rate >= 65 and share < 20 and n_events >= 10:
             annotation = "winner"
-        elif ev_per_trade < 0 and trades_count >= 5:
+        elif ev < 0 and len(trades) >= 5:
             annotation = "stop"
 
         rows.append({
             "bracket": b,
-            "signals_count": signals_count,
-            "trades_count": trades_count,
-            "won_count": won,
-            "events_count": len(events),
+            "signals_count": len(sigs),
+            "trades_count": len(trades),
+            "won_count": n_won,
+            "events_count": n_events,
             "win_rate_pct": win_rate,
             "avg_entry_price": avg_entry,
-            "avg_roi_pct": avg_roi_pct,
-            "ev_per_trade_usd": ev_per_trade,
-            "last_5_results": _last_5_results(positions),
+            "avg_roi_pct": avg_roi,
+            "ev_per_trade_usd": ev,
+            "last_5_results": last_5,
             "annotation": annotation,
-            "trade_share_pct": trade_share_pct,
+            "trade_share_pct": share,
         })
 
-    # 7. All-time comparison (no window filter, mode still applies)
-    all_time = compute_comparison_baseline(module_id, mode)
+    # 7. All-time comparison
+    at_events: dict[str, int] = defaultdict(int)
+    at_won: dict[str, int] = defaultdict(int)
+    for r in all_time_rows:
+        outcomes = r.get("bracket_outcomes") or {}
+        for bk, won in outcomes.items():
+            at_events[bk] += 1
+            if won:
+                at_won[bk] += 1
+
     comparison = []
     for r in rows:
         b = r["bracket"]
-        baseline = all_time.get(b, {"win_rate_pct": 0.0})
-        delta = round(r["win_rate_pct"] - baseline["win_rate_pct"], 1)
+        at_n = at_events.get(b, 0)
+        at_w = at_won.get(b, 0)
+        at_pct = round((at_w / at_n) * 100, 1) if at_n else 0.0
+        delta = round(r["win_rate_pct"] - at_pct, 1)
         if delta <= -15:
             trend = "regime_shift"
         elif delta >= 15:
@@ -223,7 +262,8 @@ def compute_bracket_stats(
         comparison.append({
             "bracket": b,
             "last_window_win_pct": r["win_rate_pct"],
-            "all_time_win_pct": baseline["win_rate_pct"],
+            "all_time_win_pct": at_pct,
+            "all_time_n": at_n,
             "delta_pt": delta,
             "trend": trend,
         })
@@ -231,65 +271,13 @@ def compute_bracket_stats(
     return {
         "rows": rows,
         "comparison": comparison,
-        "n_auctions": len(in_window),
-        "data_quality": "ok" if len(in_window) >= 5 else "insufficient",
+        "n_auctions": n_auctions,
+        "data_quality": "ok" if n_auctions >= 5 else "insufficient",
     }
 
 
-def compute_comparison_baseline(module_id: str, mode: Mode) -> dict[str, dict]:
-    """Per-bracket all-time win rate, used for the recent-vs-all-time delta."""
-    sb = get_supabase()
-    pos_rows = (sb.table("positions").select(
-        "bracket,market_id,realized_pnl,status"
-    ).eq("module_id", module_id).limit(5000).execute().data or [])
-
-    if mode == "spike_only":
-        # Only count auctions where a spike-tagged signal fired in this bracket.
-        try:
-            sig_rows = (sb.table("signals").select(
-                "bracket,market_id,signal_type,metadata"
-            ).eq("module_id", module_id).limit(5000).execute().data or [])
-        except Exception:
-            sig_rows = (sb.table("signals").select(
-                "bracket,market_id,metadata"
-            ).eq("module_id", module_id).limit(5000).execute().data or [])
-        spike_keys = set()
-        for s in sig_rows:
-            stype = s.get("signal_type")
-            if not stype:
-                md = s.get("metadata") or {}
-                stype = "spike" if md.get("strategy") == "spike_trading" else "baseline"
-            if stype == "spike" and s.get("market_id") and s.get("bracket"):
-                spike_keys.add((s["bracket"], s["market_id"]))
-        pos_rows = [
-            p for p in pos_rows
-            if (p.get("bracket"), p.get("market_id")) in spike_keys
-        ]
-
-    by_b_market = defaultdict(lambda: defaultdict(list))
-    for p in pos_rows:
-        b, m = p.get("bracket"), p.get("market_id")
-        if b and m:
-            by_b_market[b][m].append(p)
-
-    out = {}
-    for b, markets in by_b_market.items():
-        events = list(markets.values())
-        won = sum(1 for ev in events if _bracket_won(ev))
-        out[b] = {
-            "win_rate_pct": round((won / len(events)) * 100, 1) if events else 0.0,
-            "events_count": len(events),
-        }
-    return out
-
-
 def allocate(rows: list[dict], reserve_pct: float = 25) -> dict:
-    """Allocation algorithm from the spec.
-
-    Inputs: rows from compute_bracket_stats (must include ev_per_trade_usd
-    and signals_count). Returns {bracket: pct} plus 'reserve'. Pct values
-    are 0-100 integers that sum to 100.
-    """
+    """Allocation algorithm from the spec."""
     reserve = max(0, min(100, reserve_pct)) / 100.0
     weights = {}
     for r in rows:
@@ -306,7 +294,6 @@ def allocate(rows: list[dict], reserve_pct: float = 25) -> dict:
         out["reserve"] = 100
         return out
     out = {b: round(w / total * (1 - reserve) * 100) for b, w in weights.items()}
-    # Round error -> push remainder into reserve so total = 100.
     spent = sum(out.values())
     out["reserve"] = max(0, 100 - spent)
     return out

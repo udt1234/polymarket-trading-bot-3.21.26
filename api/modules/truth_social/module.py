@@ -79,6 +79,10 @@ class TruthSocialModule(BaseModule):
     def get_brackets(self) -> list[str]:
         return list(self.BRACKETS)
 
+    def get_auction_window_days(self) -> float | None:
+        # Truth Social Posts module trades the weekly Trump auction (7 days).
+        return 7.0
+
     def get_display_keywords(self) -> list[str]:
         return ["truth", "trump"]
 

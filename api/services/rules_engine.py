@@ -29,22 +29,25 @@ def render_bracket_headline(
     # Always-first: performance summary
     total_signals = sum(r.get("signals_count", 0) for r in rows)
     total_trades = sum(r.get("trades_count", 0) for r in rows)
-    total_won = sum(r.get("won_count", 0) for r in rows)
-    total_events = sum(r.get("events_count", 0) for r in rows)
-    win_pct = round((total_won / total_events) * 100) if total_events else 0
     mode_label = "Spike-triggered" if mode == "spike_only" else "All signals"
 
-    # Show win rate alongside the trade count when we have any closed events.
-    if total_events > 0:
+    # Bot-specific win rate: only count brackets the bot actually traded.
+    bot_traded_rows = [r for r in rows if (r.get("trades_count") or 0) > 0]
+    bot_wins = sum(r.get("won_count", 0) for r in bot_traded_rows)
+    bot_events = sum(r.get("events_count", 0) for r in bot_traded_rows)
+    bot_win_pct = round((bot_wins / bot_events) * 100) if bot_events else 0
+
+    if total_trades > 0 and bot_events > 0:
         header = (
-            f"{mode_label}: {total_trades} trades in {window_label.replace('_',' ')} "
-            f"({total_events} resolved, {win_pct}% win)."
+            f"{mode_label}: {total_trades} trades across {n_auctions} auctions "
+            f"({bot_wins}/{bot_events} bracket events won, {bot_win_pct}%)."
+        )
+    elif n_auctions > 0:
+        header = (
+            f"{mode_label}: 0 trades across {n_auctions} resolved auctions yet."
         )
     else:
-        header = (
-            f"{mode_label}: {total_trades} trades in {window_label.replace('_',' ')} "
-            f"(none resolved yet)."
-        )
+        header = f"{mode_label}: no resolved auctions in window yet."
 
     lines = [header]
 

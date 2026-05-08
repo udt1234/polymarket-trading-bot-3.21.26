@@ -127,6 +127,19 @@ def _resolve_market(sb, market_id: str, positions: list[dict], risk_manager=None
     if module_id:
         _record_calibration(sb, module_id, market_id, final_prices, winning_bracket)
 
+    # Write to auction_archive — one row per resolved auction. Module-driven so
+    # editing one module's archive_resolved_auction() never affects others.
+    if module_id:
+        try:
+            from api.services.auction_archiver import archive_auction
+            from api.services.engine import engine
+            mod_row = sb.table("modules").select("id,name,strategy").eq("id", module_id).single().execute().data
+            module = engine.registry.for_db_row(mod_row) if mod_row else None
+            if module is not None:
+                archive_auction(module, module_id, market_id)
+        except Exception as e:
+            log.warning(f"auction_archive write failed for {market_id}: {e}")
+
     sb.table("logs").insert({
         "log_type": "execution",
         "severity": "info",

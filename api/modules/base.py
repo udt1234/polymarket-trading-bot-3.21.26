@@ -117,3 +117,16 @@ class BaseModule(ABC):
             if k in cfg and cfg[k] is not None:
                 out[k] = cfg[k]
         return out
+
+    def archive_resolved_auction(self, module_id: str, auction_slug: str) -> dict | None:
+        """Hook for modules to supply a custom auction_archive row.
+
+        Default behavior: return None — the auction_archiver service falls
+        back to the generic Gamma-event row builder. Override only if the
+        module wants to add custom metrics (regime, pace_zscore, etc.) to
+        the row's `metrics` JSONB.
+
+        Should return a dict matching the auction_archive schema, OR a
+        partial dict (auction_archiver merges it with the generic builder).
+        Return None to use the generic builder unchanged."""
+        return None
