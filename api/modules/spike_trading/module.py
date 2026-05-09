@@ -418,6 +418,10 @@ class SpikeTradingModule(BaseModule):
         ask = float(market.get("best_ask") or 1.0)
         bracket_cap = float(cfg.get("bracket_cap_pct_of_bankroll", 0.05))
         bracket = profile.get("bracket")
+        # Tick + size constraints from Polymarket CLOB. Limit prices below
+        # min_tick get snapped UP to the nearest valid tick so live mode
+        # accepts the order (paper now mirrors the same rejection rule).
+        min_tick = float(market.get("min_tick_size") or 0.01)
 
         for tier in strategy.build_buy_ladder(state, params):
             target = float(tier.get("price", 0))
@@ -425,6 +429,13 @@ class SpikeTradingModule(BaseModule):
             if target <= 0 or pct <= 0:
                 continue
             limit_price = adaptive_buy_price(bid, ask, target)
+            # Snap to nearest tick. If the strategy wanted $0.003 on a
+            # min_tick=0.01 market, we round to $0.01 (cheapest valid tick).
+            if min_tick > 0:
+                snapped = round(limit_price / min_tick) * min_tick
+                if snapped < min_tick:
+                    snapped = min_tick  # never go below 1 tick
+                limit_price = round(snapped, 4)
             signals.append(Signal(
                 module_id=module_id,
                 market_id=market["market_id"],

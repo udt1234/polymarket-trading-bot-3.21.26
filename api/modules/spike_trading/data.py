@@ -166,6 +166,25 @@ async def fetch_market_for_tracking(tracking: dict, target_bracket: str) -> Opti
         raw = m.get("groupItemTitle", m.get("question", "")) or ""
         if raw.strip().lower() != target_clean:
             continue
+        # CLOB constraints — needed by the strategy ladder builder so tier
+        # prices below min_tick get snapped UP to a valid tick (live API
+        # rejects sub-tick limits).
+        try:
+            min_tick = float(
+                m.get("orderPriceMinTickSize")
+                or m.get("minimumTickSize")
+                or 0.01
+            )
+        except Exception:
+            min_tick = 0.01
+        try:
+            min_order = float(
+                m.get("orderMinSize")
+                or m.get("minimumOrderSize")
+                or 5
+            )
+        except Exception:
+            min_order = 5.0
         return {
             "market_id": str(m.get("id", "")),
             "slug": slug,
@@ -175,6 +194,8 @@ async def fetch_market_for_tracking(tracking: dict, target_bracket: str) -> Opti
             "best_ask": float(m.get("bestAsk") or 1.0),
             "volume_24h": float(m.get("volume24hr") or m.get("volume24Hr") or 0.0),
             "outcome_prices": m.get("outcomePrices"),
+            "min_tick_size": min_tick,
+            "min_order_size": min_order,
         }
     return None
 

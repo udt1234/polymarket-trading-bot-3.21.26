@@ -1030,7 +1030,32 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     # Clamp so downstream pacing math never sees remaining > total.
     if total_days > 0:
         remaining_days = min(remaining_days, total_days)
+    # is_complete = our window-clock says the auction has ended.
+    # polymarket_resolved = Polymarket has actually flipped markets to closed=True.
+    # The two diverge for 24-72h while Polymarket waits to verify final counts.
+    # The dashboard distinguishes "ended-pending-resolution" from "fully resolved"
+    # so the user knows we're waiting on Polymarket vs our data being stuck.
     is_complete = bool(summary.get("is_complete")) or remaining_days <= 0
+    polymarket_resolved = False
+    if is_complete and tracking:
+        try:
+            from api.modules.shared.polymarket import GAMMA_BASE
+            import httpx as _httpx
+            _slug = extract_slug_from_tracking(tracking) or ""
+            if _slug:
+                with _httpx.Client(timeout=8) as _c:
+                    _ev = _c.get(f"{GAMMA_BASE}/events", params={"slug": _slug})
+                    if _ev.status_code == 200:
+                        _events = _ev.json()
+                        if isinstance(_events, list) and _events:
+                            _markets = _events[0].get("markets", []) or []
+                            if _markets:
+                                polymarket_resolved = all(
+                                    m.get("closed") or m.get("resolved")
+                                    for m in _markets
+                                )
+        except Exception:
+            polymarket_resolved = False
 
     rw = recency_weighted_averages(weekly_history, half_life=cfg.get("recency_half_life", 4.0))
     hist_mean = rw["mean"] if rw["mean"] > 0 else 100.0
@@ -1265,6 +1290,8 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         "days_elapsed": round(elapsed_days, 1),
         "days_remaining": round(remaining_days, 1),
         "is_complete": is_complete,
+        "polymarket_resolved": polymarket_resolved,
+        "pending_polymarket_resolution": is_complete and not polymarket_resolved,
         "pace": summary.get("pace", round(list(model_outputs.values())[0], 0)),
         "regime": regime,
         "projected_winner": conf_bands[0]["bracket"] if conf_bands else None,

@@ -37,7 +37,21 @@ class PaperExecutor:
             self._log_rejection(signal, "price_below_floor")
             return {"status": "rejected", "reason": "price_below_floor"}
 
-        fill_price, max_depth = self._check_liquidity(signal)
+        # Tick-size validation: live Polymarket CLOB rejects limit orders that
+        # aren't multiples of the market's min_tick_size (0.01 on standard
+        # markets, 0.001 on neg_risk). Without this check, paper mode can
+        # 'fill' against legacy resting orders at sub-tick prices that live
+        # would never accept — masking a major paper-vs-live divergence.
+        fill_price, max_depth, min_tick, min_order = self._check_liquidity_with_constraints(signal)
+        if min_tick and signal.market_price > 0:
+            ratio = signal.market_price / min_tick
+            if abs(ratio - round(ratio)) > 0.001:
+                log.info(
+                    f"PAPER REJECT {signal.bracket}: price {signal.market_price:.4f} "
+                    f"is not a multiple of min_tick_size {min_tick} (live CLOB would reject)"
+                )
+                self._log_rejection(signal, "below_min_tick_size")
+                return {"status": "rejected", "reason": "below_min_tick_size", "min_tick": min_tick}
         if fill_price is None:
             # Limit didn't cross — order rests on the book unfilled. This is
             # the CORRECT outcome for our spike strategy: we WANT the limit
@@ -74,6 +88,17 @@ class PaperExecutor:
                 release_position_after_failed_exit(existing["id"])
             self._log_rejection(signal, "zero_size")
             return {"status": "rejected", "reason": "zero_size"}
+
+        # min_order_size enforcement (Polymarket CLOB rejects sub-min orders).
+        if min_order and size < min_order:
+            if existing:
+                from api.services.position_manager import release_position_after_failed_exit
+                release_position_after_failed_exit(existing["id"])
+            log.info(
+                f"PAPER REJECT {signal.bracket}: size {size:.4f} < min_order_size {min_order} (live CLOB would reject)"
+            )
+            self._log_rejection(signal, "below_min_order_size")
+            return {"status": "rejected", "reason": "below_min_order_size", "min_order": min_order}
 
         cost = size * fill_price
 
@@ -150,42 +175,52 @@ class PaperExecutor:
         return order
 
     def _check_liquidity(self, signal: Signal) -> tuple:
+        """Backwards-compatible 2-tuple wrapper around the constraint-aware helper."""
+        fill_price, depth, _, _ = self._check_liquidity_with_constraints(signal)
+        return (fill_price, depth)
+
+    def _check_liquidity_with_constraints(self, signal: Signal) -> tuple:
         """For limit orders: only fill if the book is already crossing our limit.
 
         BUY: fills at best_ask only if best_ask <= signal.market_price.
              Otherwise no fill — the limit waits on the book.
         SELL: fills at best_bid only if best_bid >= signal.market_price.
 
-        Returns (fill_price | None, depth). None price = no fill (limit
-        sits unfilled, which is the realistic paper-trading outcome).
+        Returns (fill_price | None, depth, min_tick_size, min_order_size).
+        None price = no fill (limit sits unfilled, the realistic paper outcome).
+        Tick + order constraints come from Polymarket Gamma; the executor uses
+        them to mirror live CLOB rejection rules in paper mode.
         """
         try:
             from api.modules.shared.polymarket import fetch_order_books_for_brackets
             books = _run_async(fetch_order_books_for_brackets(signal.market_id, [signal.bracket]))
             book = books.get(signal.bracket)
             if not book:
-                return (signal.market_price, 0)
+                return (signal.market_price, 0, None, None)
+
+            min_tick = book.get("min_tick_size")
+            min_order = book.get("min_order_size")
 
             if signal.side == "BUY":
                 best_ask = book.get("best_ask")
                 depth = book.get("ask_depth_5", 0)
                 if best_ask is None or best_ask <= 0 or best_ask >= 1:
-                    return (signal.market_price, depth)
+                    return (signal.market_price, depth, min_tick, min_order)
                 # Limit only fills if book ask is at or below our limit
                 if best_ask > signal.market_price:
-                    return (None, depth)
-                return (best_ask, depth)
+                    return (None, depth, min_tick, min_order)
+                return (best_ask, depth, min_tick, min_order)
             else:
                 best_bid = book.get("best_bid")
                 depth = book.get("bid_depth_5", 0)
                 if best_bid is None or best_bid <= 0 or best_bid >= 1:
-                    return (signal.market_price, depth)
+                    return (signal.market_price, depth, min_tick, min_order)
                 if best_bid < signal.market_price:
-                    return (None, depth)
-                return (best_bid, depth)
+                    return (None, depth, min_tick, min_order)
+                return (best_bid, depth, min_tick, min_order)
         except Exception as e:
             log.warning(f"Liquidity check failed for {signal.bracket}, using signal price: {e}")
-            return (signal.market_price, 0)
+            return (signal.market_price, 0, None, None)
 
     def _log_rejection(self, signal: Signal, reason: str):
         try:

@@ -427,6 +427,29 @@ async def fetch_order_books_for_brackets(slug: str, brackets: list[str]) -> dict
             outcome_prices = json.loads(outcome_prices)
         volume = float(m.get("volume", m.get("volumeNum", 0)) or 0)
 
+        # min_tick_size + min_order_size are CLOB constraints. Without them
+        # the executor can't snap limit prices to valid ticks, and live
+        # orders below tick get rejected (paper mode might still 'fill'
+        # against legacy resting orders, masking the gap).
+        try:
+            min_tick = float(
+                m.get("orderPriceMinTickSize")
+                or m.get("minimumTickSize")
+                or m.get("minimum_tick_size")
+                or 0.01
+            )
+        except Exception:
+            min_tick = 0.01
+        try:
+            min_order = float(
+                m.get("orderMinSize")
+                or m.get("minimumOrderSize")
+                or m.get("minimum_order_size")
+                or 5
+            )
+        except Exception:
+            min_order = 5.0
+
         books[bracket] = {
             "best_bid": best_bid,
             "best_ask": best_ask,
@@ -434,6 +457,8 @@ async def fetch_order_books_for_brackets(slug: str, brackets: list[str]) -> dict
             "bid_depth_5": volume * 0.1,
             "ask_depth_5": volume * 0.1,
             "midpoint": (best_bid + best_ask) / 2 if best_bid and best_ask else float(outcome_prices[0]) if outcome_prices else 0,
+            "min_tick_size": min_tick,
+            "min_order_size": min_order,
         }
     return books
 

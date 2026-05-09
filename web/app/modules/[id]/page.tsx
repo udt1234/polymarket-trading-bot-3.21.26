@@ -1301,13 +1301,26 @@ export default function ModuleDetailPage() {
           }).sort((a, b) => a.end_date.localeCompare(b.end_date))
           return (
             <div className="rounded-lg border border-border bg-card p-6 h-full">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Current Auction</h2>
                 {selectedAuc?.market_link && (
                   <a href={selectedAuc.market_link} target="_blank" rel="noopener noreferrer"
                     className="text-primary hover:text-primary/80 text-sm">
                     &#128279;
                   </a>
+                )}
+                {data?.pending_polymarket_resolution && (
+                  <span
+                    className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-500"
+                    title="Auction window has ended but Polymarket has not yet flipped the markets to closed=true. Polymarket has a 24-72h verification window. Position will close automatically once Polymarket settles. Holdings, P&L, and Bracket Analysis will update at that time."
+                  >
+                    Pending Polymarket resolution
+                  </span>
+                )}
+                {data?.polymarket_resolved && (
+                  <span className="rounded bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-success">
+                    Resolved
+                  </span>
                 )}
               </div>
               {data ? (
@@ -1346,7 +1359,11 @@ export default function ModuleDetailPage() {
                       {data.projected_winner && (
                         <div className="flex justify-between border-b border-border pb-2">
                           <span className="text-muted-foreground">
-                            {data.is_complete ? "Actual Winner" : "Projected Winner"}
+                            {data.polymarket_resolved
+                              ? "Actual Winner"
+                              : data.pending_polymarket_resolution
+                                ? "Projected Winner (pending Polymarket)"
+                                : "Projected Winner"}
                           </span>
                           <span className="font-semibold text-primary">{data.projected_winner}</span>
                         </div>
@@ -1354,7 +1371,11 @@ export default function ModuleDetailPage() {
                       {data.ensemble_avg != null && (
                         <div className="flex justify-between border-b border-border pb-2">
                           <span className="text-muted-foreground">
-                            {data.is_complete ? "Final Count" : "Ensemble Avg"}
+                            {data.polymarket_resolved
+                              ? "Final Count"
+                              : data.pending_polymarket_resolution
+                                ? "Final Count (pending Polymarket)"
+                                : "Ensemble Avg"}
                           </span>
                           <span className="font-bold">{data.ensemble_avg} posts</span>
                         </div>
