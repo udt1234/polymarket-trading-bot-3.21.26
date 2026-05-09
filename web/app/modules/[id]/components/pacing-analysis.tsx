@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { cn } from "@/lib/utils"
+import { cn, fmtPrice } from "@/lib/utils"
 import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react"
 
 function fmt(n: number, decimals = 1): string {
@@ -262,7 +262,7 @@ export function ConfidenceBands({
                 <p className="text-[10px] uppercase text-muted-foreground">Polymarket's Pick</p>
                 <p className="text-lg font-bold text-amber-500">{topMarket.bracket}</p>
                 <p className="text-xs text-muted-foreground">
-                  {fmt((marketPrices![topMarket.bracket] ?? 0) * 100)}¢
+                  {fmtPrice(marketPrices![topMarket.bracket] ?? 0)}
                 </p>
               </div>
             )}
@@ -312,7 +312,7 @@ export function ConfidenceBands({
                     </span>
                   </div>
 
-                  {/* Polymarket: bar + ¢ together */}
+                  {/* Polymarket: bar + raw $ price together */}
                   {showMarket && (
                     <div className="flex items-center gap-2">
                       <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
@@ -321,8 +321,8 @@ export function ConfidenceBands({
                           style={{ width: `${Math.min(mktPct * 1.5, 100)}%`, opacity: 0.9 }}
                         />
                       </div>
-                      <span className="w-12 text-right font-mono text-amber-500">
-                        {fmt(mktPct)}¢
+                      <span className="w-16 text-right font-mono text-amber-500">
+                        {fmtPrice(marketPrices![b.bracket] ?? 0)}
                       </span>
                     </div>
                   )}

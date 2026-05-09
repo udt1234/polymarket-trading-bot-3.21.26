@@ -1,6 +1,7 @@
 "use client"
 
 import { useApi } from "@/lib/hooks"
+import { fmtPrice } from "@/lib/utils"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
 interface BookSnapshot {
@@ -26,7 +27,7 @@ export function OrderBookDepthChart({ moduleId }: { moduleId: string }) {
     bracket: s.bracket,
     bidDepth: -(s.bid_depth_5 || 0),
     askDepth: s.ask_depth_5 || 0,
-    spread: s.spread ? (s.spread * 100).toFixed(1) + "¢" : "—",
+    spread: s.spread != null ? fmtPrice(s.spread) : "—",
   }))
 
   return (

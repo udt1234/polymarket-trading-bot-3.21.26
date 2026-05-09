@@ -1,4 +1,4 @@
-import { formatCurrency, cn } from "@/lib/utils"
+import { formatCurrency, cn, fmtPrice } from "@/lib/utils"
 
 function fmt(n: number, decimals = 1): string {
   return parseFloat(n.toFixed(decimals)).toString()
@@ -73,10 +73,10 @@ export function PositionsTable({
                     <td className="px-6 py-3 font-medium">{p.bracket}</td>
                     <td className="px-6 py-3 text-right">{fmt(p.size)}</td>
                     <td className="px-6 py-3 text-right">
-                      <span className="text-muted-foreground">{fmt(p.avg_price * 100)}¢</span>
+                      <span className="text-muted-foreground">{fmtPrice(p.avg_price)}</span>
                       <span className="mx-1">→</span>
                       <span className={cn(nowPrice > p.avg_price ? "text-success" : nowPrice < p.avg_price ? "text-destructive" : "")}>
-                        {fmt(nowPrice * 100)}¢
+                        {fmtPrice(nowPrice)}
                       </span>
                     </td>
                     <td className="px-6 py-3 text-right">{formatCurrency(cost)}</td>

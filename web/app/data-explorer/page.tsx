@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useApi } from "@/lib/hooks"
-import { cn } from "@/lib/utils"
+import { cn, fmtPrice } from "@/lib/utils"
 import { Database, FileText, BarChart3, DollarSign } from "lucide-react"
 
 type View = "raw_posts" | "post_counts" | "prices"
@@ -214,7 +214,7 @@ export default function DataExplorerPage() {
                   <tr key={i} className="border-b border-border/50">
                     <td className="px-3 py-1.5">{fmtDate(r.snapshot_hour)}</td>
                     <td className="px-3 py-1.5 font-medium">{r.bracket}</td>
-                    <td className="px-3 py-1.5 text-right font-mono">{(r.price * 100).toFixed(1)}¢</td>
+                    <td className="px-3 py-1.5 text-right font-mono">{fmtPrice(r.price)}</td>
                     <td className="px-3 py-1.5 text-right text-muted-foreground">{r.volume?.toFixed(0) || "—"}</td>
                     <td className="px-3 py-1.5 text-muted-foreground">{r.dow != null ? DOWS[r.dow] : "—"}</td>
                   </tr>

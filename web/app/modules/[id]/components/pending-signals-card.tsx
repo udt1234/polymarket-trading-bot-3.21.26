@@ -2,7 +2,7 @@
 
 import { useApi } from "@/lib/hooks"
 import { apiFetch } from "@/lib/api"
-import { cn } from "@/lib/utils"
+import { cn, fmtPrice } from "@/lib/utils"
 import { Clock, X } from "lucide-react"
 
 interface PendingSignal {
@@ -70,9 +70,9 @@ export function PendingSignalsCard({ moduleId }: { moduleId: string }) {
                       {r.side}
                     </span>
                   </td>
-                  <td className="py-2 pr-3 text-right font-mono">{(r.original_price * 100).toFixed(1)}¢</td>
-                  <td className="py-2 pr-3 text-right font-mono text-success">{(r.target_price * 100).toFixed(1)}¢</td>
-                  <td className="py-2 pr-3 text-right font-mono text-destructive">{(r.abandon_if_price_above * 100).toFixed(1)}¢</td>
+                  <td className="py-2 pr-3 text-right font-mono">{fmtPrice(r.original_price)}</td>
+                  <td className="py-2 pr-3 text-right font-mono text-success">{fmtPrice(r.target_price)}</td>
+                  <td className="py-2 pr-3 text-right font-mono text-destructive">{fmtPrice(r.abandon_if_price_above)}</td>
                   <td className="py-2 pr-3 text-right font-mono">{(r.expected_drop_pct * 100).toFixed(1)}%</td>
                   <td className="py-2 pr-3 text-right text-muted-foreground">{timeLabel}</td>
                   <td className="py-2 pr-3 text-right text-muted-foreground">{r.analog_count}</td>

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { ChevronDown, ChevronUp, BookOpen } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, fmtPrice } from "@/lib/utils"
 
 interface BiddingStrategyPanelProps {
   config: Record<string, any> | null
@@ -58,8 +58,8 @@ export function BiddingStrategyPanel({ config }: BiddingStrategyPanelProps) {
   const bracketCap = cfg.bracket_cap_pct_of_bankroll ?? 0.05
   const maxOpen = cfg.max_open_positions ?? 3
 
-  // Helpers
-  const cents = (p: number) => `${(p * 100).toFixed(p < 0.01 ? 2 : 1)}¢`
+  // Helpers — Polymarket prices always render as raw dollars (Option B).
+  const cents = (p: number) => fmtPrice(p)
   const pct = (p: number) => `${(p * 100).toFixed(0)}%`
 
   // Compute absolute sell prices from multipliers × top buy tier
@@ -182,7 +182,7 @@ export function BiddingStrategyPanel({ config }: BiddingStrategyPanelProps) {
 
           <Step n={10} title="Resolution">
             When the auction settles, resolution tracker (every 30 min) marks any remaining position closed.
-            P&amp;L locks in. Spike's bet is <em>asymmetric</em>: ~96% of {bracket} auctions die at ≤0.5¢
+            P&amp;L locks in. Spike's bet is <em>asymmetric</em>: ~96% of {bracket} auctions die at ≤$0.005
             (your stop loss handles those); ~2% resolve YES at $1 (the {sellMults[sellMults.length - 1]}× moonshot tier captures these).
           </Step>
         </div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { ChevronDown, ChevronUp } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, fmtPrice } from "@/lib/utils"
 
 interface DecisionLog {
   created_at?: string
@@ -150,13 +150,10 @@ export function BotStatusTimeline({
               <span className="text-right">Unrealized P&amp;L</span>
             </div>
             {holdingsLines.map((h, i) => {
-              // Polymarket prices are dollars per share (0..1). Sub-cent prices
-              // like 0.008 used to display as "0.80¢" which reads like 80 cents.
-              // Show tenths-of-a-cent explicitly when below 1¢.
-              const cents = h.avgPrice * 100
-              const avgLabel = cents < 1
-                ? `$${h.avgPrice.toFixed(4)}/sh (under 1¢)`
-                : `${cents.toFixed(2)}¢/sh`
+              // Polymarket prices are dollars per share (0..1). Always render
+              // raw dollars via fmtPrice (adaptive 2-3 decimals) so sub-cent
+              // and whole-cent prices both read unambiguously.
+              const avgLabel = `${fmtPrice(h.avgPrice)}/sh`
               return (
               <div key={i} className="grid grid-cols-[1fr_auto_auto] items-start gap-3 text-xs">
                 <div className="flex flex-col">

@@ -4,7 +4,7 @@ import { useParams } from "next/navigation"
 import { useState, useEffect, useCallback } from "react"
 import { useApi, useMutation } from "@/lib/hooks"
 import { apiFetch } from "@/lib/api"
-import { formatCurrency, formatDate, formatDateShort, cn } from "@/lib/utils"
+import { formatCurrency, formatDate, formatDateShort, cn, fmtPrice } from "@/lib/utils"
 import {
   ChevronDown, ChevronUp, RefreshCw,
   Save, Settings,
@@ -1576,7 +1576,7 @@ export default function ModuleDetailPage() {
                     <tr key={i} className="border-b border-border last:border-0">
                       <td className="px-6 py-2 font-medium">{p.bracket}</td>
                       <td className="px-6 py-2 text-right">{fmt(p.size)}</td>
-                      <td className="px-6 py-2 text-right">{fmt(p.avg_price * 100)}¢</td>
+                      <td className="px-6 py-2 text-right">{fmtPrice(p.avg_price)}</td>
                       <td className="px-6 py-2 text-right">{formatCurrency(cost)}</td>
                       <td className={cn("px-6 py-2 text-right font-medium", pnl >= 0 ? "text-success" : "text-destructive")}>
                         {pnl >= 0 ? "+" : ""}{formatCurrency(pnl)}

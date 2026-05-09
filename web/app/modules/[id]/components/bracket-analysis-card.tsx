@@ -12,7 +12,7 @@
 import { useState } from "react"
 import { useApi } from "@/lib/hooks"
 import { CardHeadline } from "./card-headline"
-import { cn } from "@/lib/utils"
+import { cn, fmtPrice } from "@/lib/utils"
 
 interface BracketRow {
   bracket: string
@@ -161,7 +161,7 @@ export function BracketAnalysisCard({ moduleId }: { moduleId: string }) {
                       {r.events_count > 0 ? `${r.win_rate_pct}%` : "—"}
                     </td>
                     <td className="px-2 py-1.5 text-right text-muted-foreground">
-                      {r.avg_entry_price > 0 ? `${(r.avg_entry_price * 100).toFixed(1)}¢` : "—"}
+                      {r.avg_entry_price > 0 ? fmtPrice(r.avg_entry_price) : "—"}
                     </td>
                     <td className={cn(
                       "px-2 py-1.5 text-right",

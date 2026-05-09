@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { cn } from "@/lib/utils"
+import { cn, fmtPrice } from "@/lib/utils"
 
 function fmt(n: number, decimals = 1): string {
   return parseFloat(n.toFixed(decimals)).toString()
@@ -128,9 +128,9 @@ export function PriceByDowHourHeatmap({ data }: { data: DowHourRow[] | undefined
                       <div
                         className="rounded px-1 py-1.5 text-center text-white font-mono"
                         style={{ backgroundColor: heatColor(cell.avg_price, minPrice, maxPrice) }}
-                        title={`${day} ${hour}:00 — avg: ${(cell.avg_price * 100).toFixed(1)}¢, min: ${(cell.min_price * 100).toFixed(1)}¢, n=${cell.samples}`}
+                        title={`${day} ${hour}:00 — avg: ${fmtPrice(cell.avg_price)}, min: ${fmtPrice(cell.min_price)}, n=${cell.samples}`}
                       >
-                        {fmt(cell.avg_price * 100)}¢
+                        {fmtPrice(cell.avg_price)}
                       </div>
                     </td>
                   )
@@ -210,9 +210,9 @@ export function PriceByElapsedDayHeatmap({ data }: { data: ElapsedRow[] | undefi
                       <div
                         className="rounded px-1 py-1 text-center text-white font-mono text-[10px]"
                         style={{ backgroundColor: heatColor(cell.avg_price, minPrice, maxPrice) }}
-                        title={`Day ${day}, ${bracket} — avg: ${(cell.avg_price * 100).toFixed(1)}¢, n=${cell.samples}`}
+                        title={`Day ${day}, ${bracket} — avg: ${fmtPrice(cell.avg_price)}, n=${cell.samples}`}
                       >
-                        {fmt(cell.avg_price * 100)}¢
+                        {fmtPrice(cell.avg_price)}
                       </div>
                     </td>
                   )

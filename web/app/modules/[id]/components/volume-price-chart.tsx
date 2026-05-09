@@ -1,6 +1,7 @@
 "use client"
 
 import { useApi } from "@/lib/hooks"
+import { fmtPrice } from "@/lib/utils"
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
 interface PriceSeries { bracket: string; price: number; volume?: number; snapshot_hour: string }
@@ -32,7 +33,7 @@ export function VolumePriceChart({ moduleId }: { moduleId: string }) {
           <ComposedChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
             <XAxis dataKey="bracket" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" />
             <YAxis yAxisId="left" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => `${(v * 100).toFixed(0)}¢`} domain={[0, 1]} />
+            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => fmtPrice(v)} domain={[0, 1]} />
             <Tooltip contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar yAxisId="left" dataKey="volume" fill="hsl(215, 20%, 55%)" name="Volume" />

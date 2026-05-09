@@ -5,7 +5,7 @@ import { useApi } from "@/lib/hooks"
 import { MetricCard } from "@/components/dashboard/metric-card"
 import { PerformanceChart } from "@/components/dashboard/performance-chart"
 import { Activity, DollarSign, TrendingUp, BarChart3, Wallet, ChevronDown, ChevronRight } from "lucide-react"
-import { formatCurrency, formatDate, cn } from "@/lib/utils"
+import { formatCurrency, formatDate, cn, fmtPrice } from "@/lib/utils"
 
 interface Metrics {
   portfolio_value: number
@@ -124,8 +124,8 @@ function AuctionRow({ auction }: { auction: Auction }) {
                   {b.title.length > 45 ? b.title.slice(0, 45) + "..." : b.title}
                 </span>
                 <span className="w-14 text-right">{b.size.toFixed(1)}</span>
-                <span className="w-14 text-right">{(b.avg_price * 100).toFixed(0)}¢</span>
-                <span className="w-14 text-right">{(b.cur_price * 100).toFixed(0)}¢</span>
+                <span className="w-14 text-right">{fmtPrice(b.avg_price)}</span>
+                <span className="w-14 text-right">{fmtPrice(b.cur_price)}</span>
                 <span className="w-16 text-right">{formatCurrency(b.market_value)}</span>
                 <span className={cn("w-16 text-right font-medium", b.pnl >= 0 ? "text-success" : "text-destructive")}>
                   {b.pnl >= 0 ? "+" : ""}{formatCurrency(b.pnl)}

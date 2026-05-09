@@ -1,6 +1,7 @@
 "use client"
 
 import { ComposedChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
+import { fmtPrice } from "@/lib/utils"
 
 interface HourlyEntry { hour_label: string; count: number; price?: number }
 
@@ -14,7 +15,7 @@ export function PostFrequencyChart({ hourlyData, title = "Post Frequency vs Mark
           <ComposedChart data={hourlyData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
             <XAxis dataKey="hour_label" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" />
             <YAxis yAxisId="left" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" />
-            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => `${(v * 100).toFixed(0)}¢`} />
+            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => fmtPrice(v)} />
             <Tooltip contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Line yAxisId="left" type="monotone" dataKey="count" stroke="hsl(142, 71%, 45%)" strokeWidth={2} dot={false} name="Posts/hr" />

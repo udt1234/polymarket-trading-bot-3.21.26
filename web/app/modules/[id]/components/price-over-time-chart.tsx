@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useApi } from "@/lib/hooks"
+import { fmtPrice } from "@/lib/utils"
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
 
 interface PriceSeries { bracket: string; price: number; snapshot_hour: string }
@@ -42,8 +43,8 @@ export function PriceOverTimeChart({ moduleId, brackets, trackingId }: { moduleI
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
             <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" />
-            <YAxis tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => `${(v * 100).toFixed(0)}¢`} domain={[0, 1]} />
-            <Tooltip contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => `${(v * 100).toFixed(2)}¢`} />
+            <YAxis tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => fmtPrice(v)} domain={[0, 1]} />
+            <Tooltip contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => fmtPrice(v)} />
             {trades.map((t, i) => {
               const matchingPt = chartData.find((d) => d.snapshot_hour >= t.executed_at)
               if (!matchingPt) return null
