@@ -50,3 +50,23 @@ export function formatDateShort(dateStr: string): string {
   const d = new Date(dateStr + (dateStr.includes("T") ? "" : "T00:00:00"))
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
+
+/**
+ * Numeric-aware bracket sort. Polymarket bracket labels are strings like
+ * "<40", "40-64", "65-89", ..., "240+". JS .sort() puts numerics before "<"
+ * so "115-139" lands before "<40". This helper sorts by the bracket's
+ * lower-edge numeric value, with "<N" ranked first and "N+" ranked last.
+ */
+export function bracketSortKey(b: string): number {
+  // "<N" always sorts first (Number.NEGATIVE_INFINITY would also work but
+  // we keep ordering predictable: <40 ranks before <80 if both ever exist).
+  if (b.startsWith("<")) return -1_000_000 + Number(b.slice(1) || 0)
+  // "N+" always sorts last for the same reason.
+  if (b.endsWith("+")) return 1_000_000 + Number(b.slice(0, -1) || 0)
+  const m = b.match(/^(\d+)/)
+  return m ? Number(m[1]) : Number.POSITIVE_INFINITY
+}
+
+export function sortBrackets(brackets: string[]): string[] {
+  return [...brackets].sort((a, b) => bracketSortKey(a) - bracketSortKey(b))
+}

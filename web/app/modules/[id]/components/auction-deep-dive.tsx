@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useApi } from "@/lib/hooks"
-import { formatCurrency, formatDate, cn } from "@/lib/utils"
+import { formatCurrency, formatDate, cn, sortBrackets } from "@/lib/utils"
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from "lucide-react"
 
 function fmt(n: number, d = 1) { return parseFloat(n.toFixed(d)).toString() }
@@ -83,7 +83,7 @@ function PriceHistoryTab({ moduleId }: { moduleId: string }) {
   const params = `page=${page}&per_page=50${bracket ? `&bracket=${bracket}` : ""}`
   const { data } = useApi<any>(`/api/modules/${moduleId}/deep-dive/prices?${params}`, [page, bracket])
 
-  const brackets = Array.from(new Set((data?.data || []).map((r: any) => r.bracket))).sort()
+  const brackets = sortBrackets(Array.from(new Set((data?.data || []).map((r: any) => r.bracket))) as string[])
 
   return (
     <div>

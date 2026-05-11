@@ -1,7 +1,13 @@
 # PolyMarket Bot — Handoff
 
-## Current State (2026-05-07)
+## Current State (2026-05-11)
 Bot LIVE on Trump + Elon (ensemble) + Spike Trading (multi-auction multi-strategy plugin architecture; paper-trading via global `PAPER_MODE=true`). All on Railway.
+
+### 2026-05-11 — Dashboard cleanup + bracket-grid fixes
+- **Modules-list P&L** — `/api/modules/` now enriches each row with `pnl` (realized + unrealized for OPEN positions) and `open_positions` count. Card stops showing $0 / 0 placeholder.
+- **Bracket Analysis current-grid filter** — `auction_archive` rows are now filtered to the current Polymarket bracket grid (≥50% overlap) before computing stats. Stops mixing Elon's old 0-9/10-19/.../80+ grid into the current `<40, 40-64, ..., 240+` grid. Resilient to empty `bracket_outcomes` by walking back up to 5 rows.
+- **Numeric bracket sort everywhere** — `<40` first, `240+` last via `sortBrackets()` helper in `web/lib/utils.ts`. Applied to price heatmaps, auction-deep-dive, bracket_stats backend (`_bracket_lo`).
+- **Posting Patterns mega-card** — replaced 4 redundant cards (Post Timing Heatmap, Post Frequency, DOW Averages Heatmap, Hourly Posts Heatmap) with one card + 3 tabs (Day×Hour grid, Hour-of-Day strip, Auction Progress) + plain-English headline. New `historical_daily` field on pacing payload (per-elapsed-day post curve from completed matching-window trackings). Deleted `post-timing-grid.tsx` + `post-frequency-chart.tsx`.
 
 ## ⭐ Cross-Module Patterns (apply to ALL modules going forward)
 
