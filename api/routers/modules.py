@@ -472,11 +472,38 @@ async def get_auctions(module_id: str, include_past: bool = True):
         and _matches_window(t, window_days)
     ]
 
-    # Pre-load this module's signals once so we can attach market_ids per
-    # auction by date-range join — lets the dashboard filter holdings,
-    # signals, activity, confidence bands by selected auction.
+    # Pre-load this module's distinct signal market_ids so we can attach
+    # market_ids per auction. We then resolve each market_id's actual
+    # Polymarket endDate and group by that — NOT by signal.created_at.
+    #
+    # Why: the insta-buy job places signals for the NEXT auction's market
+    # WITHIN the current auction's window (e.g. a signal fired May 5 18:36 UTC
+    # for the May 7-9 auction's market). The old created_at-window join
+    # incorrectly attributed that signal to the May 4-6 auction.
     sigs = sb.table("signals").select("market_id,created_at").eq("module_id", module_id).limit(2000).execute()
     sig_rows = sigs.data or []
+    sig_market_ids = sorted({str(s.get("market_id") or "") for s in sig_rows if s.get("market_id")})
+
+    # Resolve each signal market_id -> its endDate via Gamma. One call per
+    # distinct market. Cached per-request; ~20 markets max for an active module.
+    market_end_dates: dict[str, datetime | None] = {}
+    if sig_market_ids:
+        import httpx as _httpx
+        with _httpx.Client(timeout=10) as _c:
+            for mid in sig_market_ids:
+                try:
+                    r = _c.get(f"{GAMMA_BASE}/markets/{mid}")
+                    if r.status_code != 200:
+                        market_end_dates[mid] = None
+                        continue
+                    j = r.json()
+                    ed = j.get("endDate") or ""
+                    if ed:
+                        market_end_dates[mid] = datetime.fromisoformat(ed.replace("Z", "+00:00"))
+                    else:
+                        market_end_dates[mid] = None
+                except Exception:
+                    market_end_dates[mid] = None
 
     results = []
     for t in module_trackings:
@@ -501,20 +528,16 @@ async def get_auctions(module_id: str, include_past: bool = True):
 
         status = "active" if is_active else ("past" if is_past else "future")
 
-        # Market IDs that fired during this auction's window.
+        # Market IDs whose Polymarket endDate matches this tracking's endDate
+        # (same auction). ±2hr tolerance because Polymarket markets and
+        # xTracker trackings sometimes round end times slightly differently.
         market_ids: list[str] = []
-        seen_mids: set[str] = set()
-        for s in sig_rows:
-            ca = s.get("created_at") or ""
-            try:
-                cdt = datetime.fromisoformat(ca.replace("Z", "+00:00"))
-            except Exception:
+        for mid, med in market_end_dates.items():
+            if med is None:
                 continue
-            if start_dt <= cdt <= end_dt:
-                mid = str(s.get("market_id") or "")
-                if mid and mid not in seen_mids:
-                    seen_mids.add(mid)
-                    market_ids.append(mid)
+            delta_hours = abs((med - end_dt).total_seconds()) / 3600
+            if delta_hours <= 2:
+                market_ids.append(mid)
 
         results.append({
             "tracking_id": str(tid),
@@ -987,8 +1010,15 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     hourly_counts = parse_hourly_counts(raw_data)
     daily_totals = parse_daily_totals(raw_data)
 
-    week_start_str = (tracking or {}).get("startDate", "")[:10]
-    week_end_str = (tracking or {}).get("endDate", "")[:10]
+    # Keep full ISO timestamps — Polymarket auctions start/end at 12 PM ET
+    # (16:00 UTC during EDT, 17:00 UTC during EST). Truncating to YYYY-MM-DD
+    # silently shifts start_dt to midnight UTC, which throws elapsed_days off
+    # by 11-17 hours depending on DST.
+    week_start_str = (tracking or {}).get("startDate", "")
+    week_end_str = (tracking or {}).get("endDate", "")
+    # Date-only forms still useful for daily tables that bucket by calendar day.
+    week_start_date_str = week_start_str[:10] if week_start_str else ""
+    week_end_date_str = week_end_str[:10] if week_end_str else ""
 
     # Compute the actual window length so we only blend matching-window
     # trackings into the historical prior. Without this, Elon's 7-day and
@@ -1208,7 +1238,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         if price_data:
             entry_timing = optimal_entry_timing(price_data, top_bracket)
 
-    daily_table = _build_daily_table(daily_totals, week_start_str, week_end_str, now, var, hist_mean, dow_weights_map, cfg)
+    daily_table = _build_daily_table(daily_totals, week_start_date_str, week_end_date_str, now, var, hist_mean, dow_weights_map, cfg)
     dow_heatmap = _build_dow_heatmap(var)
     hourly_heatmap = _build_hourly_heatmap(hourly_counts)
     dow_hour_heatmap = _build_dow_hour_heatmap(handle)
@@ -1284,7 +1314,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
             ev_winner = actual_winner
 
     current_auction = {
-        "period": f"{week_start_str} to {week_end_str}" if week_start_str else None,
+        "period": f"{week_start_date_str} to {week_end_date_str}" if week_start_date_str else None,
         "title": (tracking or {}).get("title"),
         "running_total": running_total,
         "days_elapsed": round(elapsed_days, 1),

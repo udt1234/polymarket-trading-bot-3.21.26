@@ -122,10 +122,16 @@ def _take_price_snapshot_sync():
         tracking_id = None
         if active_tracking:
             tracking_id = str(active_tracking.get("id") or active_tracking.get("trackingId") or "")
-            start = active_tracking.get("startDate", "")[:10]
-            if start:
+            # Use FULL ISO timestamp (auctions open/close at 12 PM ET = 16:00 UTC),
+            # not the [:10] date truncation which silently shifts start to midnight
+            # UTC. A 2-day Elon auction was previously reporting elapsed_days
+            # ~16 hrs ahead of reality.
+            start_iso = active_tracking.get("startDate", "")
+            if start_iso:
                 try:
-                    start_dt = datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+                    if start_dt.tzinfo is None:
+                        start_dt = start_dt.replace(tzinfo=timezone.utc)
                     elapsed_days = round((now - start_dt).total_seconds() / 86400, 2)
                 except Exception:
                     pass

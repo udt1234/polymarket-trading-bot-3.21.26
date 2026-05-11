@@ -1099,7 +1099,12 @@ export default function ModuleDetailPage() {
       </CollapsibleCard>
 
       <CollapsibleCard id="last-auctions-pnl" title="Recent Auctions P&L">
-        <LastAuctionsPnl auctions={auctions || []} walletAuctions={relevantAuctions} />
+        <LastAuctionsPnl
+          auctions={auctions || []}
+          walletAuctions={relevantAuctions}
+          paperPositions={(paperPositions || []).filter((p: any) => p.module_id === id)}
+          marketPrices={pacing?.market_prices}
+        />
       </CollapsibleCard>
 
       {/* Module P&L Curve — filtered to selected auction's markets when known */}
