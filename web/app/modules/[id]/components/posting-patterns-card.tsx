@@ -96,9 +96,9 @@ function buildHeadline(grid: number[][], runningTotal: number | null, elapsedDay
       const deltaPct = ((projected - expectedFull) / expectedFull) * 100
       if (Math.abs(deltaPct) >= 8) {
         const direction = deltaPct > 0 ? "hotter" : "cooler"
-        lines.push(`→ Current auction running ${Math.abs(deltaPct).toFixed(0)}% ${direction} than his typical ${totalDays.toFixed(0)}-day pace (${projected.toFixed(0)} vs ${expectedFull.toFixed(0)} projected).`)
+        lines.push(`→ Current auction running ${Math.abs(deltaPct).toFixed(0)}% ${direction} than the typical ${totalDays.toFixed(0)}-day pace (${projected.toFixed(0)} vs ${expectedFull.toFixed(0)} projected).`)
       } else {
-        lines.push(`→ Current auction tracking his typical ${totalDays.toFixed(0)}-day pace (~${projected.toFixed(0)} posts projected).`)
+        lines.push(`→ Current auction tracking the typical ${totalDays.toFixed(0)}-day pace (~${projected.toFixed(0)} posts projected).`)
       }
     }
   }

@@ -50,7 +50,7 @@ def _bracket_lo(b: str) -> int:
         return 0
 
 
-def _current_grid_for_module(module_id: str) -> set[str] | None:
+def _current_grid_for_handle(handle: str | None, win_days: float | None) -> set[str] | None:
     """Return the set of bracket labels for the module's CURRENT auction.
     Used to filter auction_archive rows so we don't mix old bracket grids
     (e.g. Elon's old 0-9/10-19/.../80+ grid) into stats for the current
@@ -59,10 +59,9 @@ def _current_grid_for_module(module_id: str) -> set[str] | None:
     Returns None if we can't determine a current grid (in which case the
     caller should fall back to using all observed brackets).
     """
-    sb = get_supabase()
-    handle, win_days = _resolve_module_meta(module_id)
     if not handle:
         return None
+    sb = get_supabase()
     # Use the most recent archived auction for this handle + window as the
     # canonical "current" grid. Walk back up to 5 rows in case the most
     # recent has an empty bracket_outcomes (incomplete archive insert).
@@ -116,8 +115,11 @@ def _resolve_module_meta(module_id: str) -> tuple[str | None, float | None]:
     return handle, window_days
 
 
-def _archive_rows_for_module(
-    module_id: str, window: str, current_grid: set[str] | None = None
+def _archive_rows_for_handle(
+    handle: str | None,
+    win_days: float | None,
+    window: str,
+    current_grid: set[str] | None = None,
 ) -> list[dict]:
     """Pull auction_archive rows for the module's handle + window-days.
 
@@ -126,10 +128,9 @@ def _archive_rows_for_module(
     match). This prevents stale grids (e.g. Elon's old 0-9/10-19 grid) from
     polluting stats when Polymarket has switched to a new bracket scheme.
     """
-    handle, win_days = _resolve_module_meta(module_id)
-    sb = get_supabase()
     if not handle:
         return []
+    sb = get_supabase()
     q = sb.table("auction_archive").select(
         "id,auction_slug,window_days,end_date,winning_bracket,"
         "bracket_outcomes,bracket_end_prices,bot_traded,bot_brackets,"
@@ -170,20 +171,24 @@ def compute_bracket_stats(
     fields (signals/trades/ev) layer in from signals + positions + trades.
     """
     sb = get_supabase()
-    handle, _ = _resolve_module_meta(module_id)
 
-    # 0. Resolve the CURRENT bracket grid from the most recent archived
-    #    auction. Used to filter out historical auctions that used different
-    #    bracket schemes (e.g. Elon's old 0-9/10-19/.../80+ grid before
-    #    Polymarket switched to <40/40-64/.../240+).
-    current_grid = _current_grid_for_module(module_id)
+    # 0. Resolve module meta ONCE and thread through all helpers below
+    #    (the prior implementation paid for 4 separate Supabase round-trips
+    #    just to read the same module row).
+    handle, win_days = _resolve_module_meta(module_id)
+
+    # 0a. Resolve the CURRENT bracket grid from the most recent archived
+    #     auction. Used to filter out historical auctions that used different
+    #     bracket schemes (e.g. Elon's old 0-9/10-19/.../80+ grid before
+    #     Polymarket switched to <40/40-64/.../240+).
+    current_grid = _current_grid_for_handle(handle, win_days)
 
     # 1. Window-scoped archive rows = recent ground truth (current grid only)
-    window_rows = _archive_rows_for_module(module_id, window, current_grid)
+    window_rows = _archive_rows_for_handle(handle, win_days, window, current_grid)
     n_auctions = len(window_rows)
 
     # 2. All-time archive rows for the comparison column (current grid only)
-    all_time_rows = _archive_rows_for_module(module_id, "all_time", current_grid)
+    all_time_rows = _archive_rows_for_handle(handle, win_days, "all_time", current_grid)
 
     # 3. Bot signals + trades + positions (per-module — auction-archive doesn't
     #    expand to per-fill granularity).
@@ -280,8 +285,11 @@ def compute_bracket_stats(
         else:
             avg_entry = 0.0
 
-        realized = sum(p.get("realized_pnl") or 0 for p in positions if p.get("status") != "open")
-        unrealized = sum(p.get("unrealized_pnl") or 0 for p in positions if p.get("status") == "open")
+        # Status convention: DB stores lowercase "open" / "closed". Some
+        # legacy rows may have mixed case — normalize so we don't double-count
+        # an "Open" row's realized_pnl while missing its unrealized_pnl.
+        realized = sum(p.get("realized_pnl") or 0 for p in positions if (p.get("status") or "").lower() != "open")
+        unrealized = sum(p.get("unrealized_pnl") or 0 for p in positions if (p.get("status") or "").lower() == "open")
         total_pnl = realized + unrealized
         cost_basis = sum((p.get("avg_price") or 0) * (p.get("size") or 0) for p in positions)
         avg_roi = round((total_pnl / cost_basis) * 100, 1) if cost_basis > 0 else 0.0
