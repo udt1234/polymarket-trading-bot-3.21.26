@@ -10,8 +10,9 @@ import {
   Save, Settings,
 } from "lucide-react"
 import { DailyPacingTable } from "./components/daily-pacing-table"
-import { DowHeatmap, HourlyHeatmap, ConfidenceBands, EnsembleBreakdown } from "./components/pacing-analysis"
+import { ConfidenceBands, EnsembleBreakdown } from "./components/pacing-analysis"
 import { BracketAnalysisCard } from "./components/bracket-analysis-card"
+import { PostingPatternsCard } from "./components/posting-patterns-card"
 import { PriceByDowHourHeatmap, PriceByElapsedDayHeatmap } from "./components/price-heatmaps"
 import { PositionsTable } from "./components/positions-table"
 import { SignalsTable } from "./components/signals-table"
@@ -26,10 +27,8 @@ import { BiddingStrategyPanel } from "./components/bidding-strategy-panel"
 import { AuctionTypesEditor } from "./components/auction-types-editor"
 import { LastAuctionsPnl } from "./components/last-auctions-pnl"
 import { PendingSignalsCard } from "./components/pending-signals-card"
-import { PostTimingGrid } from "./components/post-timing-grid"
 import { PositionBreakdownChart } from "./components/position-breakdown-chart"
 import { KellyTrackerChart } from "./components/kelly-tracker-chart"
-import { PostFrequencyChart } from "./components/post-frequency-chart"
 import { PriceOverTimeChart } from "./components/price-over-time-chart"
 import { VolumePriceChart } from "./components/volume-price-chart"
 import { OrderBookDepthChart } from "./components/order-book-depth-chart"
@@ -1625,23 +1624,6 @@ export default function ModuleDetailPage() {
       {(() => {
         const allSignals = mySignals.map((s: any) => s.bracket).filter(Boolean)
         const uniqueBrackets = Array.from(new Set(allSignals)) as string[]
-        // Use hourly_heatmap (avg posts/hr by hour-of-day, returned by /pacing) since
-        // raw hourly_counts isn't in the payload. Overlay with current market price for top bracket.
-        const topBracketPrice = pacing?.confidence_bands?.[0]?.bracket
-          ? pacing?.market_prices?.[pacing.confidence_bands[0].bracket]
-          : undefined
-        const fmtHr = (h: number) => h === 0 ? "12 AM" : h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h - 12} PM`
-        const hourlyData = (pacing?.hourly_heatmap || []).map((h: any) => ({
-          hour_label: fmtHr(h.hour),
-          count: h.avg ?? 0,
-          price: topBracketPrice,
-        }))
-        const timingData = (pacing?.dow_hour_heatmap || []).map((c: any) => ({
-          dow: c.dow,
-          hour: c.hour,
-          count: c.avg || 0,
-          samples: c.samples || 0,
-        }))
         return (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1663,12 +1645,6 @@ export default function ModuleDetailPage() {
             <CollapsibleCard id="latency-histogram" title="Signal-to-Fill Latency">
               <LatencyHistogramChart moduleId={module.id} />
             </CollapsibleCard>
-            <CollapsibleCard id="post-timing-heatmap" title="Post Timing Heatmap">
-              <PostTimingGrid data={timingData} />
-            </CollapsibleCard>
-            <CollapsibleCard id="post-frequency" title="Post Frequency">
-              <PostFrequencyChart hourlyData={hourlyData} />
-            </CollapsibleCard>
             {uniqueBrackets.length > 0 && (
               <CollapsibleCard id="price-over-time" title="Price Over Time">
                 <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} trackingId={activeTrackingId} />
@@ -1683,16 +1659,14 @@ export default function ModuleDetailPage() {
         )
       })()}
 
-      {/* Pacing detail — Daily table + DOW heatmap */}
+      {/* Daily pacing detail */}
       <CollapsibleCard id="daily-pacing" title="Daily Pacing">
         <DailyPacingTable pacing={pacing} />
       </CollapsibleCard>
-      <CollapsibleCard id="dow-heatmap" title="DOW Averages Heatmap">
-        <DowHeatmap dowAvg={pacing?.dow_heatmap} />
-      </CollapsibleCard>
-      {/* Hourly Heatmap */}
-      <CollapsibleCard id="hourly-heatmap" title="Hourly Posts Heatmap">
-        <HourlyHeatmap hourlyAvg={pacing?.hourly_heatmap} historicalHourly={pacing?.historical_hourly_heatmap} />
+
+      {/* Posting Patterns — replaces 4 prior cards (Post Timing, Post Frequency, DOW Averages, Hourly Posts) */}
+      <CollapsibleCard id="posting-patterns" title="Posting Patterns">
+        <PostingPatternsCard pacing={pacing} />
       </CollapsibleCard>
 
       <CollapsibleCard id="price-by-dow-hour" title="Price by DOW × Hour">

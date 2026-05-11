@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { cn, fmtPrice } from "@/lib/utils"
+import { cn, fmtPrice, sortBrackets } from "@/lib/utils"
 
 function fmt(n: number, decimals = 1): string {
   return parseFloat(n.toFixed(decimals)).toString()
@@ -43,7 +43,7 @@ interface ElapsedRow {
 }
 
 export function PriceByDowHourHeatmap({ data }: { data: DowHourRow[] | undefined }) {
-  const brackets = Array.from(new Set((data || []).map((d) => d.bracket))).sort()
+  const brackets = sortBrackets(Array.from(new Set((data || []).map((d) => d.bracket))))
   const [selectedBracket, setSelectedBracket] = useState<string>("")
 
   if (!data || data.length === 0) {
@@ -159,7 +159,7 @@ export function PriceByElapsedDayHeatmap({ data }: { data: ElapsedRow[] | undefi
     )
   }
 
-  const brackets = Array.from(new Set(data.map((d) => d.bracket))).sort()
+  const brackets = sortBrackets(Array.from(new Set(data.map((d) => d.bracket))))
   const days = Array.from(new Set(data.map((d) => d.elapsed_day))).sort((a, b) => a - b)
 
   const lookup: Record<string, ElapsedRow> = {}

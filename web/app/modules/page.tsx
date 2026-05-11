@@ -112,8 +112,8 @@ export default function ModulesPage() {
             status={m.status}
             displayBadge={m.display_badge}
             inactiveReasonHuman={m.inactive_reason_human}
-            pnl={0}
-            positions={0}
+            pnl={Number(m.pnl) || 0}
+            positions={Number(m.open_positions) || 0}
           />
         ))}
       </div>

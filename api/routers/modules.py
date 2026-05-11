@@ -215,7 +215,35 @@ def _decorate_with_badge(module_row: dict) -> dict:
 async def list_modules():
     sb = get_supabase()
     res = sb.table("modules").select("*").order("created_at", desc=True).execute()
-    return [_decorate_with_badge(m) for m in (res.data or [])]
+    modules = [_decorate_with_badge(m) for m in (res.data or [])]
+
+    # Enrich each module with realized+unrealized P&L and open-position count.
+    # One batch query against positions for all modules — cheap.
+    if modules:
+        ids = [m["id"] for m in modules]
+        try:
+            pos_rows = sb.table("positions").select(
+                "module_id,status,realized_pnl,unrealized_pnl"
+            ).in_("module_id", ids).execute().data or []
+        except Exception:
+            pos_rows = []
+        pnl_by_mod: dict[str, float] = {mid: 0.0 for mid in ids}
+        open_by_mod: dict[str, int] = {mid: 0 for mid in ids}
+        for p in pos_rows:
+            mid = p.get("module_id")
+            if mid not in pnl_by_mod:
+                continue
+            pnl_by_mod[mid] += float(p.get("realized_pnl") or 0)
+            # Status convention: DB stores lowercase "open" / "closed"
+            # (see bracket_stats.py:284 and module routes filtering on "open").
+            # Be tolerant of mixed case in legacy rows via .lower().
+            if (p.get("status") or "").lower() == "open":
+                pnl_by_mod[mid] += float(p.get("unrealized_pnl") or 0)
+                open_by_mod[mid] += 1
+        for m in modules:
+            m["pnl"] = round(pnl_by_mod.get(m["id"], 0.0), 2)
+            m["open_positions"] = open_by_mod.get(m["id"], 0)
+    return modules
 
 
 @router.get("/{module_id}")
@@ -980,6 +1008,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         parse_hourly_counts, parse_daily_totals, get_xtracker_summary,
         compute_elapsed_days, fetch_historical_weekly_totals,
         fetch_market_prices, extract_slug_from_tracking,
+        fetch_historical_daily_curve,
     )
     from api.modules.shared.regime import detect_regime
 
@@ -1248,6 +1277,17 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     hist_hourly = historical_hourly_averages(hist_dir, handle)
     historical_hourly_heatmap = _build_historical_hourly_heatmap(hist_hourly)
 
+    # Per-elapsed-day curve for the Posting Patterns "By Auction Progress" tab.
+    # Best-effort — never block the pacing endpoint if it fails.
+    historical_daily: list[dict] = []
+    try:
+        historical_daily = await fetch_historical_daily_curve(
+            handle, platform=_detect_platform(module.data),
+            target_window_days=total_days, n_trackings=20,
+        )
+    except Exception as _e:
+        log.warning(f"historical_daily fetch failed for {handle}: {_e}")
+
     ensemble_breakdown = _build_ensemble_breakdown(model_outputs, weights)
 
     # Truth Social direct fetch is supplemental — must NEVER block the pacing
@@ -1363,6 +1403,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         "hourly_heatmap": hourly_heatmap,
         "dow_hour_heatmap": dow_hour_heatmap,
         "historical_hourly_heatmap": historical_hourly_heatmap,
+        "historical_daily": historical_daily,
         "pace_acceleration": accel,
         "dow_deviation": dev,
         "confidence_bands": conf_bands,

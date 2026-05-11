@@ -228,6 +228,79 @@ async def fetch_recent_daily_post_counts(
     return h.get("daily_counts", [])
 
 
+async def fetch_historical_daily_curve(
+    handle: str,
+    platform: str = "truthsocial",
+    target_window_days: float | None = None,
+    n_trackings: int = 20,
+) -> list[dict]:
+    """Average posts-per-elapsed-day across recent completed trackings whose
+    window length matches `target_window_days` (±0.5d).
+
+    Returns: [{"elapsed_day": 0, "avg_posts": 18.4, "samples": 12}, ...]
+
+    Powers the "By Auction Progress" tab on the Posting Patterns card —
+    shows how a typical auction develops day-by-day.
+    """
+    from collections import defaultdict
+    trackings = await _fetch_trackings_raw(handle, platform)
+    if not trackings:
+        return []
+
+    now = datetime.now(timezone.utc)
+    matched: list[dict] = []
+    for t in trackings:
+        s, e = t.get("startDate", ""), t.get("endDate", "")
+        if not (s and e):
+            continue
+        try:
+            sd = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            ed = datetime.fromisoformat(e.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        # Skip the currently-active auction. Its metrics are partial — Day 0/1
+        # are populated but Day N is empty, biasing the elapsed-day averages.
+        if ed > now:
+            continue
+        wd = (ed - sd).total_seconds() / 86400.0
+        if target_window_days is not None and abs(wd - target_window_days) > 0.5:
+            continue
+        metrics = t.get("metrics") or {}
+        if not isinstance(metrics, dict) or not metrics:
+            continue
+        matched.append({"start": sd, "metrics": metrics})
+        if len(matched) >= n_trackings:
+            break
+
+    by_day: dict[int, list[float]] = defaultdict(list)
+    for t in matched:
+        start = t["start"]
+        for date_str, count in t["metrics"].items():
+            if not isinstance(count, (int, float)):
+                continue
+            try:
+                d = datetime.fromisoformat(date_str.replace("Z", "+00:00")) if "T" in date_str else datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                continue
+            elapsed = int((d.date() - start.date()).days)
+            if elapsed < 0:
+                continue
+            by_day[elapsed].append(float(count))
+
+    if not by_day:
+        return []
+
+    rows = []
+    for ed in sorted(by_day.keys()):
+        counts = by_day[ed]
+        rows.append({
+            "elapsed_day": ed,
+            "avg_posts": round(sum(counts) / len(counts), 2),
+            "samples": len(counts),
+        })
+    return rows
+
+
 async def fetch_all_active_trackings(handle: str = "realDonaldTrump", platform: str = "truthsocial") -> list[dict]:
     trackings = await _fetch_trackings_raw(handle, platform)
     now = datetime.now(timezone.utc)
