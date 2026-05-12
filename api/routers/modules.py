@@ -574,6 +574,10 @@ async def get_auctions(module_id: str, include_past: bool = True):
             "title": t.get("title", ""),
             "start_date": start_str[:10],
             "end_date": end_str[:10],
+            # Full ISO for clients that need the actual hour-precise timestamp
+            # (e.g. countdown widget — auctions open at 12 PM ET, not midnight).
+            "start_iso": start_str,
+            "end_iso": end_str,
             "elapsed_days": round(elapsed, 1),
             "remaining_days": round(remaining, 1),
             "status": status,
