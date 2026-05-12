@@ -288,7 +288,7 @@ class TradingEngine:
                         if result.get("status") == "rejected":
                             log.info(f"Executor rejected: {result.get('reason')}")
                             self._log_rejection(signal, result.get("reason", "executor_rejected"))
-                            self._track_rejection(module.name, getattr(signal, "module_id", ""), result.get("reason", "executor_rejected"))
+                            self._track_rejection(module.name, signal, result.get("reason", "executor_rejected"))
                             continue
                         self._log_execution(signal, result)
                         # Only Slack on actual fills. unfilled = limit resting on
@@ -320,7 +320,7 @@ class TradingEngine:
                     else:
                         log.info(f"Signal rejected: {reason}")
                         self._log_rejection(signal, reason)
-                        self._track_rejection(module.name, getattr(signal, "module_id", ""), reason)
+                        self._track_rejection(module.name, signal, reason)
             except Exception as e:
                 log.error(f"Module {module.name} error: {e}")
                 self._log_error(module.name, str(e))
@@ -983,14 +983,22 @@ class TradingEngine:
         except Exception:
             pass
 
-    def _track_rejection(self, module_name: str, module_id: str, reason: str):
+    def _track_rejection(self, module_name: str, signal, reason: str):
         """Append to in-memory rejection streak. Fires rejection_spike alert
         when 5+ rejections accumulate without an intervening approval. The
         alert dispatcher dedupes so we don't ping every additional rejection."""
+        module_id = getattr(signal, "module_id", "") or ""
+        metadata = getattr(signal, "metadata", {}) or {}
+        # event_slug is what we link in Slack. Truth Social / Elon stuff their
+        # slug into market_id directly; spike_trading carries it in metadata.
+        slug = metadata.get("event_slug") or getattr(signal, "market_id", "") or ""
         self._recent_rejections.append({
             "module_name": module_name,
             "module_id": module_id,
             "reason": reason,
+            "market_id": getattr(signal, "market_id", "") or "",
+            "bracket": getattr(signal, "bracket", "") or "",
+            "event_slug": slug,
         })
         # Keep at most last 20 to bound memory
         if len(self._recent_rejections) > 20:
@@ -999,13 +1007,15 @@ class TradingEngine:
             try:
                 from api.services.alerts import notify_rejection_spike
                 from collections import Counter
-                reasons = Counter(r["reason"] for r in self._recent_rejections[-10:]).most_common(3)
+                window = self._recent_rejections[-10:]
+                reasons = Counter(r["reason"] for r in window).most_common(3)
                 top = [f"{r} ({c}x)" for r, c in reasons]
                 _fire_and_forget_async(notify_rejection_spike(
                     module_id=module_id,
                     module_name=module_name,
                     count=len(self._recent_rejections),
                     top_reasons=top,
+                    recent=window,
                 ))
             except Exception:
                 pass

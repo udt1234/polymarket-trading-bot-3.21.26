@@ -245,9 +245,15 @@ async def notify_daily_module_status_digest():
 
 async def notify_rejection_spike(
     module_id: str, module_name: str, count: int, top_reasons: list[str],
+    recent: list[dict] | None = None,
 ):
     """N risk-rejected signals back-to-back. Often means a config is misaligned
-    with current market conditions (e.g. min_edge_threshold too high)."""
+    with current market conditions (e.g. min_edge_threshold too high).
+
+    `recent` is a list of rejection records (module_name, market_id, bracket,
+    event_slug, reason). When provided, the message lists each distinct
+    auction with a Polymarket link so the user can click straight to the
+    market that's being blocked."""
     if not _is_alert_enabled("rejection_spike"):
         return
     key = f"alert_rejection_spike:{module_id}"
@@ -255,9 +261,29 @@ async def notify_rejection_spike(
                                     {"count": count}):
         return
     reasons_str = "\n".join(f"• {r}" for r in top_reasons[:3])
+
+    # Distinct (slug, bracket) pairs from the recent window, preserving
+    # most-recent-first order. Cap at 5 lines so Slack doesn't get spammed.
+    auction_lines: list[str] = []
+    if recent:
+        seen: set[tuple[str, str]] = set()
+        for r in reversed(recent):
+            slug = (r.get("event_slug") or "").strip()
+            bracket = (r.get("bracket") or "").strip()
+            ident = (slug, bracket)
+            if not slug or ident in seen:
+                continue
+            seen.add(ident)
+            label = f"`{bracket}`" if bracket else "auction"
+            auction_lines.append(f"• <https://polymarket.com/event/{slug}|{label} — {slug}>")
+            if len(auction_lines) >= 5:
+                break
+
     msg = (
-        f":information_source: *Rejection Spike — {module_name}*\n"
-        f"*{count}* signals rejected back-to-back. Top reasons:\n{reasons_str}\n"
-        f"_Often means a config knob (edge threshold, exposure cap) is misaligned._"
+        f":information_source: *Rejection Spike — module: {module_name}*\n"
+        f"*{count}* signals rejected back-to-back. Top reasons:\n{reasons_str}"
     )
+    if auction_lines:
+        msg += "\n*Auctions blocked:*\n" + "\n".join(auction_lines)
+    msg += "\n_Often means a config knob (edge threshold, exposure cap) is misaligned._"
     await send_slack(msg)

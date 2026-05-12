@@ -526,6 +526,7 @@ class SpikeTradingModule(BaseModule):
                     "skip_edge_check": True,
                     "target_price": target,
                     "adaptive_price": limit_price,
+                    "event_slug": market.get("slug"),
                 },
             ))
         return signals
@@ -566,6 +567,7 @@ class SpikeTradingModule(BaseModule):
                     "strategy": "spike_trading", "signal_type": "spike", "tier": tier_idx, "tier_label": label,
                     "tier_type": "buy", "skip_edge_check": True,
                     "target_price": target, "adaptive_price": limit_price,
+                    "event_slug": market.get("slug"),
                 },
             ))
         return signals
@@ -615,6 +617,7 @@ class SpikeTradingModule(BaseModule):
                     "position_id": position["id"],
                     "skip_edge_check": True,
                     "force_exit": True,
+                    "event_slug": market.get("slug"),
                 },
             )]
 
@@ -639,6 +642,7 @@ class SpikeTradingModule(BaseModule):
                 "position_id": position["id"],
                 "skip_edge_check": True,
                 "force_exit": True,
+                "event_slug": market.get("slug"),
             },
         )]
 
