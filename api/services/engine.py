@@ -1040,11 +1040,13 @@ class TradingEngine:
         Returns: { state: 'trading'|'watching'|'paused'|'killed',
                    reason: str, details: {...} }
         """
+        cb = self._cb_status()
         if not self._running:
             return {
                 "state": "paused",
                 "reason": "Engine stopped",
-                "details": {"action": "Use /api/engine/start to resume"},
+                "details": {"action": "Use /api/engine/start to resume",
+                            "circuit_breaker": cb},
             }
         if self.risk_manager.circuit_breaker_tripped:
             cooldown_remaining_s = max(0, int(self.risk_manager._cooldown_until - time.time()))
@@ -1052,22 +1054,25 @@ class TradingEngine:
                 "state": "paused",
                 "reason": "Circuit breaker tripped",
                 "details": {
-                    "consecutive_losses": self.risk_manager.consecutive_losses,
                     "cooldown_remaining_min": round(cooldown_remaining_s / 60, 1),
+                    "circuit_breaker": cb,
                 },
             }
         if self._stale_data:
             return {
                 "state": "paused",
                 "reason": f"Engine cycle stalled — no decision logs in over {STALE_DATA_THRESHOLD_HOURS}h",
-                "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS, "action": "Check Railway deploy logs for module evaluation errors"},
+                "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS,
+                            "action": "Check Railway deploy logs for module evaluation errors",
+                            "circuit_breaker": cb},
             }
         active = self.registry.active_modules()
         if not active:
             return {
                 "state": "paused",
                 "reason": "No active modules",
-                "details": {"action": "Resume modules from the dashboard"},
+                "details": {"action": "Resume modules from the dashboard",
+                            "circuit_breaker": cb},
             }
         # Degraded state: if module evaluation has been throwing errors in the
         # last 15 min, the bot isn't actually trading even though the engine
@@ -1085,6 +1090,7 @@ class TradingEngine:
                     "latest_error": latest_sig[:100],
                     "window_minutes": 15,
                     "active_modules": len(active),
+                    "circuit_breaker": cb,
                 },
             }
         # Look at most recent module evaluation outcome to distinguish trading vs watching.
@@ -1100,33 +1106,55 @@ class TradingEngine:
                 return {
                     "state": "watching",
                     "reason": "Regime in transition — bot waiting for trend to clear",
-                    "details": {"active_modules": len(active)},
+                    "details": {"active_modules": len(active),
+                                "circuit_breaker": cb},
                 }
         except Exception:
             pass
         return {
             "state": "trading",
             "reason": "Bot is actively scanning markets",
-            "details": {"active_modules": len(active), "cycle_count": self._cycle_count},
+            "details": {"active_modules": len(active), "cycle_count": self._cycle_count,
+                        "circuit_breaker": cb},
+        }
+
+    def _cb_status(self) -> dict:
+        """Snapshot of the circuit-breaker counter. Always returns the trio
+        so the dashboard can render `X/Y losses (tripped?)` regardless of
+        which health state the module is in."""
+        from api.config import get_settings
+        s = get_settings()
+        return {
+            "consecutive_losses": int(self.risk_manager.consecutive_losses or 0),
+            "max_consecutive_losses": int(getattr(s, "circuit_breaker_max_consecutive_losses", 5) or 5),
+            "tripped": bool(self.risk_manager.circuit_breaker_tripped),
         }
 
     def health_for_module(self, module_name: str) -> dict:
         """Per-module health. Global engine state (stopped, circuit breaker,
         stale data) still applies to every module — but recent errors are
         scoped so one module's hiccup doesn't paint every page red.
+
+        The circuit-breaker counter is GLOBAL (one RiskManager across the
+        engine) but surfaced on every module's health so the dashboard can
+        warn 'X/5 losses → auto-pause incoming'.
         """
+        cb = self._cb_status()
+
         if not self._running:
             return {"state": "paused", "reason": "Engine stopped",
-                    "details": {"action": "Use /api/engine/start to resume"}}
+                    "details": {"action": "Use /api/engine/start to resume",
+                                "circuit_breaker": cb}}
         if self.risk_manager.circuit_breaker_tripped:
             cooldown_remaining_s = max(0, int(self.risk_manager._cooldown_until - time.time()))
             return {"state": "paused", "reason": "Circuit breaker tripped",
-                    "details": {"consecutive_losses": self.risk_manager.consecutive_losses,
-                                "cooldown_remaining_min": round(cooldown_remaining_s / 60, 1)}}
+                    "details": {"cooldown_remaining_min": round(cooldown_remaining_s / 60, 1),
+                                "circuit_breaker": cb}}
         if self._stale_data:
             return {"state": "paused",
                     "reason": f"Engine cycle stalled — no decision logs in over {STALE_DATA_THRESHOLD_HOURS}h",
-                    "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS}}
+                    "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS,
+                                "circuit_breaker": cb}}
 
         # Resolve the human-friendly DB name (e.g. "Elon Tweets") to the
         # canonical registry name ("elon_tweets") via the registry's keyword
@@ -1143,13 +1171,15 @@ class TradingEngine:
             return {
                 "state": "paused",
                 "reason": f"Degraded — {err_count} recent error{'s' if err_count != 1 else ''} from this module",
-                "details": {"latest_error": latest_sig[:100], "window_minutes": 15, "module": module_name},
+                "details": {"latest_error": latest_sig[:100], "window_minutes": 15, "module": module_name,
+                            "circuit_breaker": cb},
             }
 
         return {
             "state": "trading",
             "reason": "Module is actively evaluating",
-            "details": {"module": module_name, "cycle_count": self._cycle_count},
+            "details": {"module": module_name, "cycle_count": self._cycle_count,
+                        "circuit_breaker": cb},
         }
 
 
