@@ -43,17 +43,23 @@ async def _fetch_token_for_market(market_id: str, bracket: str) -> str | None:
     """
     if not market_id:
         return None
-    async with httpx.AsyncClient(timeout=15) as client:
-        try:
-            r = await client.get(f"{GAMMA_BASE}/markets", params={"id": market_id})
-            r.raise_for_status()
-            markets = r.json()
-        except Exception as e:
-            print(f"  ! gamma fetch failed for market_id={market_id}: {e}")
-            return None
-    if not isinstance(markets, list) or not markets:
+    # Numeric market IDs use the path-style endpoint /markets/{id}.
+    # Slug-style market IDs (e.g. legacy Trump rows storing the event slug)
+    # fall through to _fetch_token_via_event() at the bottom of this function.
+    m = None
+    if market_id.isdigit():
+        async with httpx.AsyncClient(timeout=15) as client:
+            try:
+                r = await client.get(f"{GAMMA_BASE}/markets/{market_id}")
+                r.raise_for_status()
+                m = r.json()
+            except Exception as e:
+                print(f"  ! gamma /markets/{market_id} failed: {e}")
+    else:
+        # market_id looks like a slug — go straight to the event lookup.
+        return await _fetch_token_via_event(market_id, bracket)
+    if not isinstance(m, dict) or not m:
         return None
-    m = markets[0]
     raw = m.get("groupItemTitle") or m.get("question") or ""
     if _normalize_bracket(raw) != _normalize_bracket(bracket):
         # market_id alone may not pin down the bracket — try the parent event.
