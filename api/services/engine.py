@@ -184,6 +184,15 @@ class TradingEngine:
         cycle from every module — vs the signals table which only writes when
         a tradeable signal emerges. A signal-only check would falsely flip to
         'stale' during quiet markets where no trades are warranted.
+
+        Returns True (proceed with cycle) when data is FRESH, False (skip new
+        entries this cycle) when stale or when the freshness probe itself
+        failed.
+
+        2026-05-12 fix: the prior version always returned True except on
+        exception, so the stale-data Slack alert only ever fired on Supabase
+        outages (not genuine staleness). Now we return False whenever the
+        decision-log is older than STALE_DATA_THRESHOLD_HOURS hours.
         """
         try:
             sb = get_supabase()
@@ -204,9 +213,14 @@ class TradingEngine:
             age_hours = (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600
             self._stale_data = age_hours > STALE_DATA_THRESHOLD_HOURS
             if self._stale_data:
-                log.info(f"Last decision {age_hours:.1f}h old — engine cycle may have stalled")
+                log.warning(f"Last decision log {age_hours:.1f}h old — engine cycle has stalled")
+                return False
             return True
-        except Exception:
+        except Exception as e:
+            # DB probe itself failed. Don't conflate with genuine staleness:
+            # log distinctly so the on-call can tell the difference. Treat as
+            # 'unknown — be safe and skip new entries this cycle'.
+            log.warning(f"Freshness probe Supabase error (treating as stale): {e}")
             self._stale_data = True
             return False
 
