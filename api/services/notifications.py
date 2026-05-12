@@ -96,10 +96,32 @@ async def send_email(subject: str, body: str):
     return False
 
 
-async def notify_trade_executed(side: str, bracket: str, size: float, price: float, executor: str):
+async def notify_trade_executed(
+    side: str,
+    bracket: str,
+    size: float,
+    price: float,
+    executor: str,
+    module_name: str | None = None,
+):
+    """Fired by the engine on a successful BUY or SELL fill.
+
+    Format:
+      📈 BUY <40 | Spike Trading | 50 shares @ $0.003 ($0.15 notional) | LIVE
+      📉 SELL <40 | Spike Trading | 50 shares @ $0.42 ($21.00 notional) | LIVE
+
+    Only fires on `status='filled'` — the engine gates this so unfilled
+    limits resting on the book don't spam (that's the normal case for
+    spike's deep ladder tiers).
+    """
     emoji = ":chart_with_upwards_trend:" if side == "BUY" else ":chart_with_downwards_trend:"
+    mode = (executor or "paper").upper()
+    notional = (size or 0) * (price or 0)
+    prefix = f"{emoji} *{side}* {bracket}"
+    if module_name:
+        prefix += f" | {module_name}"
     await send_slack(
-        f"{emoji} *{side}* {bracket} | Size: ${size:.2f} @ {price:.4f} | Mode: {executor}"
+        f"{prefix} | {size:.0f} shares @ ${price:.4f} (${notional:.2f} notional) | {mode}"
     )
 
 

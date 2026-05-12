@@ -152,17 +152,29 @@ async def notify_stale_data(handle: str, hours: float, source: str = "xTracker")
 
 
 async def notify_daily_module_status_digest():
-    """Daily Slack message listing every module that is NOT active, with the
-    most recent reason. Fires at most once per day (24h dedupe). Skipped
-    entirely if zero modules are down (all-clear days are silent).
+    """Daily Slack heartbeat — fires every morning/evening even when all
+    modules are healthy. The user explicitly wants 'alert when bot is dead
+    (daily)', and the only reliable way to know the bot is dead is for
+    the heartbeat to STOP arriving. Silent days hide failure modes
+    (Slack creds expired, Railway service down, scheduler stuck) so we
+    always send.
 
-    Reason source: most recent log entry for the module where log_type IN
-    ('system','risk') with a non-empty message in the last 7 days. Falls back
-    to 'No recent reason logged' if nothing found.
+    Format on a healthy day:
+      :white_check_mark: *Daily Bot Heartbeat*
+      All 3 modules running: Spike Trading (active), Trump (paper), Elon (paper).
+
+    Format on a degraded day:
+      :bell: *Daily Bot Heartbeat — 1 module not active*
+      :white_check_mark: Spike Trading (active)
+      :no_entry: Trump (inactive: circuit_breaker)
+        _Auto-paused after 5 consecutive losses_
+      :white_check_mark: Elon (paper)
+
+    Reason source for inactive modules: most recent log entry where
+    log_type IN ('system','risk'). Falls back to inactive_detail or
+    inactive_reason when no log exists.
     """
-    # Has its own toggle (alert_daily_module_digest_enabled). Defaults ON, but
-    # if explicitly disabled, fall back to the module_status_change toggle so
-    # turning that off silences both.
+    # Has its own toggle (alert_daily_module_digest_enabled). Defaults ON.
     cfg = _alert_settings()
     if cfg.get("alert_daily_module_digest_enabled", True) is False:
         return
@@ -179,40 +191,45 @@ async def notify_daily_module_status_digest():
         return
     try:
         sb = get_supabase()
-        # 'active' AND 'paper' are healthy. Only 'inactive' is degraded.
         mods = sb.table("modules").select("id,name,status,inactive_reason,inactive_detail").execute().data or []
-        down = [m for m in mods if (m.get("status") or "").lower() == "inactive"]
-        if not down:
-            return  # Silence on all-clear days
+        if not mods:
+            await send_slack(":bell: *Daily Bot Heartbeat* — no modules configured.")
+            return
 
         lines = []
-        for m in down:
-            mid = m["id"]
-            reason = "No recent reason logged."
-            try:
-                logs = sb.table("logs").select("message,log_type,severity,created_at") \
-                    .eq("module_id", mid).in_("log_type", ["system", "risk"]) \
-                    .order("created_at", desc=True).limit(1).execute().data or []
-                if logs:
-                    reason = (logs[0].get("message") or reason)[:240]
-            except Exception:
-                pass
-            # All non-active/non-paper modules are 'inactive' now; show the
-            # structured reason (e.g. circuit_breaker, manual_pause) when set.
-            reason_label = m.get("inactive_reason") or "unknown"
-            detail = m.get("inactive_detail")
-            label_line = f":no_entry: *{m.get('name')}* — `inactive ({reason_label})`"
-            if detail:
-                label_line += f"\n_{detail[:200]}_"
+        n_down = 0
+        for m in mods:
+            status = (m.get("status") or "").lower()
+            name = m.get("name") or m.get("id")
+            if status == "active":
+                lines.append(f":white_check_mark: *{name}* — `active` (real money)")
+            elif status == "paper":
+                lines.append(f":blue_book: *{name}* — `paper` (paper trades)")
             else:
-                label_line += f"\n_{reason}_"
-            lines.append(label_line)
+                n_down += 1
+                reason_label = m.get("inactive_reason") or "unknown"
+                detail = m.get("inactive_detail")
+                line = f":no_entry: *{name}* — `inactive ({reason_label})`"
+                if detail:
+                    line += f"\n_{detail[:200]}_"
+                else:
+                    # Fall back to most recent system/risk log entry
+                    try:
+                        logs = sb.table("logs").select("message,created_at") \
+                            .eq("module_id", m["id"]).in_("log_type", ["system", "risk"]) \
+                            .order("created_at", desc=True).limit(1).execute().data or []
+                        if logs:
+                            line += f"\n_{(logs[0].get('message') or '')[:200]}_"
+                    except Exception:
+                        pass
+                lines.append(line)
 
-        msg = (
-            f":bell: *Daily Module Status — {len(down)} not active*\n\n"
-            + "\n\n".join(lines)
-        )
-        await send_slack(msg)
+        if n_down == 0:
+            header = f":white_check_mark: *Daily Bot Heartbeat — all {len(mods)} modules running*"
+        else:
+            header = f":bell: *Daily Bot Heartbeat — {n_down}/{len(mods)} not active*"
+
+        await send_slack(header + "\n\n" + "\n\n".join(lines))
     except Exception as e:
         log.warning(f"daily module digest failed: {e}")
 
