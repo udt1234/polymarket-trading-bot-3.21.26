@@ -17,7 +17,7 @@ from api.modules.shared.signals import (
     compute_signal_modifier, kelly_sizing, rank_brackets,
     cross_bracket_arbitrage, depth_adjusted_size,
 )
-from api.modules.shared.polymarket import fetch_order_books_for_brackets
+from api.modules.shared.polymarket import fetch_order_books_for_brackets, fetch_bracket_token_ids
 from api.modules.elon_tweets.module_config import get_module_config
 from api.modules.shared.hawkes import hawkes_pace, fit_hawkes_params
 from api.modules.shared.news_classifier import classify_news_regime
@@ -96,6 +96,11 @@ class ElonTweetsModule(BaseModule):
         if not market_prices:
             self._log(sb, module_id, "decision", "warning", f"No market prices for slug={slug}")
             return []
+        try:
+            bracket_token_ids = await fetch_bracket_token_ids(slug)
+        except Exception as _e:
+            log.warning(f"fetch_bracket_token_ids({slug}) failed: {_e}")
+            bracket_token_ids = {}
 
         dynamic_brackets = await fetch_market_brackets(slug)
         if not dynamic_brackets:
@@ -306,6 +311,7 @@ class ElonTweetsModule(BaseModule):
                     best_ask=book.get("best_ask", 1.0),
                     bid_depth_5=book.get("bid_depth_5", 0.0),
                     ask_depth_5=book.get("ask_depth_5", 0.0),
+                    token_id=bracket_token_ids.get(bracket_label),
                     metadata={
                         "min_edge_threshold": mod_cfg.get("min_edge_threshold"),
                         "auction_aggregate_price_ceiling": mod_cfg.get("auction_aggregate_price_ceiling"),

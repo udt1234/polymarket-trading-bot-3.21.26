@@ -5,7 +5,11 @@ from api.dependencies import get_supabase
 log = logging.getLogger(__name__)
 
 
-def open_position(module_id: str, market_id: str, bracket: str, side: str, size: float, price: float):
+def open_position(module_id: str, market_id: str, bracket: str, side: str, size: float, price: float, token_id: str | None = None):
+    """Insert or merge into an open BUY position. `token_id` is the
+    ERC-1155 CLOB token ID needed for the SELL leg — store it on first
+    insert so exit_manager can resubmit a sell without re-fetching Gamma.
+    """
     sb = get_supabase()
     existing = (
         sb.table("positions")
@@ -23,9 +27,13 @@ def open_position(module_id: str, market_id: str, bracket: str, side: str, size:
         old_avg = pos["avg_price"]
         new_size = old_size + size
         new_avg = ((old_avg * old_size) + (price * size)) / new_size if new_size != 0 else 0
-        sb.table("positions").update({"size": new_size, "avg_price": new_avg}).eq("id", pos["id"]).execute()
+        upd = {"size": new_size, "avg_price": new_avg}
+        # Backfill token_id on existing positions written before this column was set.
+        if token_id and not pos.get("token_id"):
+            upd["token_id"] = token_id
+        sb.table("positions").update(upd).eq("id", pos["id"]).execute()
     else:
-        sb.table("positions").insert({
+        row = {
             "module_id": module_id,
             "market_id": market_id,
             "bracket": bracket,
@@ -33,7 +41,10 @@ def open_position(module_id: str, market_id: str, bracket: str, side: str, size:
             "size": size,
             "avg_price": price,
             "status": "open",
-        }).execute()
+        }
+        if token_id:
+            row["token_id"] = token_id
+        sb.table("positions").insert(row).execute()
 
 
 def find_open_position(module_id: str, market_id: str, bracket: str) -> dict | None:

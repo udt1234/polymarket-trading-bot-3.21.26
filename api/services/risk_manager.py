@@ -25,6 +25,11 @@ class Signal:
     ask_depth_5: float = 0.0
     metadata: dict = field(default_factory=dict)
     post_detected_at: str | None = None
+    # ERC-1155 CLOB token ID (256-bit integer as string). REQUIRED for live
+    # execution — CLOB rejects `tokenID = bracket label`. Populated by
+    # module emitters from `market["token1"]` (Gamma `clobTokenIds[0]` for
+    # YES). When unset, LiveExecutor refuses to submit the order.
+    token_id: str | None = None
 
 
 class RiskManager:
@@ -162,6 +167,14 @@ class RiskManager:
             sb = get_supabase()
             positions = sb.table("positions").select("size,avg_price").eq("status", "open").execute()
             total_exposure = sum(abs(p["size"] * p["avg_price"]) for p in positions.data)
+            # ALSO count unfilled BUY orders resting on the book — GTC limits
+            # that haven't crossed yet still represent committed exposure
+            # because they can fill any time. Without this, multi-profile
+            # Spike laddering can silently exceed the portfolio cap.
+            unfilled = sb.table("orders").select("size,price,side,status").eq("status", "submitted").execute()
+            for o in (unfilled.data or []):
+                if (o.get("side") or "").upper() == "BUY":
+                    total_exposure += abs((o.get("size") or 0) * (o.get("price") or 0))
             new_notional = signal.kelly_pct * settings.bankroll
             if (total_exposure + new_notional) / settings.bankroll > settings.max_portfolio_exposure:
                 return False, f"portfolio exposure {(total_exposure + new_notional) / settings.bankroll:.2%} exceeds {settings.max_portfolio_exposure:.0%}"
@@ -175,6 +188,12 @@ class RiskManager:
             sb = get_supabase()
             positions = sb.table("positions").select("size,avg_price").eq("status", "open").eq("market_id", signal.market_id).eq("bracket", signal.bracket).execute()
             existing = sum(abs(p["size"] * p["avg_price"]) for p in positions.data)
+            # Count unfilled BUY orders for THIS market+bracket too. Same
+            # rationale as portfolio exposure: resting GTC limits commit us.
+            unfilled = sb.table("orders").select("size,price,side,status").eq("status", "submitted").eq("market_id", signal.market_id).eq("bracket", signal.bracket).execute()
+            for o in (unfilled.data or []):
+                if (o.get("side") or "").upper() == "BUY":
+                    existing += abs((o.get("size") or 0) * (o.get("price") or 0))
             new_notional = signal.kelly_pct * settings.bankroll
             if (existing + new_notional) / settings.bankroll > settings.max_single_market_exposure:
                 return False, f"single market exposure exceeded for {signal.bracket}"
@@ -315,11 +334,16 @@ class RiskManager:
     def _check_duplicate(self, signal: Signal, settings) -> tuple[bool, str]:
         try:
             sb = get_supabase()
+            # Must scope by market_id too — Spike can run on multiple concurrent
+            # 2-day auctions (e.g. current + pre-launched next), and each lives
+            # in a different market. Without this filter, a position in
+            # auction A's `<40` blocks valid entries in auction B's `<40`.
             existing = (
                 sb.table("positions")
-                .select("id,avg_price,module_id")
+                .select("id,avg_price,module_id,market_id")
                 .eq("status", "open")
                 .eq("module_id", signal.module_id)
+                .eq("market_id", signal.market_id)
                 .eq("bracket", signal.bracket)
                 .execute()
             )
@@ -392,10 +416,24 @@ class RiskManager:
         return True, ""
 
     def _check_spread(self, signal: Signal, settings) -> tuple[bool, str]:
-        # Structural strategies (spike_trading) place LIMIT orders that may be
-        # well below the current bid — they intentionally don't care about
-        # the live spread because they wait for the market to come to them.
-        if (signal.metadata or {}).get("skip_edge_check") is True:
+        # Structural strategies (spike_trading) place LIMIT BUY orders that
+        # may be well below the current bid — they intentionally don't care
+        # about the live spread because they wait for the market to come to
+        # them. SELL signals (SELL-NOW exits) DO care about the spread —
+        # crossing a wide spread on exit is real slippage. Only bypass for
+        # BUY side.
+        if (signal.metadata or {}).get("skip_edge_check") is True and signal.side == "BUY":
+            return True, ""
+        # Emergency-exit bypass for SELL signals: when a position MUST close
+        # (auction near settlement, bracket dying), refusing the exit because
+        # spread is wide is the wrong call — the alternative is holding to
+        # zero. Logged loudly so we can detect misuse.
+        if (signal.metadata or {}).get("force_exit") is True and signal.side == "SELL":
+            log.warning(
+                f"SELL force_exit bypassing spread check: "
+                f"bracket={signal.bracket} market={signal.market_id} "
+                f"reason={(signal.metadata or {}).get('reason', 'unspecified')}"
+            )
             return True, ""
         # Either default sentinel means no real book data was populated by the
         # module (Signal dataclass defaults: best_bid=0.0, best_ask=1.0). Prior
@@ -411,9 +449,20 @@ class RiskManager:
         return True, ""
 
     def _check_liquidity(self, signal: Signal, settings) -> tuple[bool, str]:
-        # Structural strategies opt out — limit orders wait for fills, depth
-        # at signal time isn't relevant.
-        if (signal.metadata or {}).get("skip_edge_check") is True:
+        # Structural strategies opt out for BUY — limit orders wait for fills,
+        # depth at signal time isn't relevant. SELL signals must still verify
+        # bid depth because they're crossing the spread to exit; an empty
+        # bid side at SELL time means the order sails at any matching bid.
+        if (signal.metadata or {}).get("skip_edge_check") is True and signal.side == "BUY":
+            return True, ""
+        # Emergency-exit bypass — see _check_spread comment. Holding a dying
+        # position to zero is worse than crossing into an empty book.
+        if (signal.metadata or {}).get("force_exit") is True and signal.side == "SELL":
+            log.warning(
+                f"SELL force_exit bypassing liquidity check: "
+                f"bracket={signal.bracket} market={signal.market_id} "
+                f"reason={(signal.metadata or {}).get('reason', 'unspecified')}"
+            )
             return True, ""
         depth = signal.ask_depth_5 if signal.side == "BUY" else signal.bid_depth_5
         target_size = signal.kelly_pct * settings.bankroll

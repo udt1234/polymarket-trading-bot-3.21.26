@@ -91,7 +91,23 @@ Adding a strategy = new file in `api/modules/spike_trading/strategies/`.
 
 ## Open Work
 
-### High priority
+### 🚦 LIVE-FLIP PROCEDURE (Spike Trading)
+1. **Run the token_id backfill** for any pre-existing open positions:
+   ```
+   python scripts/backfill_position_token_ids.py            # dry-run, prints would-write actions
+   python scripts/backfill_position_token_ids.py --apply    # writes
+   ```
+   Live SELLs refuse to submit when `positions.token_id IS NULL`. Backfill or close any paper-era open positions first.
+2. **Apply migration 015** (`positions_token_id.sql`) — adds the `token_id` column.
+3. **Verify Railway env vars on Bot-API service**: `PAPER_MODE=false`, `ENV=production`.
+4. **Verify `SLACK_WEBHOOK_URL`** (or equivalent — `notifications.py:send_slack`) is set; daily digests run at 9 AM ET + 5 PM ET.
+5. **Open the Spike Trading module dashboard** → status dropdown → "Real $ Trades". This writes `status='active'` to the modules row.
+6. **Watch the next cycle log** for `"Live executor ready"` and confirm the first signal is routed via LiveExecutor (or rejected with `signal has no token_id` if backfill missed something).
+
+### Whale Watching card (Phase 2 of `WHALE_BRACKET_CARDS_SPEC.md`)
+Zero files exist yet. Needs: `whale_snapshots` + `whale_wallet_profiles` Supabase tables, `whale_classifier.py` (5-archetype detection: Market-Maker / Tail Scooper / Spike Trader (=us) / Pace Chaser / Tail Punter), `whale_snapshot.py` orchestrator, nightly Railway cron, `/api/modules/{id}/whales` endpoint, 5 TSX components. Recommend: Spike-only first + 90-day backfill (~half a day). Spec estimate: 8-10 hr full Phase 2.
+
+### Other high priority
 - **Apply patterns 3 + 6 to Trump + Elon ensemble modules.** Their pacing prior is stale and their Confidence Bands don't show Polymarket prices. ETA: ~1 day.
 - **Bot vs market disagreement gating.** When the bot's top bracket diverges sharply (>30pp) from Polymarket's top, log a warning and reduce signal confidence. Right now we trust the model unconditionally.
 
