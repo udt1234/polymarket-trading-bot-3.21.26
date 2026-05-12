@@ -268,12 +268,11 @@ class LiveExecutor:
         return self._client
 
     def execute(self, signal: Signal) -> dict:
-        from api.config import get_settings
-        settings = get_settings()
-        if settings.paper_mode:
-            raise RuntimeError("LiveExecutor called while PAPER_MODE is True")
-        if getattr(settings, "environment", "development") != "production":
-            raise RuntimeError("LiveExecutor called outside production environment")
+        # Global PAPER_MODE and ENV guards were removed 2026-05-12 — per-module
+        # status (handled by Engine._executor_for_signal) is now authoritative.
+        # Real safety net is the credentials check in _get_client(): a missing
+        # API key / secret / passphrase / private_key raises ValueError, so a
+        # misconfigured environment cannot accidentally place orders.
         if signal.market_price <= 0 or signal.market_price >= 1:
             raise ValueError(f"Invalid price: {signal.market_price}")
         # CLOB requires the ERC-1155 token ID, NOT the human bracket label.
@@ -373,7 +372,15 @@ class LiveExecutor:
                 open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, signal.market_price, token_id=signal.token_id)
 
             log.info(f"LIVE [{profile_name}] {signal.side} {signal.bracket} size={size:.2f} @ {signal.market_price:.4f}")
-            return {"id": order_id, "status": "filled", "profile": profile_name, "clob_response": str(order)}
+            return {
+                "id": order_id,
+                "status": "filled",
+                "profile": profile_name,
+                "size": size,
+                "price": signal.market_price,
+                "executor": "live",
+                "clob_response": str(order),
+            }
 
         except Exception as e:
             sb.table("orders").update({"status": "rejected"}).eq("id", order_id).execute()

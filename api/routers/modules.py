@@ -203,8 +203,10 @@ def _decorate_with_badge(module_row: dict) -> dict:
         module_row["display_badge"] = "inactive"
         module_row["inactive_reason_human"] = _INACTIVE_REASON_LABELS.get(reason, reason)
         return module_row
-    is_live_env = (not settings.paper_mode) and (settings.environment == "production")
-    if status == "active" and is_live_env:
+    # Per-module status is authoritative for the badge (2026-05-12 — global
+    # PAPER blocker removed). status='active' -> real money. status='paper' or
+    # anything else -> paper trades.
+    if status == "active":
         module_row["display_badge"] = "real_trading"
     else:
         module_row["display_badge"] = "paper_trading"

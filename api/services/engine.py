@@ -86,32 +86,28 @@ class TradingEngine:
             return
         settings = get_settings()
 
-        # Per-module routing model (2026-05-05):
-        #   - module.status='active' AND global PAPER off  -> live executor
-        #   - module.status='paper' OR global PAPER on     -> paper executor
-        #   - non-production env always forces paper (safety)
-        # We always build the paper executor; live is built only if env allows
-        # any module to ever go live. This makes per-module status the source
-        # of truth and global PAPER an override-only safety net.
+        # Per-module routing model (2026-05-12 — global PAPER blocker removed):
+        #   Each module's own status decides paper vs live, period.
+        #   - module.status='active' -> live executor (trades real money)
+        #   - module.status='paper'  -> paper executor
+        #   - module.status='inactive' -> short-circuited before this point
+        # Global `paper_mode` env is now ADVISORY ONLY (dashboard banner) —
+        # it no longer overrides per-module routing. The real safety net is
+        # the credentials check in LiveExecutor._get_client(): missing API
+        # key / secret / passphrase / private_key raises ValueError, so a
+        # misconfigured prod environment can't accidentally trade.
         self.paper_executor = PaperExecutor()
-        self._force_paper = settings.paper_mode or settings.environment != "production"
-        if self._force_paper:
-            self.executor = self.paper_executor
-            self._multi_mode = False
-            if not settings.paper_mode and settings.environment != "production":
-                log.warning("ENV != production — forcing paper mode for all modules regardless of status")
-            log.info("Global PAPER override ACTIVE — all modules paper-trade")
+        self._force_paper = False  # kept for backwards-compat callers; always False now
+        from api.services.profiles import get_multi_exec_profiles
+        multi_profiles = get_multi_exec_profiles()
+        if len(multi_profiles) > 1:
+            self.executor = MultiExecutor(multi_profiles)
+            self._multi_mode = True
+            log.info(f"Multi-account live executor ready: {[p['name'] for p in multi_profiles]}")
         else:
-            from api.services.profiles import get_multi_exec_profiles
-            multi_profiles = get_multi_exec_profiles()
-            if len(multi_profiles) > 1:
-                self.executor = MultiExecutor(multi_profiles)
-                self._multi_mode = True
-                log.info(f"Multi-account live mode: broadcasting to {[p['name'] for p in multi_profiles]}")
-            else:
-                self.executor = LiveExecutor()
-                self._multi_mode = False
-                log.info("Live executor ready — modules with status='active' will trade real money")
+            self.executor = LiveExecutor()
+            self._multi_mode = False
+            log.info("Live executor ready — modules with status='active' will trade real money")
 
         self.registry.discover()
         self.scheduler.add_job(self._run_cycle, "interval", seconds=interval, max_instances=1)
@@ -138,25 +134,27 @@ class TradingEngine:
         """Route a signal to the right executor based on per-module status.
 
         Decision rules:
-          1. Global PAPER override (env) -> always paper.
-          2. Module status='paper' -> paper executor (this module is in
-             paper even when other modules are live).
-          3. Module status='active' -> live executor (self.executor).
+          1. Module status='paper' -> paper executor.
+          2. Module status='active' -> live executor (self.executor).
 
-        Falls back to self.executor on any DB lookup failure (fail-safe to
-        whatever the engine was started with).
+        Per-module status is authoritative. The global `paper_mode` env
+        flag no longer overrides routing (see start() comment).
+
+        Failure modes:
+        - DB lookup fails -> route to PAPER (fail-safe: never accidentally
+          trade real money when we don't know the module's intent).
         """
-        if self._force_paper:
-            return self.paper_executor
         try:
             sb = get_supabase()
             row = sb.table("modules").select("status").eq("id", signal.module_id).single().execute()
             status = ((row.data or {}).get("status") or "").lower()
-            if status == "paper":
-                return self.paper_executor
+            if status == "active":
+                return self.executor
+            # Anything other than active (paper, inactive, unknown) -> paper.
+            return self.paper_executor
         except Exception as e:
-            log.warning(f"executor routing fallback (DB error): {e}")
-        return self.executor
+            log.warning(f"executor routing fallback to PAPER (DB error): {e}")
+            return self.paper_executor
 
     def stop(self):
         if not self._running:
@@ -166,10 +164,9 @@ class TradingEngine:
         log.info(f"Engine stopped after {self._cycle_count} cycles")
 
     def reload_executors(self):
-        settings = get_settings()
-        if settings.paper_mode:
-            return
-
+        """Rebuild the live executor — used when profile credentials change.
+        No longer gated on settings.paper_mode (global PAPER blocker removed
+        2026-05-12)."""
         from api.services.profiles import get_multi_exec_profiles
         multi_profiles = get_multi_exec_profiles()
         if len(multi_profiles) > 1:
@@ -280,13 +277,32 @@ class TradingEngine:
                             self._track_rejection(module.name, getattr(signal, "module_id", ""), result.get("reason", "executor_rejected"))
                             continue
                         self._log_execution(signal, result)
-                        try:
-                            from api.services.notifications import notify_trade_executed
-                            _fire_and_forget_async(
-                                notify_trade_executed(signal.side, signal.bracket, result.get("size", 0), result.get("price", 0), result.get("executor", "paper"))
-                            )
-                        except Exception:
-                            pass
+                        # Only Slack on actual fills. unfilled = limit resting on
+                        # the book (normal for spike's deep ladder) — skipping
+                        # avoids alert spam every 5-min cycle.
+                        if result.get("status") == "filled":
+                            try:
+                                from api.services.notifications import notify_trade_executed
+                                # Look up module display name for the message.
+                                _mod_name = None
+                                try:
+                                    sb_ = get_supabase()
+                                    _row = sb_.table("modules").select("name").eq("id", signal.module_id).single().execute()
+                                    _mod_name = ((_row.data or {}).get("name")) or module.name
+                                except Exception:
+                                    _mod_name = module.name
+                                _fire_and_forget_async(
+                                    notify_trade_executed(
+                                        signal.side,
+                                        signal.bracket,
+                                        result.get("size", 0),
+                                        result.get("price", 0),
+                                        result.get("executor", "paper"),
+                                        module_name=_mod_name,
+                                    )
+                                )
+                            except Exception:
+                                pass
                     else:
                         log.info(f"Signal rejected: {reason}")
                         self._log_rejection(signal, reason)
