@@ -123,7 +123,8 @@ function DowHourGrid({ grid, max }: { grid: number[][]; max: number }) {
           <div key={dow} className="flex items-center mt-[2px]">
             <div className="w-10 flex-shrink-0 text-[10px] text-muted-foreground">{d}</div>
             <div className="flex-1 grid gap-[2px]" style={{ gridTemplateColumns: "repeat(24, minmax(0, 1fr))" }}>
-              {grid[dow].map((v, h) => {
+              {grid[dow].map((rawV, h) => {
+                const v = Number.isFinite(rawV) ? rawV : 0
                 const t = tier(v, max)
                 const display = v > 0 ? (v >= 10 ? Math.round(v).toString() : v.toFixed(1)) : ""
                 return (
@@ -264,10 +265,15 @@ export function PostingPatternsCard({ pacing }: { pacing: any }) {
   const { grid, max } = useMemo(() => {
     const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0))
     let max = 0
+    // Backend emits {dow, hour, avg, samples} — _build_dow_hour_heatmap in
+    // api/routers/modules.py. Old PostTimingGrid mapped `c.avg -> count` at
+    // the call site; we read `avg` directly. Fall back to `count` defensively
+    // so legacy/test payloads don't crash.
     for (const d of pacing?.dow_hour_heatmap || []) {
       if (d.dow >= 0 && d.dow < 7 && d.hour >= 0 && d.hour < 24) {
-        grid[d.dow][d.hour] = d.count
-        if (d.count > max) max = d.count
+        const v = Number(d.avg ?? d.count ?? 0) || 0
+        grid[d.dow][d.hour] = v
+        if (v > max) max = v
       }
     }
     return { grid, max }
