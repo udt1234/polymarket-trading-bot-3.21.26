@@ -20,6 +20,7 @@ import { TradeHistory } from "./components/trade-history"
 import { AuctionDeepDive } from "./components/auction-deep-dive"
 import { PnlCurve } from "./components/pnl-curve"
 import { BotHealthBanner } from "./components/bot-health-banner"
+import { NextAuctionCountdown } from "./components/next-auction-countdown"
 import { LiveStatusBadge } from "./components/live-status-badge"
 import { StatusDropdown } from "./components/status-dropdown"
 import { DynamicConfigForm, type ConfigSchemaField } from "./components/dynamic-config-form"
@@ -473,6 +474,9 @@ export default function ModuleDetailPage() {
 
       {/* Bot Health Banner — always visible, single-glance status */}
       <BotHealthBanner moduleId={module.id} />
+
+      {/* Next-Auction Countdown — silent on quiet days (no active or future auctions) */}
+      <NextAuctionCountdown moduleId={module.id} />
 
       {/* Circuit Breaker Banner */}
       {cbState?.tripped && (
