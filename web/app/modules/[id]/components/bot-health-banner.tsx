@@ -2,7 +2,13 @@
 
 import { useApi } from "@/lib/hooks"
 import { cn } from "@/lib/utils"
-import { CheckCircle2, Eye, Pause, Skull } from "lucide-react"
+import { CheckCircle2, Eye, Pause, Skull, ShieldAlert } from "lucide-react"
+
+interface CircuitBreaker {
+  consecutive_losses: number
+  max_consecutive_losses: number
+  tripped: boolean
+}
 
 interface Health {
   state: "trading" | "watching" | "paused" | "killed"
@@ -17,6 +23,34 @@ const STYLES: Record<Health["state"], { bg: string; border: string; text: string
   killed:   { bg: "bg-muted",           border: "border-muted-foreground", text: "text-muted-foreground", iconClass: "text-muted-foreground", Icon: Skull,    label: "Killed" },
 }
 
+function CircuitBreakerPill({ cb }: { cb: CircuitBreaker }) {
+  const max = Math.max(cb.max_consecutive_losses || 5, 1)
+  const cur = Math.max(0, cb.consecutive_losses || 0)
+  // Color tier: green when far from cap, amber halfway, red near/past cap.
+  const ratio = cur / max
+  const tone =
+    cb.tripped ? "bg-destructive/15 text-destructive border-destructive/40"
+    : ratio >= 0.8 ? "bg-destructive/10 text-destructive border-destructive/30"
+    : ratio >= 0.5 ? "bg-amber-500/15 text-amber-500 border-amber-500/30"
+    : "bg-muted text-muted-foreground border-border"
+  return (
+    <span
+      title={
+        cb.tripped
+          ? "Circuit breaker TRIPPED — all modules paused until cooldown clears."
+          : `Bot-wide consecutive losses across all modules. Auto-pauses the module that lands the ${max}th loss.`
+      }
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+        tone,
+      )}
+    >
+      <ShieldAlert className="h-3 w-3" />
+      Trips: {cur}/{max}{cb.tripped ? " · TRIPPED" : ""}
+    </span>
+  )
+}
+
 export function BotHealthBanner({ moduleId }: { moduleId?: string } = {}) {
   const url = moduleId ? `/api/engine/health?module_id=${moduleId}` : "/api/engine/health"
   const { data: health } = useApi<Health>(url, [moduleId], 15000)
@@ -25,13 +59,15 @@ export function BotHealthBanner({ moduleId }: { moduleId?: string } = {}) {
   const style = STYLES[health.state] || STYLES.paused
   const { Icon, bg, border, text, iconClass, label } = style
 
-  // Stringify details into a single readable line.
-  const detailsLine = health.details
-    ? Object.entries(health.details)
-        .filter(([, v]) => v != null && v !== "")
-        .map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`)
-        .join(" · ")
-    : ""
+  // Pull circuit_breaker out of details so it renders as a pill (not as a
+  // raw [object Object] string in the catch-all detail line).
+  const cb: CircuitBreaker | undefined = health.details?.circuit_breaker
+  const otherDetails = health.details
+    ? Object.entries(health.details).filter(([k, v]) => k !== "circuit_breaker" && v != null && v !== "")
+    : []
+  const detailsLine = otherDetails
+    .map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`)
+    .join(" · ")
 
   return (
     <div className={cn(
@@ -40,12 +76,13 @@ export function BotHealthBanner({ moduleId }: { moduleId?: string } = {}) {
     )}>
       <Icon className={cn("h-5 w-5 shrink-0", iconClass)} />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm flex-wrap">
           <span className={cn("font-semibold uppercase tracking-wide text-xs", text)}>
             {label}
           </span>
           <span className="text-muted-foreground">·</span>
           <span className="text-foreground">{health.reason}</span>
+          {cb && <CircuitBreakerPill cb={cb} />}
         </div>
         {detailsLine && (
           <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
