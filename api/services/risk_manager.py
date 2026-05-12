@@ -135,6 +135,15 @@ class RiskManager:
         return True, ""
 
     def _check_position_size(self, signal: Signal, settings) -> tuple[bool, str]:
+        # kelly_pct semantics differ by side:
+        #   BUY  -> fraction of bankroll to deploy (must obey the per-market cap)
+        #   SELL -> fraction of the existing position to liquidate (1.0 = full
+        #           exit, which is the normal SELL-NOW emergency-exit path).
+        # Without the side gate, every Spike SELL-NOW would be rejected with
+        # "kelly 1.0 exceeds max single market 0.15" — the bot would be unable
+        # to exit a losing or expiring position.
+        if signal.side == "SELL":
+            return True, ""
         if signal.kelly_pct > settings.max_single_market_exposure:
             return False, f"kelly {signal.kelly_pct:.4f} exceeds max single market {settings.max_single_market_exposure}"
         return True, ""
@@ -163,6 +172,11 @@ class RiskManager:
         return True, ""
 
     def _check_portfolio_exposure(self, signal: Signal, settings) -> tuple[bool, str]:
+        # SELL signals REDUCE portfolio exposure, so the per-cycle BUY-cap
+        # check doesn't apply. Without this gate, a SELL with kelly_pct=1.0
+        # gets treated as adding 100% of bankroll to exposure and is rejected.
+        if signal.side == "SELL":
+            return True, ""
         try:
             sb = get_supabase()
             positions = sb.table("positions").select("size,avg_price").eq("status", "open").execute()
@@ -184,6 +198,10 @@ class RiskManager:
         return True, ""
 
     def _check_single_market_exposure(self, signal: Signal, settings) -> tuple[bool, str]:
+        # SELL is an unwind — kelly_pct=1.0 means "100% of THIS position", not
+        # 100% of bankroll. Single-market exposure caps don't apply to exits.
+        if signal.side == "SELL":
+            return True, ""
         try:
             sb = get_supabase()
             positions = sb.table("positions").select("size,avg_price").eq("status", "open").eq("market_id", signal.market_id).eq("bracket", signal.bracket).execute()
@@ -203,6 +221,9 @@ class RiskManager:
         return True, ""
 
     def _check_correlated_exposure(self, signal: Signal, settings) -> tuple[bool, str]:
+        # SELL unwinds, doesn't add exposure.
+        if signal.side == "SELL":
+            return True, ""
         try:
             sb = get_supabase()
             positions = sb.table("positions").select("size,avg_price").eq("status", "open").eq("market_id", signal.market_id).execute()
@@ -228,6 +249,10 @@ class RiskManager:
         would always reject them. Their sizing is bounded by their own
         per-tier % caps.
         """
+        # SELL doesn't add bracket exposure — the aggregate-EV check is a
+        # BUY-only entry gate.
+        if signal.side == "SELL":
+            return True, ""
         if (signal.metadata or {}).get("skip_edge_check") is True:
             return True, ""
         try:
@@ -282,6 +307,9 @@ class RiskManager:
         Per-module override via signal.metadata['auction_aggregate_price_ceiling'].
         Set to 0 (or None) to disable.
         """
+        # SELL exits don't add new bracket exposure to the aggregate cap.
+        if signal.side == "SELL":
+            return True, ""
         # Per-module override via signal metadata. Modules may set this STRICTER
         # (lower) than the global floor — but the floor itself caps the maximum
         # leniency, mirroring the min_edge_threshold pattern. If both are 0 the
@@ -398,6 +426,11 @@ class RiskManager:
         return True, ""
 
     def _check_settlement_decay(self, signal: Signal, settings) -> tuple[bool, str]:
+        # SELL must be allowed near settlement — that's WHEN SELL-NOW fires.
+        # Blocking exits within 2h of close would strand positions on dying
+        # brackets through final resolution.
+        if signal.side == "SELL":
+            return True, ""
         try:
             sb = get_supabase()
             module = sb.table("modules").select("resolution_date").eq("id", signal.module_id).single().execute()
