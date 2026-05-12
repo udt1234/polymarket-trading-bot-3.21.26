@@ -1707,6 +1707,20 @@ async def price_history(
     result = q.order("snapshot_hour", desc=False).limit(limit).execute()
     series = result.data or []
 
+    # When no specific bracket/tracking is requested, filter out snapshots
+    # whose bracket label isn't part of the module's CURRENT auction grid.
+    # Stops stale brackets (e.g. 240-259/260-279 from old Elon auctions)
+    # from showing up in Volume vs Price.
+    if not bracket and not tracking_id:
+        try:
+            from api.services.bracket_stats import _resolve_module_meta, _current_grid_for_handle
+            handle, win_days = _resolve_module_meta(module_id)
+            current_grid = _current_grid_for_handle(handle, win_days)
+            if current_grid:
+                series = [s for s in series if s.get("bracket") in current_grid]
+        except Exception as _e:
+            log.warning(f"price-history grid filter failed: {_e}")
+
     trades_result = sb.table("trades").select("bracket,side,price,size,executed_at,market_id").eq("module_id", module_id).order("executed_at", desc=False).limit(100).execute()
     trades = trades_result.data or []
     if bracket:
@@ -1976,4 +1990,18 @@ async def order_book_depth(module_id: str, bracket: str | None = None):
         b = r["bracket"]
         if b not in latest_by_bracket:
             latest_by_bracket[b] = r
-    return {"snapshots": list(latest_by_bracket.values())}
+    snapshots = list(latest_by_bracket.values())
+
+    # Filter to brackets that exist in the module's CURRENT auction grid —
+    # stops stale order-book rows for retired brackets from rendering.
+    if not bracket:
+        try:
+            from api.services.bracket_stats import _resolve_module_meta, _current_grid_for_handle
+            handle, win_days = _resolve_module_meta(module_id)
+            current_grid = _current_grid_for_handle(handle, win_days)
+            if current_grid:
+                snapshots = [s for s in snapshots if s.get("bracket") in current_grid]
+        except Exception as _e:
+            log.warning(f"order-book-depth grid filter failed: {_e}")
+
+    return {"snapshots": snapshots}

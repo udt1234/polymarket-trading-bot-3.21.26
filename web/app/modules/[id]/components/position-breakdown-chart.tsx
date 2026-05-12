@@ -1,6 +1,7 @@
 "use client"
 
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts"
+import { chartTooltip } from "@/lib/utils"
 
 interface Position { bracket: string; size: number; avg_price: number; status: string }
 
@@ -44,7 +45,10 @@ export function PositionBreakdownChart({ positions }: { positions: Position[] })
                 <Cell key={i} fill={COLORS[d.name] || COLORS["Other"]} />
               ))}
             </Pie>
-            <Tooltip contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => `$${v.toFixed(2)}`} />
+            <Tooltip
+              {...chartTooltip}
+              formatter={(v: number) => `$${v.toFixed(2)}`}
+            />
             <Legend wrapperStyle={{ fontSize: 11 }} />
           </PieChart>
         </ResponsiveContainer>

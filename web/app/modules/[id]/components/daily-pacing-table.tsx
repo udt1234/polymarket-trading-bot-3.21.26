@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { formatDate, cn } from "@/lib/utils"
+import { formatDate, cn, chartTooltip } from "@/lib/utils"
 import { AreaChart, Area, LineChart, Line, ComposedChart, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 
 interface PacingModel {
@@ -175,7 +175,8 @@ export function DailyPacingTable({ pacing }: { pacing: any }) {
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" />
                   <YAxis tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" />
                   <Tooltip
-                    contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 11 }}
+                    {...chartTooltip}
+                    contentStyle={{ ...chartTooltip.contentStyle, fontSize: 11 }}
                     formatter={(value: any, name: string) => [value, name === "actual" ? "Actual" : name === "expected" ? "Expected" : "Projected"]}
                   />
                   {/* Expected: dashed grey line */}

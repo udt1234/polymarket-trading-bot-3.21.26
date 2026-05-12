@@ -2,12 +2,12 @@
 
 // Build-tag: pnl-curve-v3 (bar chart + range selector, replaces v2 area chart)
 import { useState, useMemo } from "react"
-import { cn } from "@/lib/utils"
+import { cn, chartTooltip } from "@/lib/utils"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from "recharts"
 
 interface Trade { bracket: string; side: string; size: number; price: number; executed_at: string }
-interface Position { bracket: string; size: number; avg_price: number; realized_pnl: number; status: string; closed_at?: string | null }
+interface Position { bracket: string; size: number; avg_price: number; realized_pnl: number; unrealized_pnl?: number; status: string; opened_at?: string | null; closed_at?: string | null }
 
 type RangeKey = "7d" | "30d" | "90d" | "all"
 
@@ -52,19 +52,29 @@ export function PnlCurve({ trades, openPositions, closedPositions, marketPrices 
   )
   const totalReturnPct = denominator > 0 ? (totalPnl / denominator) * 100 : 0
 
-  // Build per-day P&L bars from closed positions. Each closed position
-  // contributes its realized_pnl to its closed_at date (or created_at as fallback).
+  // Build per-day P&L bars. Closed positions contribute realized_pnl to their
+  // closed_at date. Open positions ALSO contribute their current unrealized_pnl
+  // to their opened_at date (computed from marketPrices if available, else from
+  // the position row) — without this, paper-mode modules with no closed trades
+  // yet show a permanently empty chart even when there's real unrealized P&L.
   const allBars = useMemo(() => {
     const byDay = new Map<string, { date: Date; pnl: number }>()
-    for (const p of closedPositions) {
-      const dateStr = p.closed_at || (p as any).created_at
-      if (!dateStr) continue
+    const add = (dateStr: string | undefined | null, pnl: number) => {
+      if (!dateStr) return
       const d = new Date(dateStr)
-      if (isNaN(d.getTime())) continue
+      if (isNaN(d.getTime())) return
       const key = dayKey(d)
       const existing = byDay.get(key)
-      if (existing) existing.pnl += p.realized_pnl || 0
-      else byDay.set(key, { date: d, pnl: p.realized_pnl || 0 })
+      if (existing) existing.pnl += pnl
+      else byDay.set(key, { date: d, pnl })
+    }
+    for (const p of closedPositions) {
+      add(p.closed_at || (p as any).created_at, p.realized_pnl || 0)
+    }
+    for (const p of openPositions) {
+      const liveUnrealized = (p.size * (marketPrices?.[p.bracket] ?? p.avg_price)) - (p.size * p.avg_price)
+      const u = Number.isFinite(liveUnrealized) ? liveUnrealized : (p.unrealized_pnl || 0)
+      add(p.opened_at || (p as any).created_at, u)
     }
     return Array.from(byDay.entries())
       .sort(([a], [b]) => a.localeCompare(b))
@@ -73,7 +83,7 @@ export function PnlCurve({ trades, openPositions, closedPositions, marketPrices 
         date: v.date,
         pnl: parseFloat(v.pnl.toFixed(2)),
       }))
-  }, [closedPositions])
+  }, [closedPositions, openPositions, marketPrices])
 
   // Filter by range. "all" returns everything; otherwise last N days from now.
   const chartData = useMemo(() => {
@@ -147,8 +157,8 @@ export function PnlCurve({ trades, openPositions, closedPositions, marketPrices 
             <YAxis tick={{ fontSize: 11 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => `$${v}`} />
             <ReferenceLine y={0} stroke="hsl(215, 20%, 35%)" />
             <Tooltip
-              contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }}
-              formatter={(v: number) => [`${v >= 0 ? "+" : ""}$${v.toFixed(2)}`, "Realized P&L"]}
+              {...chartTooltip}
+              formatter={(v: number) => [`${v >= 0 ? "+" : ""}$${v.toFixed(2)}`, "Daily P&L"]}
               cursor={{ fill: "hsl(215, 20%, 25%)", opacity: 0.2 }}
             />
             <Bar dataKey="pnl" name="Daily P&L">
@@ -163,7 +173,7 @@ export function PnlCurve({ trades, openPositions, closedPositions, marketPrices 
         </ResponsiveContainer>
       ) : (
         <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-          No closed trades in the last {range === "all" ? "all time" : range}.
+          No P&L activity in the last {range === "all" ? "all time" : range}.
         </div>
       )}
     </div>
