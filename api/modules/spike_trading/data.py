@@ -6,6 +6,7 @@ bracket (default <40).
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -185,11 +186,27 @@ async def fetch_market_for_tracking(tracking: dict, target_bracket: str) -> Opti
             )
         except Exception:
             min_order = 5.0
+        # clobTokenIds can come back as either a list OR a JSON-encoded
+        # string depending on the Gamma endpoint variant. The string form
+        # is the one that bit us — without json.loads, token1 was silently
+        # None and every live order got refused by LiveExecutor.
+        raw_token_ids = m.get("clobTokenIds")
+        token_ids_list: list = []
+        if isinstance(raw_token_ids, str):
+            try:
+                parsed = json.loads(raw_token_ids)
+                if isinstance(parsed, list):
+                    token_ids_list = parsed
+            except Exception:
+                token_ids_list = []
+        elif isinstance(raw_token_ids, list):
+            token_ids_list = raw_token_ids
+        token1 = token_ids_list[0] if token_ids_list else None
         return {
             "market_id": str(m.get("id", "")),
             "slug": slug,
             "condition_id": m.get("conditionId") or m.get("condition_id"),
-            "token1": (m.get("clobTokenIds") or [None])[0] if isinstance(m.get("clobTokenIds"), list) else None,
+            "token1": token1,
             "best_bid": float(m.get("bestBid") or 0.0),
             "best_ask": float(m.get("bestAsk") or 1.0),
             "volume_24h": float(m.get("volume24hr") or m.get("volume24Hr") or 0.0),
@@ -285,9 +302,16 @@ async def fetch_cumulative_tweets(handle: str, tracking_id: str | None = None) -
         return 0
 
 
-def hours_to_close(end_iso: str) -> float:
+def hours_to_close(end_iso: str) -> float | None:
+    """Hours until the auction closes. Returns None when the input is empty
+    or unparseable — caller MUST treat that distinct from "0 hours" because
+    pacing logic divides by elapsed_hours and would misclassify a parse
+    failure as "auction closing right now" (premature SELL-NOW).
+    """
+    if not end_iso:
+        return None
     try:
         e = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
         return max((e - datetime.now(timezone.utc)).total_seconds() / 3600.0, 0.0)
     except (ValueError, TypeError):
-        return 0.0
+        return None

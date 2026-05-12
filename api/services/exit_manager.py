@@ -280,6 +280,7 @@ def execute_exits(exits: list[ExitSignal], positions_by_id: dict, executor) -> l
                 model_prob=0.0,
                 market_price=float(current_price),
                 kelly_pct=1.0,  # liquidate full position; executor reads existing size
+                token_id=pos.get("token_id"),
                 metadata={"exit_reason": ex.reason, "exit_urgency": ex.urgency},
             )
             result = executor.execute(sell_signal)

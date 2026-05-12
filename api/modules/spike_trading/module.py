@@ -87,21 +87,36 @@ class SpikeTradingModule(BaseModule):
         return ["spike trading", "spike_trading", "spike"]
 
     def _first_enabled_auction(self) -> dict | None:
-        """First enabled auction_type. Used by engine.* methods that expect
-        a single handle/platform/window (post-count snapshot, dashboard
-        default). Multi-auction iteration happens in _evaluate_async."""
+        """First enabled auction_type across ALL DB rows mapped to this module.
+        Used by engine.* methods that expect a single handle/platform/window
+        (post-count snapshot, dashboard default). Multi-auction iteration
+        happens in _evaluate_async.
+
+        Matches every row whose `strategy='spike_trading'` OR whose name
+        contains a display keyword — same resolution as the registry. This
+        makes duplication safe: a new 'Spike Trading v2' row is picked up
+        without code changes.
+        """
         try:
             sb = get_supabase()
-            row = sb.table("modules").select("id").eq("name", "Spike Trading").execute()
-            if not row.data:
-                return None
-            cfg = get_module_config(row.data[0]["id"])
-            for at in cfg.get("auction_types", []) or []:
-                if at.get("enabled"):
-                    return at
-            # No enabled auction type — fall back to first regardless
-            ats = cfg.get("auction_types", []) or []
-            return ats[0] if ats else None
+            all_rows = sb.table("modules").select("id,name,strategy").execute().data or []
+            matching = [
+                r for r in all_rows
+                if (r.get("strategy") or "").lower().strip() == self.name
+                or any(kw in (r.get("name") or "").lower() for kw in self.get_display_keywords())
+            ]
+            for r in matching:
+                cfg = get_module_config(r["id"])
+                for at in cfg.get("auction_types", []) or []:
+                    if at.get("enabled"):
+                        return at
+            # No enabled auction type — fall back to first available
+            for r in matching:
+                cfg = get_module_config(r["id"])
+                ats = cfg.get("auction_types", []) or []
+                if ats:
+                    return ats[0]
+            return None
         except Exception:
             return None
 
@@ -179,12 +194,39 @@ class SpikeTradingModule(BaseModule):
     # ------------------------------------------------------------------
 
     async def _evaluate_async(self) -> list[Signal]:
+        """Evaluate every DB row that maps to this module class.
+
+        Resolution: rows whose `strategy='spike_trading'` OR whose display
+        name contains 'spike trading' / 'spike' (mirrors registry.for_db_row).
+        This is what makes module duplication safe — the user can create a
+        new row with name 'Spike Trading v2' and the engine will pick it up
+        as long as `strategy='spike_trading'`.
+
+        Each matching row gets its own pass through the auction_types ×
+        bracket_profiles loop with its own module_id, config, and signals.
+        """
         sb = get_supabase()
-        module_row = sb.table("modules").select("*").eq("name", "Spike Trading").execute()
-        if not module_row.data:
-            log.warning("Spike Trading module row not found in DB; create it before enabling.")
+        # Find all DB rows for this module class. Prefer strategy match;
+        # fall back to display-keyword match for backwards compat.
+        all_rows = sb.table("modules").select("*").execute().data or []
+        matching_rows = [
+            r for r in all_rows
+            if (r.get("strategy") or "").lower().strip() == self.name
+            or any(kw in (r.get("name") or "").lower() for kw in self.get_display_keywords())
+        ]
+        if not matching_rows:
+            log.warning(f"No DB rows match module class '{self.name}'; create one before enabling.")
             return []
-        module_db = module_row.data[0]
+
+        all_signals: list[Signal] = []
+        for module_db in matching_rows:
+            try:
+                all_signals.extend(await self._evaluate_one_row(sb, module_db))
+            except Exception as e:
+                log.error(f"_evaluate_one_row failed for module_id={module_db.get('id')}: {e}", exc_info=True)
+        return all_signals
+
+    async def _evaluate_one_row(self, sb, module_db: dict) -> list[Signal]:
         module_id = module_db["id"]
         # DB status semantics:
         #   'active' or 'paper' -> evaluate normally; the engine's executor
@@ -312,6 +354,13 @@ class SpikeTradingModule(BaseModule):
             )
 
         h_to_close = hours_to_close(end_iso)
+        if h_to_close is None:
+            # Window timing unknown — refuse to evaluate. Pacing logic divides
+            # by elapsed_hours; defaulting to "0 hours left" would trigger
+            # premature SELL-NOW classification on a parse failure.
+            self._log(sb, module_id, "decision", "warning",
+                      f"[{label}] {market_id}: tracking has no parseable endDate ({end_iso!r}) — skipping cycle")
+            return []
         total_hours = float(auction_type.get("window_days", 2)) * 24.0
         elapsed_hours = max(total_hours - h_to_close, 0.0)
         bid_v = float(market.get("best_bid") or 0.0)
@@ -365,7 +414,13 @@ class SpikeTradingModule(BaseModule):
                           f"[{label}] pending BUY orders already in flight")
                 return []
 
-            self._open_position(sb, module_id, market, bracket, current_price)
+            # Only emit the ladder if we have a tracker row. Otherwise fills
+            # would be orphaned with nothing to classify SELL-NOW / HOLD off.
+            if not self._open_position(sb, module_id, market, bracket, current_price):
+                self._log(sb, module_id, "decision", "warning",
+                          f"[{label}] {market_id}: could not create spike_positions row — "
+                          f"refusing to emit ladder (would orphan fills)")
+                return []
             return self._build_buy_ladder_for_profile(
                 module_id, market, profile, params, strategy, state, cfg,
             )
@@ -432,10 +487,22 @@ class SpikeTradingModule(BaseModule):
             # Snap to nearest tick. If the strategy wanted $0.003 on a
             # min_tick=0.01 market, we round to $0.01 (cheapest valid tick).
             if min_tick > 0:
+                pre_snap = limit_price
                 snapped = round(limit_price / min_tick) * min_tick
                 if snapped < min_tick:
                     snapped = min_tick  # never go below 1 tick
                 limit_price = round(snapped, 4)
+                # Loud warning when the snap moved the price by more than 50%
+                # of what the strategy intended. The classic case: 0.3¢ tier
+                # silently becoming 1¢ on a standard min_tick=0.01 market.
+                # Strategy intent diverges from execution; user should know.
+                if pre_snap > 0 and abs(limit_price - pre_snap) / pre_snap > 0.5:
+                    log.warning(
+                        f"Spike tier price snap: tier={tier.get('label')} "
+                        f"intended={pre_snap:.4f} actual={limit_price:.4f} "
+                        f"min_tick={min_tick} bracket={bracket} market={market.get('market_id')}. "
+                        f"Strategy is paying {limit_price / pre_snap:.1f}x intended price."
+                    )
             signals.append(Signal(
                 module_id=module_id,
                 market_id=market["market_id"],
@@ -448,6 +515,7 @@ class SpikeTradingModule(BaseModule):
                 confidence=0.5,
                 best_bid=bid,
                 best_ask=ask,
+                token_id=market.get("token1"),
                 metadata={
                     "strategy": "spike_trading", "signal_type": "spike",
                     "strategy_name": strategy.name,
@@ -493,6 +561,7 @@ class SpikeTradingModule(BaseModule):
                 kelly_pct=pct * cfg.get("bracket_cap_pct_of_bankroll", 0.05),
                 confidence=0.5,
                 best_bid=bid, best_ask=ask,
+                token_id=market.get("token1"),
                 metadata={
                     "strategy": "spike_trading", "signal_type": "spike", "tier": tier_idx, "tier_label": label,
                     "tier_type": "buy", "skip_edge_check": True,
@@ -538,12 +607,14 @@ class SpikeTradingModule(BaseModule):
                 confidence=1.0,
                 best_bid=bid,
                 best_ask=ask,
+                token_id=market.get("token1"),
                 metadata={
                     "strategy": "spike_trading", "signal_type": "spike",
                     "tier_type": "slow_bleed",
                     "reason": "SELL-NOW thin book — auto slow-bleed",
                     "position_id": position["id"],
                     "skip_edge_check": True,
+                    "force_exit": True,
                 },
             )]
 
@@ -560,12 +631,14 @@ class SpikeTradingModule(BaseModule):
             confidence=1.0,
             best_bid=bid,
             best_ask=ask,
+            token_id=market.get("token1"),
             metadata={
                 "strategy": "spike_trading", "signal_type": "spike",
                 "tier_type": "market_sell",
                 "reason": "SELL-NOW classifier triggered",
                 "position_id": position["id"],
                 "skip_edge_check": True,
+                "force_exit": True,
             },
         )]
 
@@ -599,13 +672,19 @@ class SpikeTradingModule(BaseModule):
             log.warning(f"_get_open_position failed: {e}")
             return None
 
-    def _open_position(self, sb, module_id: str, market: dict, bracket: str, current_price: float):
+    def _open_position(self, sb, module_id: str, market: dict, bracket: str, current_price: float) -> bool:
+        """Insert the spike_positions tracker row. Returns True when a row
+        exists after this call (either freshly inserted OR pre-existing from
+        a parallel cycle that won the race). Returns False when neither —
+        meaning the caller MUST NOT emit ladder signals (otherwise fills
+        would be orphaned with no tracker row to classify them).
+        """
         # Re-check under the partial unique index — between _get_open_position
         # and here, another cycle could have raced us. If a row already exists
         # in WAITING/MONITORING, no-op rather than letting the DB raise.
         existing = self._get_open_position(sb, module_id, market["market_id"], bracket)
         if existing:
-            return
+            return True
         try:
             sb.table("spike_positions").insert({
                 "module_id": module_id,
@@ -618,11 +697,15 @@ class SpikeTradingModule(BaseModule):
                 "current_tweets": 0,
                 "hours_to_close": 0,
             }).execute()
+            return True
         except Exception as e:
             # Most common cause: partial unique index conflict from a parallel
-            # cycle. Safe to swallow — the next cycle will find the row via
-            # _get_open_position and proceed normally.
-            log.warning(f"_open_position failed (likely race on unique index): {e}")
+            # cycle. Distinguish: if the row now exists (parallel cycle won),
+            # return True; otherwise this was a real failure (DB down, missing
+            # table, etc.) and the caller must NOT emit ladder signals.
+            log.warning(f"_open_position insert failed: {e}")
+            recovered = self._get_open_position(sb, module_id, market["market_id"], bracket)
+            return recovered is not None
 
     def _snapshot(self, sb, position_id: str, state: PositionState, decision: str):
         try:
@@ -633,9 +716,11 @@ class SpikeTradingModule(BaseModule):
                 "current_price": state.current_price,
                 "decision": decision,
             }).execute()
-        except Exception:
-            # Snapshot failures are non-fatal — don't break the cycle
-            pass
+        except Exception as e:
+            # Snapshot failures are non-fatal — don't break the trading cycle.
+            # But DO surface them: a missing migration would silently kill the
+            # backtest data stream otherwise (see lessons.md 2026-05-02).
+            log.warning(f"_snapshot insert failed for position={position_id}: {e}")
 
     def _log(self, sb, module_id: str, log_type: str, severity: str, message: str):
         try:

@@ -147,7 +147,7 @@ class PaperExecutor:
                 from api.services.position_manager import close_position
                 close_position(existing["id"], fill_price)
         else:
-            open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, fill_price)
+            open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, fill_price, token_id=signal.token_id)
 
         try:
             sb.table("signals").insert({
@@ -276,6 +276,15 @@ class LiveExecutor:
             raise RuntimeError("LiveExecutor called outside production environment")
         if signal.market_price <= 0 or signal.market_price >= 1:
             raise ValueError(f"Invalid price: {signal.market_price}")
+        # CLOB requires the ERC-1155 token ID, NOT the human bracket label.
+        # If the emitter forgot to populate this, abort BEFORE creating an
+        # orders row so we don't poison the audit trail with a doomed order.
+        if not signal.token_id:
+            raise ValueError(
+                f"LiveExecutor refusing: signal has no token_id "
+                f"(module={signal.module_id} bracket={signal.bracket}). "
+                f"Module emitter must populate Signal.token_id from market['token1']."
+            )
 
         order_id = str(uuid.uuid4())
         # On SELL, kelly_pct means "fraction of the existing position to liquidate".
@@ -321,16 +330,27 @@ class LiveExecutor:
             side = BUY if signal.side == "BUY" else SELL
 
             order = client.create_and_post_order({
-                "tokenID": signal.bracket,
+                "tokenID": signal.token_id,
                 "price": signal.market_price,
                 "size": size,
                 "side": side,
                 "type": "GTC",
             })
 
+            # CLOB order ID is the field py-clob-client returns as "orderID"
+            # (or "id" depending on SDK version). Save it so the TTL sweep
+            # can call client.cancel(orderID) later.
+            clob_order_id = None
+            try:
+                if isinstance(order, dict):
+                    clob_order_id = order.get("orderID") or order.get("id") or order.get("orderId")
+            except Exception:
+                pass
+
             sb.table("orders").update({
                 "status": "filled",
                 "filled_at": datetime.now(timezone.utc).isoformat(),
+                "metadata": {"profile": profile_name, "clob_order_id": clob_order_id} if clob_order_id else {"profile": profile_name},
             }).eq("id", order_id).execute()
 
             sb.table("trades").insert({
@@ -350,7 +370,7 @@ class LiveExecutor:
                 from api.services.position_manager import close_position
                 close_position(existing_position["id"], signal.market_price)
             else:
-                open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, signal.market_price)
+                open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, signal.market_price, token_id=signal.token_id)
 
             log.info(f"LIVE [{profile_name}] {signal.side} {signal.bracket} size={size:.2f} @ {signal.market_price:.4f}")
             return {"id": order_id, "status": "filled", "profile": profile_name, "clob_response": str(order)}
@@ -370,6 +390,23 @@ class LiveExecutor:
 
     def invalidate_client(self):
         self._client = None
+
+    def cancel_clob_order(self, clob_order_id: str) -> bool:
+        """Cancel a resting GTC order at the Polymarket CLOB by its order ID.
+        Used by the TTL sweep so past-TTL limits don't silently fill.
+        Returns True on success, False on failure (best-effort — no raise).
+        """
+        if not clob_order_id:
+            return False
+        try:
+            client = self._get_client()
+            # py-clob-client exposes .cancel(order_id) (returns bool or dict).
+            res = client.cancel(order_id=clob_order_id)
+            log.info(f"CLOB cancel {clob_order_id}: {res}")
+            return True
+        except Exception as e:
+            log.warning(f"CLOB cancel failed for {clob_order_id}: {e}")
+            return False
 
 
 class MultiExecutor:

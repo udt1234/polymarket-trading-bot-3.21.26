@@ -9,7 +9,7 @@ from api.modules.shared.polymarket import (
     extract_slug_from_tracking,
     parse_hourly_counts, parse_daily_totals, compute_running_total,
     compute_elapsed_days, fetch_market_prices, fetch_historical_weekly_totals,
-    fetch_order_books_for_brackets,
+    fetch_order_books_for_brackets, fetch_bracket_token_ids,
 )
 from api.modules.shared.news import fetch_google_news
 from api.modules.shared.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
@@ -156,6 +156,14 @@ class TruthSocialModule(BaseModule):
         if not market_prices:
             self._log(sb, module_id, "decision", "warning", f"No market prices for slug={slug}")
             return []
+        # Token IDs are needed for live order placement (CLOB requires the
+        # ERC-1155 token ID, not the bracket label). Best-effort: emitter
+        # falls back to skipping the signal if token_id is missing.
+        try:
+            bracket_token_ids = await fetch_bracket_token_ids(slug)
+        except Exception as _e:
+            log.warning(f"fetch_bracket_token_ids({slug}) failed: {_e}")
+            bracket_token_ids = {}
 
         # Historical data + news + social intelligence
         n_periods = mod_cfg.get("historical_periods", 9)
@@ -537,6 +545,7 @@ class TruthSocialModule(BaseModule):
                     model_prob=model_prob,
                     market_price=market_price,
                     kelly_pct=sizing["kelly_pct"],
+                    token_id=bracket_token_ids.get(bracket_label),
                     confidence=1.0 - regime.get("volatility", 0.8) / 2,
                     best_bid=book.get("best_bid", 0.0),
                     best_ask=book.get("best_ask", 1.0),

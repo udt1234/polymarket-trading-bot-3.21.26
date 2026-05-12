@@ -668,15 +668,43 @@ class TradingEngine:
             from datetime import timedelta
             cutoff = (cutoff - timedelta(minutes=ORDER_TTL_MINUTES)).isoformat()
 
-            # Identify spike_trading module IDs to exempt
-            spike_modules = sb.table("modules").select("id").ilike("name", "%spike%").execute()
-            spike_ids = [m["id"] for m in (spike_modules.data or [])]
+            # Identify spike_trading module IDs to exempt (strategy match,
+            # name-keyword fallback) — covers duplicated modules too.
+            spike_modules = sb.table("modules").select("id,name,strategy").execute()
+            spike_ids = [
+                m["id"] for m in (spike_modules.data or [])
+                if (m.get("strategy") or "").lower().strip() == "spike_trading"
+                or "spike" in (m.get("name") or "").lower()
+            ]
 
-            q = sb.table("orders").select("id").in_("status", ["submitted", "live"]).lt("created_at", cutoff)
+            # Live mode also needs to tell the CLOB to cancel — without that,
+            # a past-TTL GTC limit at the CLOB can STILL fill. Pull metadata
+            # for stale orders so we can extract clob_order_id.
+            def _cancel_at_clob(stale_rows):
+                if not stale_rows:
+                    return
+                try:
+                    if self._force_paper or not isinstance(self.executor, (LiveExecutor, MultiExecutor)):
+                        return
+                except Exception:
+                    return
+                exec_for_cancel = self.executor if isinstance(self.executor, LiveExecutor) else (
+                    list(self.executor._executors.values())[0] if self.executor._executors else None
+                )
+                if exec_for_cancel is None:
+                    return
+                for row in stale_rows:
+                    meta = row.get("metadata") or {}
+                    cid = meta.get("clob_order_id") if isinstance(meta, dict) else None
+                    if cid:
+                        exec_for_cancel.cancel_clob_order(cid)
+
+            q = sb.table("orders").select("id,metadata").in_("status", ["submitted", "live"]).lt("created_at", cutoff)
             if spike_ids:
                 q = q.not_.in_("module_id", spike_ids)
             stale = q.execute()
             if stale.data:
+                _cancel_at_clob(stale.data)
                 ids = [o["id"] for o in stale.data]
                 for oid in ids:
                     sb.table("orders").update({"status": "cancelled"}).eq("id", oid).execute()
@@ -685,8 +713,9 @@ class TradingEngine:
             # Spike-specific TTL: 24h on buy orders (config-driven later)
             if spike_ids:
                 spike_cutoff = (datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=24)).isoformat()
-                spike_stale = sb.table("orders").select("id").in_("status", ["submitted", "live"]).in_("module_id", spike_ids).eq("side", "BUY").lt("created_at", spike_cutoff).execute()
+                spike_stale = sb.table("orders").select("id,metadata").in_("status", ["submitted", "live"]).in_("module_id", spike_ids).eq("side", "BUY").lt("created_at", spike_cutoff).execute()
                 if spike_stale.data:
+                    _cancel_at_clob(spike_stale.data)
                     sids = [o["id"] for o in spike_stale.data]
                     for oid in sids:
                         sb.table("orders").update({"status": "cancelled"}).eq("id", oid).execute()
