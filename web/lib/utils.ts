@@ -70,3 +70,38 @@ export function bracketSortKey(b: string): number {
 export function sortBrackets(brackets: string[]): string[] {
   return [...brackets].sort((a, b) => bracketSortKey(a) - bracketSortKey(b))
 }
+
+/**
+ * Recharts <Tooltip> default text is dark-slate on dark-slate (illegible
+ * on our dark theme). Apply this trio to fix contrast across all charts.
+ *   <Tooltip
+ *     contentStyle={chartTooltip.contentStyle}
+ *     itemStyle={chartTooltip.itemStyle}
+ *     labelStyle={chartTooltip.labelStyle}
+ *   />
+ */
+export const chartTooltip = {
+  contentStyle: { background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12, color: "#fff" } as const,
+  itemStyle: { color: "#fff" } as const,
+  labelStyle: { color: "#fff", fontWeight: 600 } as const,
+}
+
+/**
+ * Render a duration in human-readable units. Inputs in seconds.
+ *   0.4   -> "0.4s"
+ *   1.8   -> "1.8s"
+ *   42    -> "42s"
+ *   180   -> "3.0min"
+ *   3600  -> "1.0h"
+ *   90000 -> "1.0d"
+ * Use for any "average / median time" display so we don't show "49881s".
+ */
+export function fmtDuration(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds)) return "—"
+  const abs = Math.abs(seconds)
+  const sign = seconds < 0 ? "-" : ""
+  if (abs < 60) return `${sign}${abs < 10 ? abs.toFixed(1) : Math.round(abs)}s`
+  if (abs < 3600) return `${sign}${(abs / 60).toFixed(1)}min`
+  if (abs < 86400) return `${sign}${(abs / 3600).toFixed(1)}h`
+  return `${sign}${(abs / 86400).toFixed(1)}d`
+}

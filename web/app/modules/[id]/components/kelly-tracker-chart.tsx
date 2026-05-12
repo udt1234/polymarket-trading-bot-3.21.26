@@ -1,6 +1,7 @@
 "use client"
 
 import { useApi } from "@/lib/hooks"
+import { chartTooltip } from "@/lib/utils"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
 interface KellyRow { bracket: string; recommended: number; actual: number; created_at: string }
@@ -18,7 +19,7 @@ export function KellyTrackerChart({ moduleId }: { moduleId: string }) {
           <BarChart data={rows} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
             <XAxis dataKey="bracket" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" />
             <YAxis tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => `$${v}`} />
-            <Tooltip contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => `$${v.toFixed(2)}`} />
+            <Tooltip {...chartTooltip} formatter={(v: number) => `$${v.toFixed(2)}`} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="recommended" fill="hsl(200, 70%, 55%)" name="Recommended" />
             <Bar dataKey="actual" fill="hsl(142, 71%, 45%)" name="Actual" />

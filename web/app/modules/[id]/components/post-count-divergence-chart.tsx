@@ -2,7 +2,7 @@
 
 import { useApi } from "@/lib/hooks"
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts"
-import { cn } from "@/lib/utils"
+import { cn, chartTooltip } from "@/lib/utils"
 
 interface SeriesPoint {
   captured_at: string
@@ -92,7 +92,7 @@ export function PostCountDivergenceChart({ moduleId, trackingId }: { moduleId: s
             <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" minTickGap={40} />
             <YAxis tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" />
             <Tooltip
-              contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }}
+              {...chartTooltip}
               formatter={(v: any, name: string) => [v ?? "—", name]}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />

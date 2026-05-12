@@ -1,7 +1,7 @@
 "use client"
 
 import { useApi } from "@/lib/hooks"
-import { fmtPrice } from "@/lib/utils"
+import { fmtPrice, chartTooltip, bracketSortKey } from "@/lib/utils"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
 interface BookSnapshot {
@@ -17,11 +17,7 @@ interface BookSnapshot {
 
 export function OrderBookDepthChart({ moduleId }: { moduleId: string }) {
   const { data } = useApi<{ snapshots: BookSnapshot[] }>(moduleId ? `/api/modules/${moduleId}/order-book-depth` : null)
-  const snapshots = (data?.snapshots || []).sort((a, b) => {
-    const na = parseInt(a.bracket.match(/\d+/)?.[0] || "0")
-    const nb = parseInt(b.bracket.match(/\d+/)?.[0] || "0")
-    return na - nb
-  })
+  const snapshots = (data?.snapshots || []).slice().sort((a, b) => bracketSortKey(a.bracket) - bracketSortKey(b.bracket))
 
   const chartData = snapshots.map((s) => ({
     bracket: s.bracket,
@@ -40,7 +36,7 @@ export function OrderBookDepthChart({ moduleId }: { moduleId: string }) {
             <XAxis type="number" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" tickFormatter={(v) => `$${Math.abs(v).toFixed(0)}`} />
             <YAxis type="category" dataKey="bracket" tick={{ fontSize: 10 }} stroke="hsl(215, 20%, 65%)" width={60} />
             <Tooltip
-              contentStyle={{ background: "hsl(217, 33%, 17%)", border: "none", borderRadius: 8, fontSize: 12 }}
+              {...chartTooltip}
               formatter={(v: number) => `$${Math.abs(v).toFixed(2)}`}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
