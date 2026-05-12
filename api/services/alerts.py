@@ -143,11 +143,20 @@ async def notify_stale_data(handle: str, hours: float, source: str = "xTracker")
     if not _dedupe_check_and_record(key, _cooldown_hours("stale_data"),
                                     {"hours": hours}):
         return
-    msg = (
-        f":warning: *Stale Data — {source}*\n"
-        f"Handle *{handle}* has not updated in *{hours:.1f}h*. "
-        f"Bot will skip new entries until data refreshes."
-    )
+    # "handle='all'" is the sentinel meaning "engine cycle is stalled" (the
+    # decision-log freshness probe). Make the message readable in both cases.
+    if handle == "all":
+        msg = (
+            f":warning: *Engine cycle stalled — no {source} updates in {hours:.1f}h*\n"
+            f"Bot will skip new entries until the next successful cycle. "
+            f"Check Railway deploy logs for module evaluation errors."
+        )
+    else:
+        msg = (
+            f":warning: *Stale Data — {source}*\n"
+            f"Handle *{handle}* has not updated in *{hours:.1f}h*. "
+            f"Bot will skip new entries until data refreshes."
+        )
     await send_slack(msg)
 
 
