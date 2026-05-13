@@ -56,6 +56,9 @@ log = logging.getLogger(__name__)
 class SpikeTradingModule(BaseModule):
     name = "spike_trading"
     enabled = True
+    # Spike runs a structural lottery-ticket ladder regardless of regime.
+    # Don't let the dashboard show "Watching — regime in transition".
+    gates_by_regime = False
 
     # ------------------------------------------------------------------
     # BaseModule contract

@@ -14,6 +14,14 @@ class BaseModule(ABC):
     name: str = "base"
     enabled: bool = True
 
+    # Whether this module gates entry decisions on the detected regime
+    # (TRANSITION / SURGE / etc). Ensemble pacing modules (truth_social,
+    # elon_tweets) do — they skip entries during TRANSITION. Spike Trading
+    # does NOT — its lottery-ticket ladder runs regardless of regime, so
+    # the dashboard should not show "Watching — regime in transition" for
+    # it. Used by the modules-list endpoint + dashboard timeline.
+    gates_by_regime: bool = True
+
     @abstractmethod
     def evaluate(self) -> list[Signal]:
         """Run the module's strategy and return trade signals."""

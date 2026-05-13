@@ -49,6 +49,7 @@ interface ModuleData {
   auto_pause: boolean
   resolution_date: string | null
   created_at: string
+  gates_by_regime?: boolean
 }
 
 interface Signal {
@@ -1484,6 +1485,7 @@ export default function ModuleDetailPage() {
                 projectedWinner={data?.projected_winner}
                 ensembleAvg={data?.ensemble_avg}
                 marketPrices={pacing?.market_prices}
+                gatesByRegime={module?.gates_by_regime !== false}
               />
 
 

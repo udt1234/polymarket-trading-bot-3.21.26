@@ -32,6 +32,7 @@ export function BotStatusTimeline({
   projectedWinner,
   ensembleAvg,
   marketPrices,
+  gatesByRegime = true,
 }: {
   decisionLog: DecisionLog[]
   openPositions: OpenPosition[]
@@ -40,6 +41,11 @@ export function BotStatusTimeline({
   projectedWinner?: string
   ensembleAvg?: number
   marketPrices?: Record<string, number>
+  // Whether this module gates entries on regime. Truth Social / Elon do
+  // (their evaluators read regime_label and skip TRANSITION). Spike Trading
+  // does not — its ladder runs regardless — so showing "Watching — regime
+  // in transition" on Spike misrepresents what the bot is actually doing.
+  gatesByRegime?: boolean
 }) {
   const [logOpen, setLogOpen] = useState(false)
 
@@ -66,7 +72,7 @@ export function BotStatusTimeline({
   let nowState: "holding" | "watching-transition" | "watching-spread" | "watching-no-edge" | "starting"
   if (openPositions.length > 0) {
     nowState = "holding"
-  } else if (regimeLabel === "TRANSITION") {
+  } else if (gatesByRegime && regimeLabel === "TRANSITION") {
     nowState = "watching-transition"
   } else if (topRejectionEntry?.[0] === "spread") {
     nowState = "watching-spread"

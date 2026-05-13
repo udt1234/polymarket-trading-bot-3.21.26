@@ -218,6 +218,16 @@ async def list_modules():
     sb = get_supabase()
     res = sb.table("modules").select("*").order("created_at", desc=True).execute()
     modules = [_decorate_with_badge(m) for m in (res.data or [])]
+    # Surface module capability flags (e.g. gates_by_regime) so the dashboard
+    # can render module-appropriate status text without hardcoding names.
+    try:
+        from api.services.engine import engine
+        for m in modules:
+            inst = engine.registry.for_db_row(m)
+            m["gates_by_regime"] = bool(getattr(inst, "gates_by_regime", True)) if inst else True
+    except Exception:
+        for m in modules:
+            m.setdefault("gates_by_regime", True)
 
     # Enrich each module with realized+unrealized P&L and open-position count.
     # One batch query against positions for all modules — cheap.
@@ -254,7 +264,14 @@ async def get_module(module_id: str):
     res = sb.table("modules").select("*").eq("id", module_id).single().execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Module not found")
-    return _decorate_with_badge(res.data)
+    row = _decorate_with_badge(res.data)
+    try:
+        from api.services.engine import engine
+        inst = engine.registry.for_db_row(row)
+        row["gates_by_regime"] = bool(getattr(inst, "gates_by_regime", True)) if inst else True
+    except Exception:
+        row.setdefault("gates_by_regime", True)
+    return row
 
 
 @router.post("/")
