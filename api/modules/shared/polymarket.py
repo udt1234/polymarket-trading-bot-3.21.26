@@ -471,6 +471,34 @@ async def fetch_bracket_token_ids(slug: str) -> dict[str, str]:
         return token_map
 
 
+async def fetch_condition_ids(slug: str) -> dict[str, str]:
+    """Return {bracket_label: conditionId} for every market in this auction.
+
+    Used by the whale snapshot orchestrator to query the data-api trades
+    endpoint per market. conditionId is distinct from clobTokenIds — the
+    trades endpoint at data-api.polymarket.com/trades?market=X expects the
+    conditionId."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            res = await client.get(f"{GAMMA_BASE}/events", params={"slug": slug})
+            res.raise_for_status()
+            events = res.json()
+        except Exception as e:
+            log.warning(f"Gamma fetch failed for condition ids ({slug}): {e}")
+            return {}
+        if not isinstance(events, list) or not events:
+            return {}
+        markets = events[0].get("markets", [])
+        out: dict[str, str] = {}
+        for m in markets:
+            raw_bracket = m.get("groupItemTitle", m.get("question", ""))
+            bracket = normalize_bracket(raw_bracket)
+            cid = m.get("conditionId")
+            if cid:
+                out[bracket] = cid
+        return out
+
+
 async def fetch_order_books_for_brackets(slug: str, brackets: list[str]) -> dict[str, dict]:
     async with httpx.AsyncClient(timeout=15) as client:
         try:

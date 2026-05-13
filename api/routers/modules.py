@@ -1839,6 +1839,293 @@ async def get_brackets(
     }
 
 
+@router.get("/{module_id}/whales")
+async def get_whales(
+    module_id: str,
+    window: str = Query(default="last_5", regex="^(last_5|last_10|all_time)$"),
+    cohort: str = Query(default="persistent", regex="^(all|persistent|profitable)$"),
+):
+    """🐋 Whale Watching card payload.
+
+    Spec: WHALE_BRACKET_CARDS_SPEC.md Phase 2. Reads from whale_snapshots
+    table populated by scripts/refresh_whale_snapshots.py. Aggregates
+    archetype shares and top wallets across the requested window. Module-id
+    driven; no per-module branching."""
+    from api.services.rules_engine import render_whale_headline
+    import os
+
+    module = _resolve_module(module_id)
+    if module is None:
+        return {
+            "headline": {"lines": ["Module not found."]},
+            "archetype_breakdown": {},
+            "top_wallets": [],
+            "grid_metrics": [],
+            "n_auctions": 0,
+            "data_quality": "insufficient",
+            "config": {"window": window, "cohort": cohort},
+        }
+
+    try:
+        slugs = module.get_market_universe()
+    except Exception:
+        slugs = []
+    try:
+        handle = module.get_handle()
+    except NotImplementedError:
+        handle = None
+
+    if not handle:
+        return {
+            "headline": {"lines": ["This module does not expose a handle yet."]},
+            "archetype_breakdown": {},
+            "top_wallets": [],
+            "grid_metrics": [],
+            "n_auctions": 0,
+            "data_quality": "insufficient",
+            "config": {"window": window, "cohort": cohort},
+        }
+
+    sb = get_supabase()
+    snap_q = (
+        sb.table("whale_snapshots")
+        .select(
+            "auction_slug, auction_start, auction_end, archetype_breakdown, "
+            "archetype_dollar_volume, top_wallets, grid_metrics"
+        )
+        .eq("handle", handle)
+        .order("auction_end", desc=True)
+    )
+    if slugs:
+        snap_q = snap_q.in_("auction_slug", slugs)
+    if window == "last_5":
+        snap_q = snap_q.limit(5)
+    elif window == "last_10":
+        snap_q = snap_q.limit(10)
+    else:
+        snap_q = snap_q.limit(50)
+
+    try:
+        snaps = (snap_q.execute().data or [])
+    except Exception as exc:
+        log.warning(f"whale_snapshots query failed for {handle}: {exc}")
+        snaps = []
+
+    n_auctions = len(snaps)
+    if n_auctions < 5:
+        return {
+            "headline": {"lines": ["Not enough data yet — keep current strategy."]},
+            "archetype_breakdown": {},
+            "top_wallets": [],
+            "grid_metrics": [],
+            "n_auctions": n_auctions,
+            "data_quality": "insufficient",
+            "config": {"window": window, "cohort": cohort},
+        }
+
+    # Aggregate archetype breakdown over the window — share-weighted by
+    # dollars across all snapshots, so a $100k auction matters more than
+    # a $1k one.
+    bot_wallet = (os.environ.get("POLYMARKET_WALLET_ADDRESS") or "").lower() or None
+    arch_dollars: dict[str, float] = {}
+    us_archetype: str | None = None
+    for snap in snaps:
+        vols = snap.get("archetype_dollar_volume") or {}
+        for k, v in vols.items():
+            arch_dollars[k] = arch_dollars.get(k, 0.0) + float(v or 0)
+        brk = snap.get("archetype_breakdown") or {}
+        for arch_name, payload in brk.items():
+            if isinstance(payload, dict) and payload.get("is_us"):
+                us_archetype = arch_name
+    total = sum(arch_dollars.values()) or 1.0
+    breakdown = {
+        a: {
+            "share": round(arch_dollars.get(a, 0.0) / total, 4),
+            "dollars": round(arch_dollars.get(a, 0.0), 2),
+            "is_us": (a == us_archetype),
+        }
+        for a in ("market_maker", "tail_scooper", "spike_trader", "pace_chaser", "tail_punter")
+    }
+
+    # Aggregate top wallets: sum dollars flowed across all snapshots,
+    # carry archetype from most recent snapshot the wallet appeared in.
+    from collections import defaultdict
+    wallet_totals: dict[str, dict] = defaultdict(lambda: {
+        "wallet": "", "wallet_short": "", "dollars_flowed": 0.0,
+        "archetype": "unknown", "archetype_secondary": None,
+        "auctions_seen": 0, "is_us": False,
+        "name_or_pseudonym": None, "roi_pct": None,
+        "portfolio_value": None, "win_rate_pct": None,
+    })
+    for snap in snaps:
+        for w in (snap.get("top_wallets") or []):
+            wallet = w.get("wallet", "")
+            if not wallet:
+                continue
+            agg = wallet_totals[wallet]
+            agg["wallet"] = wallet
+            agg["wallet_short"] = w.get("wallet_short") or (wallet[:6] + "..." + wallet[-4:] if len(wallet) > 10 else wallet)
+            agg["dollars_flowed"] += float(w.get("dollars_flowed", 0) or 0)
+            agg["archetype"] = w.get("archetype", "unknown")
+            agg["archetype_secondary"] = w.get("archetype_secondary")
+            agg["auctions_seen"] = agg["auctions_seen"] + 1
+            agg["is_us"] = bool(w.get("is_us"))
+            for k in ("name_or_pseudonym", "roi_pct", "portfolio_value", "win_rate_pct"):
+                if w.get(k) is not None and agg[k] is None:
+                    agg[k] = w[k]
+
+    wallets_list = list(wallet_totals.values())
+    if cohort == "persistent":
+        wallets_list = [w for w in wallets_list if w["auctions_seen"] >= 3]
+    elif cohort == "profitable":
+        wallets_list = [w for w in wallets_list if (w.get("roi_pct") or 0) > 0]
+    wallets_list.sort(key=lambda w: w["dollars_flowed"], reverse=True)
+    for w in wallets_list:
+        w["dollars_flowed"] = round(w["dollars_flowed"], 2)
+    top_wallets = wallets_list[:20]
+
+    # Grid metrics: average across snapshots per archetype
+    grid_buckets: dict[str, list[dict]] = defaultdict(list)
+    for snap in snaps:
+        for g in (snap.get("grid_metrics") or []):
+            grid_buckets[g["archetype"]].append(g)
+    grid_metrics = []
+    for a in ("market_maker", "tail_scooper", "spike_trader", "pace_chaser", "tail_punter"):
+        rows = grid_buckets.get(a, [])
+        if not rows:
+            grid_metrics.append({
+                "archetype": a, "median_entry_hour": None,
+                "median_entry_price": None, "avg_fill_size_usd": None,
+                "fills_count": 0,
+            })
+            continue
+        # Weighted average by fills_count
+        total_fills = sum((r.get("fills_count") or 0) for r in rows) or 1
+        def _wmean(key):
+            vals = [(r.get(key), r.get("fills_count") or 0) for r in rows if r.get(key) is not None]
+            if not vals:
+                return None
+            wsum = sum(v * n for v, n in vals)
+            nsum = sum(n for _, n in vals) or 1
+            return round(wsum / nsum, 3)
+        grid_metrics.append({
+            "archetype": a,
+            "median_entry_hour": _wmean("median_entry_hour"),
+            "median_entry_price": _wmean("median_entry_price"),
+            "avg_fill_size_usd": _wmean("avg_fill_size_usd"),
+            "fills_count": total_fills,
+        })
+
+    # Headline supplemental signals — last-auction concentration. The
+    # denominator must include ALL wallets' dollar flow (including
+    # 'unknown'-archetype wallets, who are excluded from
+    # archetype_dollar_volume). We approximate total flow by summing
+    # `dollars_flowed` over the last snapshot's top_wallets, which captures
+    # the dominant share of any auction's volume.
+    last_top_dollars = None
+    last_total_dollars = None
+    last_top_wallet_obj = None
+    if snaps:
+        last_snap = snaps[0]
+        last_top = (last_snap.get("top_wallets") or [])
+        if last_top:
+            last_top_wallet_obj = last_top[0]
+            last_top_dollars = float(last_top[0].get("dollars_flowed", 0) or 0)
+            last_total_dollars = sum(
+                float(w.get("dollars_flowed", 0) or 0) for w in last_top
+            )
+
+    headline = render_whale_headline(
+        breakdown=breakdown,
+        top_wallets=top_wallets,
+        grid_metrics=grid_metrics,
+        n_auctions=n_auctions,
+        bot_wallet=bot_wallet,
+        data_quality="ok",
+        last_auction_top_wallet_dollars=last_top_dollars,
+        last_auction_total_dollars=last_total_dollars,
+        last_top_wallet_obj=last_top_wallet_obj,
+    )
+
+    return {
+        "headline": {"lines": headline},
+        "archetype_breakdown": breakdown,
+        "top_wallets": top_wallets,
+        "grid_metrics": grid_metrics,
+        "n_auctions": n_auctions,
+        "data_quality": "ok",
+        "config": {"window": window, "cohort": cohort},
+    }
+
+
+@router.get("/{module_id}/whales/wallets/{wallet}")
+async def get_whale_wallet_detail(module_id: str, wallet: str):
+    """Per-wallet detail expansion — bucket preference, hour density,
+    estimated bid floor, list of auctions participated in.
+
+    Reads from whale_snapshots (no extra Polymarket calls). Only the
+    handle's auctions are scanned."""
+    module = _resolve_module(module_id)
+    if module is None:
+        return {"wallet": wallet, "auctions": [], "data_quality": "insufficient"}
+    try:
+        handle = module.get_handle()
+    except NotImplementedError:
+        return {"wallet": wallet, "auctions": [], "data_quality": "insufficient"}
+
+    w_lower = wallet.lower()
+    sb = get_supabase()
+    res = (
+        sb.table("whale_snapshots")
+        .select("auction_slug, auction_start, auction_end, top_wallets")
+        .eq("handle", handle)
+        .order("auction_end", desc=True)
+        .limit(50)
+        .execute()
+    )
+    snaps = res.data or []
+
+    auctions = []
+    bucket_preference: dict[str, float] = {}
+    hour_density = [0.0] * 48
+    archetype_history = []
+    total_dollars = 0.0
+
+    for snap in snaps:
+        for w in (snap.get("top_wallets") or []):
+            if (w.get("wallet") or "").lower() != w_lower:
+                continue
+            auctions.append({
+                "slug": snap["auction_slug"],
+                "end_date": snap["auction_end"],
+                "archetype": w.get("archetype"),
+                "dollars_flowed": float(w.get("dollars_flowed", 0) or 0),
+            })
+            archetype_history.append({
+                "slug": snap["auction_slug"],
+                "archetype": w.get("archetype"),
+                "archetype_secondary": w.get("archetype_secondary"),
+            })
+            total_dollars += float(w.get("dollars_flowed", 0) or 0)
+            break
+
+    # bucket_preference + hour_density require per-fill data which we don't
+    # carry on the snapshot row. v1: leave empty; v2 can re-fetch trades.
+    estimated_bid_floor = None
+
+    return {
+        "wallet": wallet,
+        "handle": handle,
+        "auctions": auctions,
+        "archetype_history": archetype_history,
+        "bucket_preference": bucket_preference,
+        "hour_density": hour_density,
+        "estimated_bid_floor": estimated_bid_floor,
+        "total_dollars_flowed": round(total_dollars, 2),
+        "data_quality": "ok" if auctions else "insufficient",
+    }
+
+
 @router.get("/{module_id}/post-count-history")
 async def post_count_history(
     module_id: str,

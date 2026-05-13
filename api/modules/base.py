@@ -138,3 +138,34 @@ class BaseModule(ABC):
         partial dict (auction_archiver merges it with the generic builder).
         Return None to use the generic builder unchanged."""
         return None
+
+    # --- Whale Watching card support (spec: WHALE_BRACKET_CARDS_SPEC.md Phase 2) ---
+
+    def get_market_universe(self, window_days: float | None = None) -> list[str]:
+        """Auction slugs this module's whales should be measured against.
+
+        Used by the /whales endpoint to look up which whale_snapshots rows
+        belong to this module. Default implementation returns auction_slugs
+        from auction_archive matching this module's handle + window_days.
+        Override to customize."""
+        try:
+            from api.dependencies import get_supabase
+            sb = get_supabase()
+            handle = self.get_handle()
+        except NotImplementedError:
+            return []
+        except Exception:
+            return []
+        if not handle:
+            return []
+        win = window_days if window_days is not None else self.get_auction_window_days()
+        q = sb.table("auction_archive").select("auction_slug").eq("handle", handle)
+        if win is not None:
+            q = q.gte("window_days", float(win) - 0.5).lte(
+                "window_days", float(win) + 0.5
+            )
+        try:
+            res = q.order("end_date", desc=True).limit(50).execute()
+        except Exception:
+            return []
+        return [r["auction_slug"] for r in (res.data or []) if r.get("auction_slug")]
