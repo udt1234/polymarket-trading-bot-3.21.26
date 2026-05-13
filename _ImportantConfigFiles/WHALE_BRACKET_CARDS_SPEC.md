@@ -1,0 +1,837 @@
+# Whale Watching + Bracket Analysis Cards — Full Spec
+
+**Status:** Spec locked. Ready to implement.
+**Created:** 2026-05-07
+**Updated:** 2026-05-12 — narrowed v1 scope to Spike Trading V2 only.
+**Scope:** Add two new cards to every module dashboard (long-term vision).
+**Owner:** new coding session
+
+---
+
+## 🚧 V1 SCOPE — SPIKE TRADING V2 ONLY (READ THIS FIRST)
+
+**For the next implementation session, build everything below ONLY against the `Spike Trading V2` module.** Do NOT integrate into any other module yet. The other modules (Truth Social, Elon Tweets, etc.) keep working as-is — their dashboard pages do NOT render either card.
+
+### Why scoped this way
+
+- **Spike Trading V1 is running REAL trades** in production. Do not touch its module code, config, or dashboard. Treat it as locked.
+- **Spike Trading V2 is in paper mode** (currently $120.36 P&L, 2 open positions). Safe to integrate against without risking live capital.
+- Validating the design against one actively-trading module before fanning out catches headline/allocation bugs early.
+
+### V1 implementation constraints
+
+| Constraint | Value |
+|---|---|
+| Target module | `Spike Trading V2` only |
+| Handle traded | Single: `elonmusk` (x platform, 2-day auction window) |
+| Other modules | Skip — render no whale/bracket card on their pages |
+| Historical depth | **ALL closed `elonmusk` 2-day auctions ever** — pull from xTracker (`xtracker.polymarket.com/api/users/elonmusk/trackings`) for full auction list, and from `_DataMetricPulls/whale_analysis/trades_elon-musk-of-tweets-*.parquet` for trade-level whale data. This dataset spans years and will have 100+ auctions, more than enough sample. |
+| Two data sources, two purposes | (1) **Whale archetypes** computed from PARQUET trade data across all historical `elonmusk` auctions (every wallet that ever touched these markets). (2) **Bracket win rates** computed from xTracker `finalValue` of every closed auction (which bucket won each time). Bracket "trade share" / "EV per trade" computed from Spike Trading V2's own signals/trades in `signals` and `trades` tables. |
+| Sample-size policy | **NOT STRICT — show the cards immediately.** The `elonmusk` market universe has years of history, so whale archetypes and bracket win rates are well-populated from day one. Spike Trading V2's own trade count being small only affects the "trade share %" column (which is OK to show as "you traded it 0 times" — that's a real signal, not insufficient data). The original n<5 fallback message ONLY applies if a future module trades a brand-new handle with <5 closed auctions globally. |
+| Module trade-count handling | If V2's own `trades_count` for a bracket is 0, render the row anyway with `trades_count=0`, `won_count=0`, win%=`—`, and footer the row with annotation `"never tested by you yet"`. The bracket's historical win rate (from xTracker) is still shown. |
+| `signal_type` backfill | Run the migration but only backfill signals belonging to Spike Trading V2's `module_id` (filter the UPDATE statement). Leave V1 signals untouched. |
+| BaseModule extensions | Implement on `BaseModule` (so future modules can hook in), but ONLY Spike Trading V2 overrides them in v1. Other modules inherit default no-op. |
+| Cron scope | Whale snapshot cron runs for the `elonmusk` handle only in v1 (one entry in the cron's handles list). |
+
+### V1 explicit DO NOTs
+
+- Do NOT add the cards to Truth Social, Elon Tweets, NYC Temperature, or any other module's dashboard page
+- Do NOT modify the existing `spike_trading` (V1) module code in `api/modules/spike_trading/`
+- Do NOT compute whale snapshots for handles other than `elonmusk`
+- Do NOT auto-apply allocation recommendations to Spike Trading V2's config — recommendation is read-only in v1
+- Do NOT backfill `signal_type` on V1's signals — scope the SQL to V2's module_id only
+
+### What "Phase 3 — Cross-module generalization" means in v1
+
+**Defer entirely.** Phase 3 in the build plan below extends the cards to all modules. In v1, build only Phases 1, 2, and 4 (polish) — and only for Spike Trading V2. Phase 3 is post-launch, after a week of Spike Trading V2 running cleanly with the cards.
+
+### Trigger phrase for next session
+
+```
+read _ImportantConfigFiles/WHALE_BRACKET_CARDS_SPEC.md and execute it
+```
+
+The session should read this file in full, note the "V1 SCOPE" boundary above, then execute Phase 1 → Phase 2 → Phase 4 (skip Phase 3) against Spike Trading V2 only.
+
+---
+
+---
+
+## Table of Contents
+
+1. [Goals](#goals)
+2. [The 5 Whale Archetypes](#the-5-whale-archetypes)
+3. [Generalization to non-tweet markets](#generalization-to-non-tweet-markets)
+4. [Headlines (Plain-English Layer)](#headlines-plain-english-layer)
+5. [Headline rule tables](#headline-rule-tables)
+6. [Card 1 — Whale Watching: UI Layout](#card-1--whale-watching-ui-layout)
+7. [Card 2 — Bracket Analysis: UI Layout](#card-2--bracket-analysis-ui-layout)
+8. [Allocation recommendation algorithm](#allocation-recommendation-algorithm)
+9. [Data Model](#data-model)
+10. [API Endpoints](#api-endpoints)
+11. [BaseModule extensions](#basemodule-extensions)
+12. [Schema migrations](#schema-migrations)
+13. [File layout](#file-layout)
+14. [Build phases](#build-phases)
+15. [Refresh cadence](#refresh-cadence)
+16. [Caveats and edge cases](#caveats-and-edge-cases)
+17. [Decisions log](#decisions-log-recap-of-locked-answers)
+
+---
+
+## Goals
+
+1. Every module dashboard shows a **🐋 Whale Watching** card and a **📊 Bracket Analysis** card. Independent of each other. Each can collapse independently.
+2. Both cards work for **all market types** (tweets, weather, finance, etc.), not just tweet-count auctions.
+3. Each card surfaces a **plain-English headline** with explicit dollar/percent recommendations BEFORE the card box.
+4. Each card includes a metrics grid with the actual numbers behind the headline.
+5. Per-module data only — no cross-module aggregation in v1.
+6. Data is computed from full historical auction corpus (all-time) and a recent rolling window (last 5 for whales, last 10 for brackets).
+7. **Headlines sit ABOVE the card box, not inside it.**
+
+---
+
+## The 5 Whale Archetypes
+
+Every wallet that appears in a module's market universe gets classified by **WHEN** and **WHY** they enter. Detection is purely behavioral — works for any market type.
+
+| # | Archetype | Behavior | Detection rule | Typical ROI |
+|---|---|---|---|---|
+| 1 | **Market-Maker** | Continuous two-sided quoting, hour 0 to close | Active in hour 0-5 AND active in last hour AND fills both BUY+SELL AND >100 fills | +5% to +20% |
+| 2 | **Tail Scooper** | Buys near-certain settlements at 90¢+ | Avg fill price >0.85 AND first fill in last 30% of window AND <30 fills | +0.5% to +3% |
+| 3 | **Spike Trader** | Reacts to event/pace acceleration, enters cheap | Fills cluster within ±2hr of top-decile Δevent/hr spike AND avg price <0.50 | Mixed |
+| 4 | **Pace Chaser** | Buys AFTER pace crosses threshold, pays premium | 30%+ of $ when cumulative crosses bracket threshold AND avg price 0.20-0.60 AND first fill >50% into window | -30% to -80% |
+| 5 | **Tail Punter** | Lottery tickets on improbable buckets | 70%+ of $ on buckets ≥2 from modal AND avg price <0.10 | -80% to -100% |
+
+**Not exclusive.** A wallet can be 60% Spike Trader + 40% Pace Chaser. Card shows dominant archetype + secondary if >25% of fills.
+
+**Mapping to known wallets (May 2026 analysis on `elonmusk` market universe):**
+- `0xd218e474`, `0x63d43bbb` → **#1 Market-Maker**
+- `0x849ccb59`, `0x04a2a707`, `0xe8424596` → **#4 Pace Chaser** (losing)
+- `0x0e51179a`, `0x74ff920a` → **#5 Tail Punter** (losing)
+
+**Our wallet (Spike Trading V2):** detected by `module.is_my_archetype_spike_trader()` and excluded from the "Spike Trader" archetype count to avoid counting ourselves in our own consensus signal.
+
+---
+
+## Generalization to non-tweet markets
+
+The detection rules use "Δposts/hr" which is tweet-specific. For other market types, generalize:
+
+- **Tweet markets:** Δposts/hr (existing data via xTracker)
+- **Weather markets:** Δforecast_value/hr (NOAA / forecast feed)
+- **Finance/crypto:** Δprice_volatility/hr or volume spike (CoinGecko / native price feed)
+- **Generic/scalar:** Top-decile Δ(market_price) over 1hr window (from Polymarket data-api/prices)
+
+Each module implements `module.get_spike_metric()` returning a callable that produces the time-series Δ used for spike detection. If a module returns `None`, archetype #3 (Spike Trader) detection falls back to the price-volatility proxy.
+
+For modules with <5 closed auctions, both cards display "Insufficient history (need 5+ closed auctions)" instead of computed metrics. The headline still renders with a single sentence: "Not enough data yet — keep current strategy."
+
+---
+
+## Headlines (Plain-English Layer)
+
+Headlines sit **above** each card box. 3-5 lines max. Generated by a deterministic rules engine (no LLM).
+
+### Whale Watching headline format
+
+```
+🐋 WHALE WATCHING
+
+[Landscape sentence — what archetype mix dominates this market]
+[Notable wallet sentence — concentration or new entrant]
+[Same-archetype-as-us sentence — are we in a working regime]
+→ [Explicit action with dollar amount]
+→ [Optional secondary action with dollar amount]
+```
+
+Example:
+```
+🐋 WHALE WATCHING
+
+2 Market-Makers control 38% of last 5 auctions ($142k). 1 Spike Trader
+appeared in 3/5 — same archetype as us, profitable (+$847/auction).
+4 Pace Chasers losing money.
+
+→ Bid $0.18 on modal bucket in hour 0-6. Skip offers above $0.32.
+→ Spike Trader 0x84... used 12¢ entry on 65-89 — undercut at $0.09.
+```
+
+### Bracket Analysis headline format
+
+```
+📊 BRACKET ANALYSIS
+
+[Performance summary — recent vs all-time win rate]
+→ [Bracket-specific action with dollar/percent]
+→ [Bracket-specific action with dollar/percent]
+→ [Trigger-tuning hint if applicable]
+```
+
+Example:
+```
+📊 BRACKET ANALYSIS
+
+Spike-triggered: 3 trades in last 10 auctions (33% win). All signals:
+47 trades (51% win).
+
+→ Bracket 40-64 wins 73% (11/15). You traded it 4 times. Move 30% of
+  next auction's budget here.
+→ Bracket <40 wins 18% (2/11). Stop trading. Save ~$340/auction.
+→ Spike detection only fired 3x in 10 auctions. Trigger may be too tight.
+```
+
+---
+
+## Headline rule tables
+
+Rules evaluated top-to-bottom. Top 3 by priority that fire become the headline body. Always end with one explicit-action arrow.
+
+### Whale Watching rules
+
+| Priority | Trigger condition | Output sentence |
+|---|---|---|
+| 1 | All brackets have <5 auctions | "Not enough data yet — keep current strategy." |
+| 2 | Single wallet drove >25% of last-auction $ | "Wallet 0xXX drove {N}% of last auction ($Y). Track this address." |
+| 3 | Market-Maker concentration >50% of total $ | "MMs control {N}% of the market. Don't lift offers above $X.XX (median MM offer)." |
+| 4 | Same archetype (Spike Trader) profitable in last 5 | "Spike Traders averaged +${Y}/auction. Your strategy is in a working regime." |
+| 5 | Same archetype (Spike Trader) losing in last 5 | "Spike Traders lost -${Y}/auction over last 5. Tighten entry threshold." |
+| 6 | New whale (≥$1k notional) appeared in last 2 auctions, never before | "New entrant 0xXX deployed ${Z}. First sighting." |
+| 7 | Pace Chaser cohort active (≥2 in last auction) | "{N} Pace Chasers active. Bid ${X} to catch their unwinds." |
+| 8 | Tail Punter $ flow >15% | "Tail Punters putting ${Y} into long-tail buckets. Avoid those buckets." |
+| ALWAYS LAST | (compute from `whale_pricing.py`) | "→ Bid ${X} on bucket {B} in hour {0-H}. Skip offers above ${Y}." |
+| OPTIONAL | If a Spike Trader's typical entry is identifiable | "→ Spike Trader 0xXX used {p}¢ entry on {bucket} — undercut at ${X}." |
+
+### Bracket Analysis rules
+
+| Priority | Trigger condition | Output sentence |
+|---|---|---|
+| 1 | All brackets EV<0 in last 10 | "No profitable bracket in last 10 auctions. Pause this module." |
+| 2 | Single bracket win% >65% AND trade share <20% AND n≥10 | "Bracket {B} wins {X}%. You traded it {Y} times. Move {Z}% of next auction's budget here." |
+| 3 | Single bracket EV<0 AND traded >5 times in last 10 | "Bracket {B} has lost ${X} over {Y} trades. Stop trading. Save ${Z}/auction." |
+| 4 | Recent vs all-time delta ≤-15pt for any bracket | "Bracket {B} used to win {X}%, now wins {Y}%. Regime shift." |
+| 5 | Spike-triggered count <3 in last 10 | "Spike detection fired only {N} times. Trigger may be too tight." |
+| 6 | Spike-triggered win% > all-signals win% +15pt | "Spike-triggered trades beat baseline by {N}pt. Spike detection is working." |
+| 7 | Spike-triggered win% < all-signals win% -15pt | "Spike-triggered trades underperform baseline by {N}pt. Review trigger logic." |
+| ALWAYS FIRST | (always shown) | "{Mode}-triggered: {N} trades in last 10 auctions ({W}% win). All signals: {M} trades ({V}% win)." |
+
+`{Mode}` = active tab (Spike-triggered or All signals).
+
+---
+
+## Card 1 — Whale Watching: UI Layout
+
+### Headline (above card)
+
+```
+🐋 WHALE WATCHING
+
+2 Market-Makers control 38% of last 5 auctions ($142k). 1 Spike Trader
+appeared in 3/5 — same archetype as us, profitable (+$847/auction).
+4 Pace Chasers losing money.
+
+→ Bid $0.18 on modal bucket in hour 0-6. Skip offers above $0.32.
+→ Spike Trader 0x84... used 12¢ entry on 65-89 — undercut at $0.09.
+```
+
+### Card box
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  Auction window: Last 5 ▼  |  Cohort: ≥3 auctions ▼   |   N=5        │
+├──────────────────────────────────────────────────────────────────────┤
+│  ARCHETYPE BREAKDOWN — bot mix in this market                       │
+│                                                                      │
+│   Market-Makers   ████████░░░░░░░░  38%   ($142k)                   │
+│   Tail Scoopers   ██████░░░░░░░░░░  28%   ($104k)                   │
+│   Pace Chasers    ████░░░░░░░░░░░░  18%   ($67k)                    │
+│   Spike Traders   ███░░░░░░░░░░░░░  12%   ($45k)  ← us              │
+│   Tail Punters    █░░░░░░░░░░░░░░░   4%   ($15k)                    │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│  TOP WHALES — last 5 auctions                                       │
+│                                                                      │
+│  Wallet      Archetype       Auctions  ROI%   $ flowed   Win rate    │
+│  0xd218e4    Market-Maker    22        +15%   $804k      100%        │
+│  0x63d43b    Market-Maker    15        +10%   $755k      n/a         │
+│  0x849ccb    Pace Chaser     17        -81%   $52k       15%         │
+│  0xfec7c9    Spike Trader    7         +3%    $27k       54%         │
+│  0x04a2a7    Tail Punter     8         -91%   $14k       1%          │
+│  ▼ Show 5 more                                                       │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│  THE GRID — fill behavior heatmap                                   │
+│                                                                      │
+│  Archetype       Median entry hr  Median entry px  Avg size  ROI%   │
+│  Market-Maker    1                $0.45            $84       +12%   │
+│  Tail Scooper    87% in           $0.96            $1,200    +1.8%  │
+│  Spike Trader    23                $0.18            $35       +3%    │
+│  Pace Chaser     34                $0.31            $48       -42%   │
+│  Tail Punter     anywhere          $0.06            $12       -88%   │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### Filter controls (top of card)
+
+- **Auction window:** Last 5 / Last 10 / All time. Default: **Last 5**.
+- **Cohort:** All / Persistent (≥3 auctions) / Profitable (ROI > 0). Default: **Persistent**.
+
+Filters re-compute boxes locally from cached data. No new API calls.
+
+### Per-wallet detail expansion (click row)
+
+- All auctions they participated in (mini sparkline of ROI per auction)
+- Their bucket preference distribution (bar chart)
+- Hour-by-hour fill density (heatmap)
+- Estimated bid floor we'd need to undercut them
+- Copy-to-clipboard button on full address
+
+---
+
+## Card 2 — Bracket Analysis: UI Layout
+
+### Headline (above card)
+
+```
+📊 BRACKET ANALYSIS
+
+Spike-triggered: 3 trades in last 10 auctions (33% win). All signals:
+47 trades (51% win).
+
+→ Bracket 40-64 wins 73% (11/15). You traded it 4 times. Move 30% of
+  next auction's budget here.
+→ Bracket <40 wins 18% (2/11). Stop trading. Save ~$340/auction.
+→ Spike detection only fired 3x in 10 auctions. Trigger may be too tight.
+```
+
+### Card box
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  [ Spike-triggered ] [ All signals ]   Window: Last 10 ▼   N=10      │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Bracket  Signals  Trades  Won  Win%   AvgPx  AvgROI  EV/trade  L5  │
+│  ──────  ───────  ──────  ───  ────   ─────  ──────  ───────  ───  │
+│  <40        14       11    2   18%    $0.31   -47%    -$8.20   LLLWL│
+│  40-64      18       15   11   73%↑   $0.28   +89%    +$24.50  WWLWW│
+│  65-89       9        7    4   57%    $0.42   +34%    +$11.40  WLWLW│
+│  90-114      6        4    1   25%    $0.18   -58%    -$4.20   LLLW │
+│  115-139     2        1    0    0%    $0.08   -100%   -$0.80   L    │
+│  240+        1        1    0    0%    $0.02   -100%   -$0.02   L    │
+│                                                                      │
+│  ↑ = win rate 65%+ AND under-traded (<20% share)                     │
+│  ↓ = negative EV — stop                                              │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│  COMPARISON TO BASELINE — recent vs all-time                        │
+│                                                                      │
+│  Bracket  Last10 Win%  AllTime Win%  Δ        Trend                 │
+│  <40         18%          22%        -4pt     stable                 │
+│  40-64       73%          61%        +12pt    ↑ improving            │
+│  65-89       57%          54%        +3pt     stable                 │
+│  90-114      25%          31%        -6pt     stable                 │
+│  115-139      0%          18%        -18pt    ⚠ regime shift         │
+│                                                                      │
+│  ⚠ regime shift = -15pt or worse (strategy may be drifting)          │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│  ALLOCATION RECOMMENDATION                                          │
+│                                                                      │
+│  Based on EV/trade × win rate × historical signal count:             │
+│                                                                      │
+│   40-64    →  45% of next auction budget                             │
+│   65-89    →  30%                                                    │
+│   <40      →   0% (negative EV)                                      │
+│   90-114   →   0% (negative EV)                                      │
+│   Reserve  →  25% (for late-auction opportunities)                   │
+│                                                                      │
+│   Reserve %: [25 ▼]   ← user editable                                │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### Tabs
+
+Two tabs at top of card:
+- **Spike-triggered** — filters trades where signal was tagged as spike
+- **All signals** — every trade regardless of trigger type
+
+Both tabs share the window filter.
+
+### "Spike-triggered" definition
+
+A trade is tagged "spike-triggered" if at least one of:
+- The signal that produced it has `metadata.signal_type = 'spike'` (new field — see schema migrations)
+- It was placed within 30 minutes of a measurable pace spike (top-decile Δevent/hr)
+- Its `bracket_threshold` was set by a spike-detector module path
+
+If `metadata.signal_type` is missing on existing rows, fall back to the time-window rule for backfill.
+
+---
+
+## Allocation recommendation algorithm
+
+Computed in the bracket card's recommendation block.
+
+```python
+# inputs per bracket: ev_per_trade, win_rate, signals_count
+def allocate(brackets: dict, reserve_pct: float = 0.25) -> dict:
+    weights = {}
+    for b, stats in brackets.items():
+        ev = stats["ev_per_trade"]
+        n = stats["signals_count"]
+        if ev <= 0:
+            weights[b] = 0
+            continue
+        # Downweight brackets with sparse signal history
+        signal_confidence = min(n / 10, 1.0)
+        weights[b] = ev * signal_confidence
+    total = sum(weights.values())
+    if total == 0:
+        return {b: 0 for b in brackets} | {"reserve": 1.0}
+    return {b: round(w / total * (1 - reserve_pct), 2) for b, w in weights.items()} | {"reserve": reserve_pct}
+```
+
+`reserve_pct` is user-editable in the card's filter row. Default 25%.
+
+Brackets with negative EV always get 0%. Brackets with <5 signals get downweighted (signal_confidence proportional). Always reserves the configured % for late-auction reactive trading.
+
+---
+
+## Data Model
+
+### Data sources (V1 SCOPE: Spike Trading V2 on `elonmusk`)
+
+The cards combine THREE data sources. Each metric in the cards is sourced from one of them:
+
+| Metric | Source | Why |
+|---|---|---|
+| Bracket win % (historical) | **xTracker API** + cached `whale_snapshots.final_outcome.winning_bucket` | xTracker has the canonical `finalValue` for every closed auction. We map `finalValue` → bracket label using the auction's bracket schema. |
+| Whale archetypes (Market-Maker, Spike Trader, etc.) | **Parquet files** `_DataMetricPulls/whale_analysis/trades_elon-musk-of-tweets-*.parquet` | These contain every fill ever on every `elonmusk` market — exactly what we need for behavioral classification across years. |
+| Top wallets table | **Parquet files** (aggregated across all elonmusk parquets) | Same source — wallet-level fill history. |
+| `your_trade_share %` column on bracket card | **Supabase `signals` + `trades` tables** filtered to Spike Trading V2's `module_id` | Only V2's own trades, to show "how much of this bracket did you bet on." |
+| `your_ev_per_trade $` on bracket card | **Supabase `trades` table** filtered to V2 | Same — your own realized P&L per bracket. |
+| "Spike-triggered" tab data | **Supabase `signals.signal_type='spike'`** filtered to V2 | After backfill, V2's spike-tagged signals only. |
+
+Implementation order: Phase 1 builds the xTracker + signals/trades aggregation. Phase 2 builds the parquet-driven whale classification.
+
+### Parquet ingestion (Phase 2)
+
+There are ~150+ `trades_elon-musk-of-tweets-*.parquet` files in `_DataMetricPulls/whale_analysis/`. The whale snapshot service should:
+
+1. On first run (initial backfill), iterate ALL of them, classify wallets by archetype, write one `whale_snapshots` row per auction.
+2. On nightly runs, only process parquets for auctions that closed in the last 24h (skip the rest — append-only).
+3. If a parquet is missing for a closed auction listed in xTracker, log a warning but don't error — that auction just won't have whale data.
+
+### Wallet career sharpness (cross-auction stats)
+
+A wallet's "career win rate" used in archetype classification spans ALL parquets, not just one auction. After the initial backfill, the `whale_wallet_profiles` table holds the rolled-up stats. Refresh weekly to incorporate new auctions.
+
+### New Supabase tables
+
+**`whale_snapshots`** — append-only, one row per (handle, auction)
+
+```sql
+CREATE TABLE whale_snapshots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    handle TEXT NOT NULL,                       -- e.g. 'elonmusk', 'realDonaldTrump'
+    market_universe TEXT[] NOT NULL,            -- list of conditionIds for this snapshot
+    auction_slug TEXT NOT NULL,                 -- e.g. 'elon-musk-of-tweets-may-2-may-4'
+    auction_start TIMESTAMPTZ NOT NULL,
+    auction_end TIMESTAMPTZ NOT NULL,
+    final_outcome JSONB,                        -- {"winning_bucket": "40-64", "final_value": 55}
+    archetype_breakdown JSONB NOT NULL,         -- {"market_maker": 0.38, "tail_scooper": 0.28, ...}
+    archetype_dollar_volume JSONB NOT NULL,     -- {"market_maker": 142000, ...}
+    top_wallets JSONB NOT NULL,                 -- array of {wallet, archetype, secondary, $flowed, fills, roi_pct}
+    grid_metrics JSONB NOT NULL,                -- archetype-level fill metrics (median entry hr/px/size, ROI)
+    computed_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (handle, auction_slug)
+);
+
+CREATE INDEX idx_whale_snapshots_handle_end ON whale_snapshots (handle, auction_end DESC);
+```
+
+**`whale_wallet_profiles`** — slowly-changing wallet identities
+
+```sql
+CREATE TABLE whale_wallet_profiles (
+    wallet TEXT PRIMARY KEY,
+    portfolio_value NUMERIC,
+    cash NUMERIC,
+    open_positions INT,
+    closed_positions INT,
+    win_rate_pct NUMERIC,
+    total_invested NUMERIC,
+    total_pnl NUMERIC,
+    roi_pct NUMERIC,
+    name_or_pseudonym TEXT,
+    archetype_dominant TEXT,                    -- inferred across all auctions
+    archetype_secondary TEXT,
+    auctions_seen INT,
+    refreshed_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**`bracket_stats_cache`** — compute on demand, cache 60s
+
+```sql
+CREATE TABLE bracket_stats_cache (
+    module_id UUID NOT NULL,
+    window_label TEXT NOT NULL,                 -- 'last_10', 'all_time'
+    mode TEXT NOT NULL,                         -- 'spike_only', 'all_signals'
+    bracket TEXT NOT NULL,
+    signals_count INT,
+    trades_count INT,
+    won_count INT,
+    win_rate NUMERIC,
+    avg_entry_price NUMERIC,
+    avg_roi NUMERIC,
+    ev_per_trade NUMERIC,
+    last_5_results TEXT,                        -- 'WWLWW' style
+    payload JSONB,                              -- raw rows for drill-down
+    computed_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (module_id, window_label, mode, bracket)
+);
+```
+
+---
+
+## API Endpoints
+
+### `GET /api/modules/{module_id}/whales`
+
+Query params:
+- `window` = `last_5` (default) | `last_10` | `all_time`
+- `cohort` = `all` | `persistent` (default) | `profitable`
+
+Response:
+```json
+{
+  "headline": {
+    "lines": [
+      "2 Market-Makers control 38% of last 5 auctions ($142k). ...",
+      "→ Bid $0.18 on modal bucket in hour 0-6. Skip offers above $0.32."
+    ]
+  },
+  "archetype_breakdown": {
+    "market_maker": {"share": 0.38, "dollars": 142000},
+    "tail_scooper": {"share": 0.28, "dollars": 104000},
+    "spike_trader": {"share": 0.12, "dollars": 45000, "is_us": true},
+    "pace_chaser": {"share": 0.18, "dollars": 67000},
+    "tail_punter": {"share": 0.04, "dollars": 15000}
+  },
+  "top_wallets": [
+    {
+      "wallet": "0xd218e474776403a330142299f7796e8ba32eb5c9",
+      "archetype": "market_maker",
+      "archetype_secondary": null,
+      "auctions_seen": 22,
+      "roi_pct": 15.4,
+      "dollars_flowed": 804455,
+      "win_rate_pct": 100,
+      "portfolio_value": 188191
+    }
+  ],
+  "grid_metrics": [
+    {"archetype": "market_maker", "median_entry_hour": 1, "median_entry_price": 0.45, "avg_fill_size_usd": 84, "roi_pct": 12}
+  ],
+  "n_auctions": 5,
+  "data_quality": "ok"
+}
+```
+
+### `GET /api/modules/{module_id}/whales/wallets/{wallet}`
+
+Detail expansion data:
+```json
+{
+  "wallet": "0x...",
+  "archetype_history": [...],          // per-auction archetype labels
+  "bucket_preference": {...},          // bucket -> $ flowed
+  "hour_density": [...],               // 48-element array of $ per hour
+  "estimated_bid_floor": 0.32,
+  "auctions": [
+    {"slug": "...", "roi_pct": 5.2, "$ flowed": 18400}
+  ]
+}
+```
+
+### `GET /api/modules/{module_id}/brackets`
+
+Query params:
+- `mode` = `spike_only` | `all_signals` (default)
+- `window` = `last_10` (default) | `last_5` | `all_time`
+- `reserve_pct` = number 0-100, default 25
+
+Response:
+```json
+{
+  "headline": {
+    "lines": [
+      "Spike-triggered: 3 trades in last 10 auctions (33% win). ...",
+      "→ Bracket 40-64 wins 73% (11/15). ..."
+    ]
+  },
+  "rows": [
+    {
+      "bracket": "40-64",
+      "signals_count": 18,
+      "trades_count": 15,
+      "won_count": 11,
+      "win_rate_pct": 73,
+      "avg_entry_price": 0.28,
+      "avg_roi_pct": 89,
+      "ev_per_trade_usd": 24.50,
+      "last_5_results": "WWLWW",
+      "annotation": "winner",
+      "trade_share_pct": 32
+    }
+  ],
+  "comparison": [
+    {
+      "bracket": "<40",
+      "last_window_win_pct": 18,
+      "all_time_win_pct": 22,
+      "delta_pt": -4,
+      "trend": "stable"
+    }
+  ],
+  "allocation": {
+    "40-64": 0.45,
+    "65-89": 0.30,
+    "<40": 0.0,
+    "90-114": 0.0,
+    "reserve": 0.25
+  },
+  "n_auctions": 10
+}
+```
+
+---
+
+## BaseModule extensions
+
+Add to `api/modules/shared/base.py`:
+
+```python
+class BaseModule:
+    def get_market_universe(self) -> list[str]:
+        """Return list of conditionIds (or condition-id query) this module trades. Used by whale analyzer."""
+        raise NotImplementedError
+
+    def get_brackets(self) -> list[str]:
+        """Return list of bracket labels (e.g. ['<40','40-64','65-89',...]) for bracket analysis."""
+        raise NotImplementedError
+
+    def get_spike_metric(self) -> Callable[[datetime, datetime], list[tuple[datetime, float]]] | None:
+        """Return callable producing time-series Δ used for Spike Trader detection.
+        Args: window_start, window_end. Returns list of (timestamp, delta_value).
+        Return None to fall back to price-volatility proxy."""
+        return None
+
+    def is_my_archetype_spike_trader(self) -> bool:
+        """Used to mark 'is_us' flag in archetype_breakdown. Default true if module name contains 'spike'."""
+        return "spike" in self.__class__.__name__.lower()
+```
+
+For modules with no closed auctions yet, both endpoints return:
+```json
+{"headline": {"lines": ["Not enough data yet — keep current strategy."]}, "rows": [], "data_quality": "insufficient"}
+```
+
+---
+
+## Schema migrations
+
+```sql
+-- Add signal_type tag to enable Spike-triggered tab
+-- (signals.metadata is jsonb; we add a top-level field for fast filtering)
+ALTER TABLE signals ADD COLUMN signal_type TEXT;
+CREATE INDEX idx_signals_type_module ON signals (module_id, signal_type);
+
+-- Backfill: classify existing signals from metadata
+UPDATE signals
+SET signal_type = COALESCE(
+    metadata->>'signal_type',
+    CASE
+        WHEN metadata->>'spike_detected' = 'true' THEN 'spike'
+        WHEN (metadata->>'pace_zscore')::numeric > 2.0 THEN 'spike'
+        ELSE 'baseline'
+    END
+)
+WHERE signal_type IS NULL;
+```
+
+After migration, every new signal from `RiskManager.create_signal()` must populate `signal_type`. Update `api/services/risk_manager.py` and module signal-emission paths.
+
+---
+
+## File layout
+
+### Backend
+
+```
+api/services/
+  whale_snapshot.py           # NEW. Runs whale analyzer per handle, writes whale_snapshots
+  whale_classifier.py         # NEW. The 5-archetype detection rules
+  bracket_stats.py            # NEW. Computes per-module bracket win rates from signals/trades
+  rules_engine.py             # NEW. Headline rules → sentence templates
+
+api/routers/
+  modules.py                  # MODIFY. Add /whales, /whales/wallets/{w}, /brackets endpoints
+
+api/modules/shared/
+  base.py                     # MODIFY. Add get_market_universe / get_brackets / get_spike_metric
+
+api/modules/<each_module>/
+  module.py                   # MODIFY. Implement new BaseModule methods
+
+scripts/
+  refresh_whale_snapshots.py  # NEW. Cron-runnable nightly. Iterates modules, refreshes snapshots.
+  backfill_signal_type.py     # NEW. One-time, runs the schema migration backfill
+
+supabase/
+  migrations/2026_05_07_whale_brackets.sql  # NEW. The schemas above
+```
+
+### Frontend
+
+```
+web/app/modules/[id]/components/
+  whale-watching-card.tsx     # NEW. Main card + headline
+  whale-archetype-bar.tsx     # NEW. Horizontal bar chart of archetype breakdown
+  whale-top-table.tsx         # NEW. The top-wallets table
+  whale-grid.tsx              # NEW. The fill-behavior grid
+  whale-wallet-detail.tsx     # NEW. Expandable per-wallet detail
+  bracket-analysis-card.tsx   # NEW. Main card + headline + tabs
+  bracket-stats-table.tsx     # NEW. The per-bracket stats grid
+  bracket-comparison-table.tsx # NEW. Recent vs all-time table
+  bracket-allocation.tsx      # NEW. Allocation recommendation block
+  card-headline.tsx           # NEW. Generic headline component (used by both cards)
+
+web/app/modules/[id]/page.tsx # MODIFY. Render WhaleWatchingCard + BracketAnalysisCard
+```
+
+---
+
+## Build phases
+
+### Phase 1 — Bracket Analysis (no new external data)
+
+Time estimate: 4-6 hours.
+
+1. Run schema migration: `signal_type` column + backfill (V1 SCOPE: filter the UPDATE to Spike Trading V2's module_id only)
+2. Build `api/services/bracket_stats.py` (pure SQL aggregation)
+3. Build `api/services/rules_engine.py` (whale + bracket rule sets)
+4. Add `GET /api/modules/{module_id}/brackets` endpoint
+5. Build `bracket-analysis-card.tsx` + sub-components
+6. Wire into Spike Trading V2's dashboard page ONLY (other module pages render nothing)
+7. Test with Spike Trading V2 (single handle: `elonmusk`)
+
+**Ship-able after Phase 1.** Bracket card works end-to-end with "All signals" and "Spike-triggered" tabs on Spike Trading V2's page.
+
+### Phase 2 — Whale Watching (uses existing whale_analysis scripts)
+
+Time estimate: 6-8 hours.
+
+1. Create `whale_snapshots` + `whale_wallet_profiles` tables
+2. Build `api/services/whale_classifier.py` (port logic from existing scripts)
+3. Build `api/services/whale_snapshot.py` (orchestrator)
+4. Build `scripts/refresh_whale_snapshots.py` cron script (V1 SCOPE: handles list contains ONLY `elonmusk`)
+5. Add `GET /api/modules/{module_id}/whales` and `/wallets/{wallet}` endpoints
+6. Build `whale-watching-card.tsx` + sub-components
+7. Wire into Spike Trading V2's dashboard page ONLY
+8. Set up Railway cron job (nightly 3 AM ET)
+9. Run initial backfill from existing parquets in `_DataMetricPulls/whale_analysis/trades_elon-musk-of-tweets-*.parquet` (filter to elon parquets only in v1)
+
+### Phase 3 — Cross-module generalization
+
+Time estimate: 3-4 hours.
+
+1. Add `get_market_universe`, `get_brackets`, `get_spike_metric` to `BaseModule`
+2. Implement new methods on every existing module (Trump, Elon, Spike Trading, NYC Temperature if exists, etc.)
+3. Update whale_classifier to use `get_spike_metric` for non-tweet markets
+4. Test with at least one non-tweet module — show "insufficient data" gracefully if no closed auctions yet
+
+### Phase 4 — Polish
+
+Time estimate: 2-3 hours.
+
+1. Wallet detail expansion (sparkline, bucket pref, hour density)
+2. User-editable reserve % in allocation block
+3. Copy-to-clipboard wallet addresses
+4. Mobile responsive layout
+5. Loading skeletons
+6. Error states (data-api down, supabase down)
+
+---
+
+## Refresh cadence
+
+- **Whale snapshots:** Nightly 3 AM ET via Railway cron. One handle per minute (rate-limited). Append-only — never recompute past auctions.
+- **Whale wallet profiles:** Weekly Sunday 4 AM ET. Refresh `/value`, `/positions` per wallet for top 50 by activity.
+- **Bracket stats:** On-demand, cached 60s. Pure SQL, no external API calls.
+- **Headlines:** Recomputed every API request (cheap — runs against cached data).
+
+Failure modes:
+- Cron fails → next night's run includes catch-up. No data loss.
+- Polymarket API down → snapshot for that night skipped, retried next night.
+- Supabase down → endpoint returns 503 with cached fallback if available.
+
+---
+
+## Caveats and edge cases
+
+1. **Insufficient history (rare in v1):** Both cards show fallback message when n<5 closed auctions GLOBALLY for the handle. For Spike Trading V2 (`elonmusk` handle), this is effectively never — the handle has 100+ closed auctions. Fallback message remains coded as a safety net for future modules tracking newer handles.
+2. **Dual-archetype wallets:** Show dominant + secondary if secondary >25% of fills.
+3. **New wallet on first sighting:** Archetype is "Unknown" until ≥3 auctions of activity.
+4. **Module never traded a bracket:** Show row with all zeros, annotation: "never tested."
+5. **All wallets are unprofitable in cohort filter:** Show "No profitable persistent whales — pure noise market."
+6. **Spike-triggered tab with no spike-tagged trades:** Show empty state with hint: "Add `signal_type='spike'` to your spike module's signal emission."
+7. **Allocation sums to <100% if all brackets are EV<0:** Reserve becomes 100%. Headline says "Pause this module."
+8. **Spike Trader detection produces a wallet but our bot also fits the rule:** We exclude our own bot's wallet from the "Spike Traders" archetype count by checking `bot.config.proxy_wallet`.
+9. **Time zones:** All timestamps stored UTC. Display localized to user's TZ in frontend.
+10. **Wallet privacy:** Don't expose full wallet addresses in headlines — truncate to first 6 chars + "...". Show full only on click-to-copy.
+
+---
+
+## Decisions log (recap of locked answers)
+
+| # | Question | Answer |
+|---|---|---|
+| Q1 | Historical depth | All historical, but card shows last-N rolling window + all-time baseline side-by-side |
+| Q2 | Archetypes | 5: Market-Maker / Tail Scooper / Spike Trader / Pace Chaser / Tail Punter |
+| Q3 | Card placement | Per module dashboard. Two separate cards. Headlines above each box. |
+| Q4 | Spike vs all signals | Both — implemented as tabs in Bracket Analysis card |
+| Q5 | Recommendation format | Explicit dollar amounts, not directional |
+| Q6 | Min sample size for "trade more" callouts | n=10 |
+| Q7 | Detail expansion | Yes, build in Phase 4 |
+| Q-headline-placement | Above box | Confirmed |
+| Q-card-names | "Whale Watching" + "Bracket Analysis" | Confirmed |
+| Q-headline-length | 3-5 lines | Confirmed |
+| Q-allocation-format | Explicit % per bracket | Confirmed |
+| Q-window-defaults | Whales: last 5. Brackets: last 10. | Confirmed |
+| Q-persistent-filter-default | ≥3 auctions | Confirmed |
+| Q-signal-type-schema | Add column + backfill | Confirmed |
+
+---
+
+## Out of scope (v1)
+
+- Cross-module comparison view ("which module's brackets are most predictable")
+- Real-time whale alerts during live auctions
+- Whale wallet labeling / naming via on-chain ENS
+- Per-whale fill replay charts in-card (charts exist as PNGs in `_DataMetricPulls/whale_analysis/charts/`)
+- LLM-generated headlines (we use deterministic rules engine)
+- Bracket allocation auto-applying to module config (recommendation only — user manually adjusts)
+- Whale-aware live order placement integration (`whale_pricing.py` exists standalone, not auto-integrated yet)
+
+---
+
+## Implementation kickoff prompt
+
+To start the implementation session, paste this:
+
+> Implement the spec at `_ImportantConfigFiles/WHALE_BRACKET_CARDS_SPEC.md`. Start with Phase 1 (Bracket Analysis card). Work through file-by-file using the file layout section. Run schema migration first. Use existing UI conventions: `CollapsibleCard`, `useApi` hook, dark theme with gold accent. Follow the headlines exactly as written in the rules tables — they must be deterministic, not LLM-generated. Ship Phase 1 to a feature branch, get user review, then proceed to Phase 2.
