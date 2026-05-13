@@ -27,6 +27,7 @@ from api.modules.copy_trading.data import poll_wallet_trades, fetch_wallet_portf
 from api.modules.copy_trading.decision import (
     MIRRORED, SKIP_STALE, SKIP_DRIFT, SKIP_CAP, SKIP_DEDUPE,
     SKIP_CIRCUIT, SKIP_PERF_GATE, SKIP_NO_POSITION, SKIP_ZERO_SIZE,
+    SKIP_SHADOW,
     is_stale, is_drifted, compute_buy_size_usd, compute_sell_proportion,
     daily_loss_breached, whale_perf_gate_breached,
 )
@@ -89,7 +90,7 @@ class CopyTradingModule(BaseModule):
              "help": "Clip individual mirrored orders at this % of bankroll."},
             {"key": "daily_loss_circuit_pct", "label": "Daily Loss Circuit (%)", "type": "number",
              "section": "risk", "min": -50, "max": 0, "step": 0.1,
-             "help": "Pause whole module after this % daily loss (negative)."},
+             "help": "Pause whole module after this % daily loss (negative). NOTE: depends on realized_pnl being backfilled by position_manager — see M-2."},
             {"key": "whale_perf_gate_window", "label": "Perf Gate Window", "type": "number",
              "section": "risk", "min": 1, "max": 100, "step": 1,
              "help": "Count of recent copies used to compute rolling whale ROI."},
@@ -107,12 +108,11 @@ class CopyTradingModule(BaseModule):
 
     async def _evaluate_async(self) -> list[Signal]:
         sb = get_supabase()
-        all_rows = sb.table("modules").select("*").execute().data or []
-        matching_rows = [
-            r for r in all_rows
-            if (r.get("strategy") or "").lower().strip() == self.name
-            or any(kw in (r.get("name") or "").lower() for kw in self.get_display_keywords())
-        ]
+        # Narrow scan: only this module's strategy rows + display-keyword
+        # fallback for legacy rows that have strategy='ensemble' set by hand.
+        # (M-3) Pushes the filter to Postgres so we don't pull every modules
+        # row on every cycle.
+        matching_rows = await asyncio.to_thread(self._fetch_my_modules, sb)
         if not matching_rows:
             return []
 
@@ -124,23 +124,48 @@ class CopyTradingModule(BaseModule):
                 log.error(f"copy_trading _evaluate_one_row failed for module_id={module_db.get('id')}: {e}", exc_info=True)
         return signals
 
+    def _fetch_my_modules(self, sb) -> list[dict]:
+        # Primary: strategy == 'copy_trading'.
+        try:
+            primary = sb.table("modules").select("*").eq("strategy", self.name).execute().data or []
+        except Exception as e:
+            log.warning(f"copy_trading: modules strategy query failed: {e}")
+            primary = []
+        primary_ids = {r.get("id") for r in primary}
+        # Fallback: display-keyword match for legacy rows (only if needed).
+        fallback: list[dict] = []
+        try:
+            kw_rows = sb.table("modules").select("*").ilike("name", "%copy%").execute().data or []
+            for r in kw_rows:
+                if r.get("id") in primary_ids:
+                    continue
+                name_l = (r.get("name") or "").lower()
+                if any(kw in name_l for kw in self.get_display_keywords()):
+                    fallback.append(r)
+        except Exception:
+            pass
+        return primary + fallback
+
     async def _evaluate_one_row(self, sb, module_db: dict) -> list[Signal]:
         module_id = module_db["id"]
         db_status = (module_db.get("status") or "").lower()
         if db_status not in ("active", "paper"):
             return []
-        cfg = get_module_config(module_id)
+        cfg = await asyncio.to_thread(get_module_config, module_id)
 
         # Circuit-breaker check (cap #3): if daily P&L from copy_trading is
         # under the circuit_pct threshold, pause the module for the day.
+        # NOTE (M-2): realized_pnl is currently never backfilled in Phase 1
+        # (position_manager hook not wired). _daily_realized_pnl returns 0.0
+        # until that lands. The math is correct; the input feed is the gap.
         bankroll = float(get_settings().bankroll or 1000.0)
-        daily_pnl = self._daily_realized_pnl(sb, module_id)
+        daily_pnl = await asyncio.to_thread(self._daily_realized_pnl, sb, module_id)
         if daily_loss_breached(daily_pnl, bankroll, float(cfg["daily_loss_circuit_pct"])):
-            self._log(sb, module_id, "risk", "warning",
-                      f"Daily-loss circuit breached: pnl={daily_pnl:.2f} threshold={cfg['daily_loss_circuit_pct']}%")
+            await asyncio.to_thread(self._log, sb, module_id, "risk", "warning",
+                                    f"Daily-loss circuit breached: pnl={daily_pnl:.2f} threshold={cfg['daily_loss_circuit_pct']}%")
             return []
 
-        wallets = sb.table("copy_trade_wallets").select("*").eq("module_id", module_id).eq("enabled", True).execute().data or []
+        wallets = await asyncio.to_thread(self._fetch_enabled_wallets, sb, module_id)
         if not wallets:
             return []
 
@@ -150,8 +175,17 @@ class CopyTradingModule(BaseModule):
                 signals.extend(await self._evaluate_wallet(sb, module_id, wallet, cfg, bankroll))
             except Exception as e:
                 log.exception(f"copy_trading wallet {wallet.get('wallet_address')} failed: {e}")
-                self._handle_poll_failure(sb, wallet, str(e))
+                await asyncio.to_thread(self._handle_poll_failure, sb, wallet, str(e))
         return signals
+
+    def _fetch_enabled_wallets(self, sb, module_id: str) -> list[dict]:
+        try:
+            return sb.table("copy_trade_wallets").select("*").eq(
+                "module_id", module_id,
+            ).eq("enabled", True).execute().data or []
+        except Exception as e:
+            log.warning(f"copy_trading: wallet fetch failed for module {module_id}: {e}")
+            return []
 
     async def _evaluate_wallet(
         self, sb, module_id: str, wallet: dict, cfg: dict, bankroll: float,
@@ -162,18 +196,18 @@ class CopyTradingModule(BaseModule):
 
         # Whale-perf gate (cap #4): if this wallet's rolling ROI is bad,
         # auto-disable and stop polling it.
-        state = self._get_state(sb, wallet_id)
+        state = await asyncio.to_thread(self._get_state, sb, wallet_id)
         if whale_perf_gate_breached(
             int(state.get("recent_copy_count") or 0),
             state.get("recent_copy_roi_pct"),
             int(cfg["whale_perf_gate_window"]),
             float(cfg["whale_perf_gate_min_roi_pct"]),
         ):
-            self._auto_disable_wallet(sb, wallet_id, reason="perf_gate")
+            await asyncio.to_thread(self._auto_disable_wallet, sb, wallet_id, "perf_gate")
             return []
 
         trades = await poll_wallet_trades(wallet_address, limit=50)
-        self._touch_polled(sb, wallet_id)
+        await asyncio.to_thread(self._touch_polled, sb, wallet_id)
         if not trades:
             return []
 
@@ -184,8 +218,8 @@ class CopyTradingModule(BaseModule):
         fresh = [t for t in trades if not is_stale(t["timestamp"], max_age, now=now)]
         stale = [t for t in trades if t not in fresh]
         for st in stale:
-            self._log_decision(sb, module_id, wallet_id, st, SKIP_STALE,
-                               skip_reason=f"trade age > {max_age}s")
+            await asyncio.to_thread(self._log_decision, sb, module_id, wallet_id, st,
+                                    SKIP_STALE, f"trade age > {max_age}s")
 
         # Diff against last_seen_trade_ts so we only consider new trades.
         last_seen = state.get("last_seen_trade_ts")
@@ -198,7 +232,7 @@ class CopyTradingModule(BaseModule):
         if not new_trades:
             return []
 
-        # Fetch portfolio once per cycle (cheap) — used for size math.
+        # Fetch portfolio once per cycle — used for size math.
         portfolio_value = await fetch_wallet_portfolio_value(wallet_address)
         signals: list[Signal] = []
 
@@ -213,13 +247,13 @@ class CopyTradingModule(BaseModule):
                     signals.append(sig)
             except Exception as e:
                 log.warning(f"copy_trading decide failed (trade={trade.get('whale_trade_id')}): {e}")
-                self._log_decision(sb, module_id, wallet_id, trade, "skipped_error",
-                                   skip_reason=str(e)[:200])
+                await asyncio.to_thread(self._log_decision, sb, module_id, wallet_id, trade,
+                                        "skipped_error", str(e)[:200])
 
         # Bump last_seen_trade_ts to the newest trade we considered (even
         # if every one was skipped — so we don't keep re-evaluating them).
         newest_ts = max(t["timestamp"] for t in new_trades)
-        self._update_last_seen(sb, wallet_id, newest_ts)
+        await asyncio.to_thread(self._update_last_seen, sb, wallet_id, newest_ts)
 
         return signals
 
@@ -229,10 +263,15 @@ class CopyTradingModule(BaseModule):
     ) -> Signal | None:
         wallet_id = wallet["id"]
 
-        # Dedupe check: was this whale_trade_id already logged? If yes, skip.
-        if self._already_logged(sb, wallet_id, trade["whale_trade_id"]):
-            self._log_decision(sb, module_id, wallet_id, trade, SKIP_DEDUPE,
-                               skip_reason="already logged for this wallet")
+        # Dedupe check (C-1): only `mirrored` rows count as "already copied".
+        # Shadow-mode and skipped rows do NOT block the same whale_trade_id
+        # from being re-evaluated when shadow_mode flips off. We rely on:
+        #   (a) this Python check for the happy path
+        #   (b) the (wallet_id, whale_trade_id) UNIQUE constraint as the
+        #       DB-level backstop against any race that slips past (a)
+        if await asyncio.to_thread(self._already_mirrored, sb, wallet_id, trade["whale_trade_id"]):
+            await asyncio.to_thread(self._log_decision, sb, module_id, wallet_id, trade,
+                                    SKIP_DEDUPE, "already mirrored for this wallet")
             return None
 
         # Current market book — needed for drift gate + price building.
@@ -243,8 +282,9 @@ class CopyTradingModule(BaseModule):
 
         # Drift gate
         if is_drifted(trade["price"], current_mid, float(cfg["max_price_drift_pct"])):
-            self._log_decision(sb, module_id, wallet_id, trade, SKIP_DRIFT,
-                               skip_reason=f"|{current_mid:.4f} - {trade['price']:.4f}| / {trade['price']:.4f} > {cfg['max_price_drift_pct']}%")
+            await asyncio.to_thread(self._log_decision, sb, module_id, wallet_id, trade,
+                                    SKIP_DRIFT,
+                                    f"|{current_mid:.4f} - {trade['price']:.4f}| / {trade['price']:.4f} > {cfg['max_price_drift_pct']}%")
             return None
 
         market_id = trade["market_id"]
@@ -252,8 +292,10 @@ class CopyTradingModule(BaseModule):
         event_slug = trade.get("event_slug") or None
 
         if trade["side"] == "BUY":
-            existing_wallet_exposure = self._wallet_exposure_usd(sb, wallet_id)
-            existing_market_notional = self._our_market_notional_usd(sb, module_id, wallet_id, market_id)
+            existing_wallet_exposure = await asyncio.to_thread(self._wallet_exposure_usd, sb, wallet_id)
+            existing_market_notional = await asyncio.to_thread(
+                self._our_market_notional_usd, sb, module_id, wallet_id, market_id,
+            )
             size_usd, skip = compute_buy_size_usd(
                 whale_price=trade["price"],
                 whale_size_shares=trade["size"],
@@ -266,13 +308,15 @@ class CopyTradingModule(BaseModule):
                 our_existing_market_notional_usd=existing_market_notional,
             )
             if skip is not None:
-                self._log_decision(sb, module_id, wallet_id, trade, skip,
-                                   skip_reason=f"buy sizer returned {skip}")
+                await asyncio.to_thread(self._log_decision, sb, module_id, wallet_id, trade,
+                                        skip, f"buy sizer returned {skip}")
                 return None
 
+            # Shadow-mode short-circuit: log under SKIP_SHADOW (not MIRRORED)
+            # so the dedupe check stays clean when we later flip shadow off.
             if cfg.get("shadow_mode", True):
-                self._log_decision(sb, module_id, wallet_id, trade, MIRRORED,
-                                   skip_reason="shadow_mode: no signal emitted")
+                await asyncio.to_thread(self._log_decision, sb, module_id, wallet_id, trade,
+                                        SKIP_SHADOW, f"shadow_mode: would have mirrored $%.2f" % size_usd)
                 return None
 
             sig = build_buy_signal(
@@ -284,28 +328,37 @@ class CopyTradingModule(BaseModule):
                 whale_trade_id=trade["whale_trade_id"], event_slug=event_slug,
                 shadow_mode=False,
             )
-            self._log_decision(sb, module_id, wallet_id, trade, MIRRORED)
+            # M-4: log MIRRORED at signal-build time. If risk_manager rejects
+            # downstream, the standard rejected_signals table captures it —
+            # we don't try to backfill our log row's action. The dedupe check
+            # short-circuits any retry, which is the correct behavior:
+            # signal was issued, audit trail exists, don't double-fire.
+            await asyncio.to_thread(self._log_decision, sb, module_id, wallet_id, trade, MIRRORED)
             return sig
 
         # SELL path
-        our_position = self._our_wallet_attributed_position(sb, module_id, wallet_id, market_id)
+        our_position = await asyncio.to_thread(
+            self._our_wallet_attributed_position, sb, module_id, wallet_id, market_id,
+        )
         if not our_position or float(our_position.get("size") or 0) <= 0:
-            self._log_decision(sb, module_id, wallet_id, trade, SKIP_NO_POSITION,
-                               skip_reason="no wallet-attributed position to sell")
+            await asyncio.to_thread(self._log_decision, sb, module_id, wallet_id, trade,
+                                    SKIP_NO_POSITION, "no wallet-attributed position to sell")
             return None
 
-        whale_pos_before = self._whale_position_size_before(sb, wallet_id, market_id, trade)
+        whale_pos_before = await asyncio.to_thread(
+            self._whale_position_size_before, sb, wallet_id, market_id, trade,
+        )
         sell_fraction = compute_sell_proportion(
             whale_size_sold=trade["size"], whale_position_size_before=whale_pos_before,
         )
         if sell_fraction <= 0:
-            self._log_decision(sb, module_id, wallet_id, trade, SKIP_ZERO_SIZE,
-                               skip_reason="sell fraction zero")
+            await asyncio.to_thread(self._log_decision, sb, module_id, wallet_id, trade,
+                                    SKIP_ZERO_SIZE, "sell fraction zero")
             return None
 
         if cfg.get("shadow_mode", True):
-            self._log_decision(sb, module_id, wallet_id, trade, MIRRORED,
-                               skip_reason="shadow_mode: no signal emitted")
+            await asyncio.to_thread(self._log_decision, sb, module_id, wallet_id, trade,
+                                    SKIP_SHADOW, f"shadow_mode: would have sold {sell_fraction*100:.1f}%")
             return None
 
         sig = build_sell_signal(
@@ -316,11 +369,11 @@ class CopyTradingModule(BaseModule):
             whale_trade_id=trade["whale_trade_id"],
             position_id=our_position.get("id"), event_slug=event_slug, shadow_mode=False,
         )
-        self._log_decision(sb, module_id, wallet_id, trade, MIRRORED)
+        await asyncio.to_thread(self._log_decision, sb, module_id, wallet_id, trade, MIRRORED)
         return sig
 
     # ------------------------------------------------------------------
-    # State / DB helpers
+    # State / DB helpers (all SYNC — wrapped in asyncio.to_thread by callers)
     # ------------------------------------------------------------------
 
     def _get_state(self, sb, wallet_id: str) -> dict:
@@ -330,9 +383,14 @@ class CopyTradingModule(BaseModule):
                 return res.data[0]
         except Exception as e:
             log.warning(f"_get_state failed: {e}")
-        # Insert empty row on first poll so subsequent updates work.
+        # First-poll init: upsert with ignore_duplicates so concurrent cycles
+        # don't race on the PK insert. H-2.
         try:
-            sb.table("copy_trade_state").insert({"wallet_id": wallet_id}).execute()
+            sb.table("copy_trade_state").upsert(
+                {"wallet_id": wallet_id},
+                on_conflict="wallet_id",
+                ignore_duplicates=True,
+            ).execute()
         except Exception:
             pass
         return {}
@@ -343,9 +401,9 @@ class CopyTradingModule(BaseModule):
                 "wallet_id": wallet_id,
                 "last_polled_at": datetime.now(timezone.utc).isoformat(),
                 "consecutive_poll_failures": 0,
-            }).execute()
-        except Exception:
-            pass
+            }, on_conflict="wallet_id").execute()
+        except Exception as e:
+            log.debug(f"_touch_polled upsert failed: {e}")
 
     def _update_last_seen(self, sb, wallet_id: str, ts: datetime):
         try:
@@ -353,7 +411,7 @@ class CopyTradingModule(BaseModule):
                 "wallet_id": wallet_id,
                 "last_seen_trade_ts": ts.isoformat(),
                 "last_polled_at": datetime.now(timezone.utc).isoformat(),
-            }).execute()
+            }, on_conflict="wallet_id").execute()
         except Exception as e:
             log.warning(f"_update_last_seen failed for {wallet_id}: {e}")
 
@@ -369,18 +427,27 @@ class CopyTradingModule(BaseModule):
                 "wallet_id": wallet["id"],
                 "consecutive_poll_failures": current_failures + 1,
                 "last_polled_at": datetime.now(timezone.utc).isoformat(),
-            }).execute()
+            }, on_conflict="wallet_id").execute()
         except Exception:
             pass
 
-    def _already_logged(self, sb, wallet_id: str, whale_trade_id: str) -> bool:
+    def _already_mirrored(self, sb, wallet_id: str, whale_trade_id: str) -> bool:
+        """True iff a `mirrored` row already exists for (wallet, trade_id).
+
+        C-3: fail-CLOSED on DB error — assume it's already mirrored so we
+        never double-emit while Supabase is sick. The UNIQUE constraint is
+        the hard backstop; this is the soft check.
+        """
         try:
             res = sb.table("copy_trade_log").select("id").eq(
                 "wallet_id", wallet_id,
-            ).eq("whale_trade_id", whale_trade_id).limit(1).execute()
+            ).eq("whale_trade_id", whale_trade_id).eq(
+                "our_action", "mirrored",
+            ).limit(1).execute()
             return bool(res.data)
-        except Exception:
-            return False
+        except Exception as e:
+            log.warning(f"_already_mirrored fail-closed on error: {e}")
+            return True
 
     def _log_decision(
         self, sb, module_id: str, wallet_id: str, trade: dict, action: str,
@@ -402,7 +469,10 @@ class CopyTradingModule(BaseModule):
                 "our_signal_id": our_signal_id,
             }).execute()
         except Exception as e:
-            log.warning(f"_log_decision insert failed: {e}")
+            # UNIQUE constraint violations on (wallet_id, whale_trade_id) are
+            # expected when re-logging a dedupe / skipped_shadow / etc — debug
+            # not warning.
+            log.debug(f"_log_decision insert failed (likely dedupe): {e}")
 
     def _auto_disable_wallet(self, sb, wallet_id: str, reason: str):
         try:
@@ -415,7 +485,14 @@ class CopyTradingModule(BaseModule):
             log.warning(f"_auto_disable_wallet failed: {e}")
 
     def _daily_realized_pnl(self, sb, module_id: str) -> float:
-        """Sum of realized_pnl from copy_trade_log for today (UTC)."""
+        """Sum of realized_pnl from copy_trade_log for today (UTC).
+
+        Phase 1 limitation (M-2): nothing currently writes realized_pnl back
+        into copy_trade_log when a copied position closes. The math here is
+        correct but the input feed is empty — the daily-loss circuit will
+        not trip until Phase 2 wires position_manager.close_position to
+        backfill realized_pnl on the originating log row.
+        """
         try:
             today = datetime.now(timezone.utc).date().isoformat()
             res = sb.table("copy_trade_log").select("realized_pnl").eq(
@@ -428,44 +505,47 @@ class CopyTradingModule(BaseModule):
     def _wallet_exposure_usd(self, sb, wallet_id: str) -> float:
         """Sum of notional from open positions tagged with this wallet_id.
 
-        We attribute by copy_source_wallet in order metadata. Phase 1 keeps
-        this simple: scan positions where metadata->>copy_wallet_id matches.
+        C-2: push status='open' filter to the DB so we don't pull every
+        closed position into Python and silently hit the 1000-row return cap.
         """
         try:
-            res = sb.table("positions").select("size,avg_price,metadata,status").execute()
+            res = sb.table("positions").select("size,avg_price,metadata").eq(
+                "status", "open",
+            ).execute()
             total = 0.0
             for p in (res.data or []):
-                if (p.get("status") or "").lower() != "open":
-                    continue
                 meta = p.get("metadata") or {}
                 if isinstance(meta, dict) and str(meta.get("copy_wallet_id") or "") == str(wallet_id):
                     total += float(p.get("size") or 0) * float(p.get("avg_price") or 0)
             return total
-        except Exception:
-            return 0.0
+        except Exception as e:
+            log.warning(f"_wallet_exposure_usd failed: {e}")
+            # Conservative fail-closed: return a large number so per-wallet
+            # cap check rejects new BUYs while exposure is unknown.
+            return float("inf")
 
     def _our_market_notional_usd(self, sb, module_id: str, wallet_id: str, market_id: str) -> float:
+        """Open-position notional for (module, market, wallet). C-2 fixed."""
         try:
-            res = sb.table("positions").select("size,avg_price,metadata,status,module_id,market_id").eq(
+            res = sb.table("positions").select("size,avg_price,metadata").eq(
                 "module_id", module_id,
-            ).eq("market_id", market_id).execute()
+            ).eq("market_id", market_id).eq("status", "open").execute()
             total = 0.0
             for p in (res.data or []):
-                if (p.get("status") or "").lower() != "open":
-                    continue
                 meta = p.get("metadata") or {}
                 if isinstance(meta, dict) and str(meta.get("copy_wallet_id") or "") == str(wallet_id):
                     total += float(p.get("size") or 0) * float(p.get("avg_price") or 0)
             return total
-        except Exception:
+        except Exception as e:
+            log.warning(f"_our_market_notional_usd failed: {e}")
             return 0.0
 
     def _our_wallet_attributed_position(self, sb, module_id: str, wallet_id: str, market_id: str) -> dict | None:
         try:
-            res = sb.table("positions").select("*").eq("module_id", module_id).eq("market_id", market_id).execute()
+            res = sb.table("positions").select("*").eq(
+                "module_id", module_id,
+            ).eq("market_id", market_id).eq("status", "open").execute()
             for p in (res.data or []):
-                if (p.get("status") or "").lower() != "open":
-                    continue
                 meta = p.get("metadata") or {}
                 if isinstance(meta, dict) and str(meta.get("copy_wallet_id") or "") == str(wallet_id):
                     return p
@@ -475,9 +555,17 @@ class CopyTradingModule(BaseModule):
 
     def _whale_position_size_before(self, sb, wallet_id: str, market_id: str, trade: dict) -> float:
         """Estimate the whale's position size on this market BEFORE this
-        SELL trade. Phase 1: walk our copy_trade_log mirrored BUYs minus
-        prior SELLs for the same (wallet, market). When unknown, fall back
-        to trade.size (treat as full exit)."""
+        SELL trade by summing OUR mirrored BUY rows minus prior mirrored SELL
+        rows for the same (wallet, market).
+
+        M-1: when no mirrored rows exist (i.e. we have no record of the whale
+        accumulating this position — they bought before we started tracking),
+        we conservatively return `trade.size` so `sell_fraction = 1.0`. That's
+        a documented Phase 1 limitation: we can't compute true proportional
+        exits without a backfill of the whale's full pre-tracking history.
+        Setting sell_fraction = 1.0 (full exit of OUR wallet-attributed
+        slice) is safer than picking an arbitrary fraction.
+        """
         try:
             res = sb.table("copy_trade_log").select("whale_side,whale_size,whale_trade_ts").eq(
                 "wallet_id", wallet_id,
@@ -494,6 +582,8 @@ class CopyTradingModule(BaseModule):
                 return inferred
         except Exception:
             pass
+        # Phase 1 fallback: treat the current SELL size as the whale's full
+        # remaining position, yielding sell_fraction = 1.0 (full exit).
         return float(trade.get("size") or 0)
 
     async def _fetch_book(self, trade: dict) -> dict:

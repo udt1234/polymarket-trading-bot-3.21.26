@@ -16,7 +16,7 @@ import pytest
 from api.modules.copy_trading.decision import (
     is_stale, is_drifted, compute_buy_size_usd, compute_sell_proportion,
     daily_loss_breached, whale_perf_gate_breached,
-    SKIP_CAP, SKIP_ZERO_SIZE,
+    SKIP_CAP, SKIP_ZERO_SIZE, SKIP_SHADOW, MIRRORED,
 )
 
 
@@ -44,24 +44,51 @@ def _trade(ts: datetime, side: str = "BUY", price: float = 0.10, size: float = 1
 # ---------------------------------------------------------------------------
 
 class TestDedupe:
-    def test_already_logged_short_circuits(self):
-        """If copy_trade_log already has a row for (wallet_id, whale_trade_id),
-        the module's _already_logged() returns True and no signal is built."""
+    def test_already_mirrored_short_circuits(self):
+        """If copy_trade_log already has a MIRRORED row for
+        (wallet_id, whale_trade_id), _already_mirrored returns True."""
         from api.modules.copy_trading.module import CopyTradingModule
         mod = CopyTradingModule()
 
         sb = MagicMock()
-        sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        sb.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
             {"id": "log-row-1"}
         ]
-        assert mod._already_logged(sb, "wallet-1", "tx-abc") is True
+        assert mod._already_mirrored(sb, "wallet-1", "tx-abc") is True
 
-    def test_not_logged_returns_false(self):
+    def test_not_mirrored_returns_false(self):
         from api.modules.copy_trading.module import CopyTradingModule
         mod = CopyTradingModule()
         sb = MagicMock()
-        sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
-        assert mod._already_logged(sb, "wallet-1", "tx-abc") is False
+        sb.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+        assert mod._already_mirrored(sb, "wallet-1", "tx-abc") is False
+
+    def test_dedupe_fails_closed_on_db_error(self):
+        """C-3: when Supabase raises, _already_mirrored returns True
+        (assume already mirrored) so we never double-emit during DB sickness.
+        The (wallet_id, whale_trade_id) UNIQUE backstop catches anything
+        that slips through anyway."""
+        from api.modules.copy_trading.module import CopyTradingModule
+        mod = CopyTradingModule()
+
+        sb = MagicMock()
+        sb.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.side_effect = RuntimeError("supabase down")
+        assert mod._already_mirrored(sb, "wallet-1", "tx-abc") is True
+
+    def test_shadow_mode_log_does_not_block_real_mirror(self):
+        """C-1: a SKIP_SHADOW row for a whale_trade_id must NOT cause
+        _already_mirrored to return True. When shadow_mode later flips off,
+        the same trade gets a real mirror."""
+        from api.modules.copy_trading.module import CopyTradingModule
+        mod = CopyTradingModule()
+
+        sb = MagicMock()
+        # Query specifically filters our_action='mirrored', so a
+        # skipped_shadow row would not appear in the result set.
+        # Simulate: log table HAS the trade but only with skipped_shadow
+        # action — the filtered query returns empty.
+        sb.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+        assert mod._already_mirrored(sb, "wallet-1", "tx-abc") is False
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +296,65 @@ class TestDriftGate:
 
     def test_no_drift_when_book_unknown(self):
         assert is_drifted(whale_price=0.10, current_price=0.0, max_drift_pct=20.0) is False
+
+
+class TestZeroPortfolioFallback:
+    def test_zero_portfolio_falls_back_to_per_trade_cap(self):
+        """H-3: when fetch_wallet_portfolio_value returns 0 (fresh wallet,
+        API failure, etc.), the sizer must NOT silently zero — it falls back
+        to per_trade_cap_usd so we still mirror something."""
+        size_usd, skip = compute_buy_size_usd(
+            whale_price=0.10, whale_size_shares=100,
+            whale_portfolio_value=0.0,  # ← unknown
+            our_bankroll=1000.0, wallet_weight_pct=1.0,
+            per_trade_cap_pct=1.0, per_wallet_cap_pct=5.0,
+            our_existing_wallet_exposure_usd=0.0,
+            our_existing_market_notional_usd=0.0,
+        )
+        assert skip is None
+        # per_trade_cap_usd = 1000 * 0.01 = $10, weight 1.0 → target $10
+        assert size_usd == pytest.approx(10.0)
+
+    def test_zero_portfolio_with_half_weight(self):
+        size_usd, skip = compute_buy_size_usd(
+            whale_price=0.10, whale_size_shares=100,
+            whale_portfolio_value=0.0,
+            our_bankroll=1000.0, wallet_weight_pct=0.5,  # half mirror
+            per_trade_cap_pct=1.0, per_wallet_cap_pct=5.0,
+            our_existing_wallet_exposure_usd=0.0,
+            our_existing_market_notional_usd=0.0,
+        )
+        assert skip is None
+        # $10 cap * 0.5 weight = $5
+        assert size_usd == pytest.approx(5.0)
+
+
+class TestExposureQueryDBFilter:
+    """C-2: verify _wallet_exposure_usd pushes status='open' to the DB
+    instead of fetching every row and filtering in Python."""
+
+    def test_wallet_exposure_pushes_status_filter_to_db(self):
+        from api.modules.copy_trading.module import CopyTradingModule
+        mod = CopyTradingModule()
+
+        sb = MagicMock()
+        sb.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+        mod._wallet_exposure_usd(sb, "wallet-1")
+
+        # The chain we expect:
+        #   sb.table("positions").select(...).eq("status", "open").execute()
+        sb.table.assert_called_with("positions")
+        sb.table.return_value.select.return_value.eq.assert_called_with("status", "open")
+
+    def test_wallet_exposure_fails_closed_on_error(self):
+        from api.modules.copy_trading.module import CopyTradingModule
+        mod = CopyTradingModule()
+
+        sb = MagicMock()
+        sb.table.return_value.select.return_value.eq.return_value.execute.side_effect = RuntimeError("db down")
+        # Fail-closed: return infinity so the per-wallet cap rejects new BUYs.
+        result = mod._wallet_exposure_usd(sb, "wallet-1")
+        assert result == float("inf")
 
 
 class TestSellProportion:
