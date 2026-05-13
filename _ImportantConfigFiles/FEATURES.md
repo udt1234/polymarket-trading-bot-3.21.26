@@ -29,6 +29,13 @@
 - Variable auction periods (7/14/30 day)
 - Dynamic bracket detection from Gamma API
 
+## Copy Trading Module (Phase 1 — paper, 2026-05-13)
+- Mirrors whale-wallet trades polled from `data-api.polymarket.com/trades` (default 30s)
+- 4 hard caps: per-wallet exposure, per-trade size, daily-loss circuit, whale-perf gate
+- Staleness/drift gates + `(wallet_id, whale_trade_id)` dedupe; cold-start drop of stale trades
+- Wallet-scoped cost-basis (`copy_source_wallet`) for per-wallet P&L attribution
+- Tables: `copy_trade_wallets`, `copy_trade_state`, `copy_trade_log`; paper via `shadow_mode=true`
+
 ## Data Sources (10 Active)
 | Source | Purpose | Modules |
 |--------|---------|---------|
@@ -130,14 +137,9 @@ correlated (30%), duplicate, cross-module, settlement decay, spread, liquidity
 ## Future Items (Backlog)
 
 ### Strategy A/B testing via per-module separation
-- **Goal:** run two distinct bidding strategies side-by-side on the same auction with isolated bankrolls so we can compare realized P&L, win rate, Brier score, and execution behavior cleanly.
-- **Approach:** add a second module (e.g. `truth_social_floor_buyer`) extending `BaseModule`, distinct row in `modules` table, fixed dollar bankroll per module (not %). Reuses shared `data.py`, regime detection, risk manager, executor, exit manager. Only `_evaluate_async()` and `module_config.py` differ.
-- **Strategy 2 (rough idea, needs spec):** buy all posting brackets when price < $X during historical-low time windows. Needs decisions on price ceiling, low-window definition, equal vs weighted share per bracket, exit rule.
-- **Prereqs before starting:**
-  - PR #9 snapshot fixes verified live (Order Book Depth + Truth Social Direct populating)
-  - Current module's projection/floor/variance changes proven over at least one full auction cycle
-  - Strategy 2 logic written down in detail (don't iterate on architecture and strategy simultaneously)
-- **Estimated cost:** ~30 min scaffold via `@module-scaffolder` + 100-150 LOC for `_evaluate_async()` + dashboard auto-renders both modules.
+- Goal: run two strategies side-by-side on the same auction with isolated bankrolls; compare P&L, win rate, Brier score
+- Approach: second module extending `BaseModule` with its own row in `modules` table and fixed-$ bankroll; reuses shared infra
+- Prereqs: PR #9 snapshots verified live; Strategy 2 logic specced before scaffolding
 
 ### Future strategy tests (deferred during PR 1-5 strategy upgrade)
 - **Sell winners when pacing turns against** — backtest historically lost money on this rule (capped upside on real winners). Worth re-testing now that the ensemble has running_total floor + variance shrinkage. Build as a togglable exit rule (`sell_on_pacing_reversal`, default OFF).
