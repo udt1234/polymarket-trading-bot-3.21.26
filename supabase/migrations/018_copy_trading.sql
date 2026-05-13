@@ -51,7 +51,8 @@ create table if not exists copy_trade_log (
   our_action text not null check (our_action in (
     'mirrored', 'skipped_stale', 'skipped_drift', 'skipped_cap',
     'skipped_dedupe', 'skipped_circuit', 'skipped_perf_gate',
-    'skipped_no_position', 'skipped_zero_size', 'skipped_error'
+    'skipped_no_position', 'skipped_zero_size', 'skipped_error',
+    'skipped_shadow'
   )),
   skip_reason text,
   realized_pnl numeric,

@@ -24,6 +24,7 @@ SKIP_CIRCUIT = "skipped_circuit"
 SKIP_PERF_GATE = "skipped_perf_gate"
 SKIP_NO_POSITION = "skipped_no_position"
 SKIP_ZERO_SIZE = "skipped_zero_size"
+SKIP_SHADOW = "skipped_shadow"
 MIRRORED = "mirrored"
 
 
@@ -87,12 +88,19 @@ def compute_buy_size_usd(
     if our_existing_wallet_exposure_usd >= wallet_cap_usd:
         return 0.0, SKIP_CAP
 
+    per_trade_cap_usd = our_bankroll * (per_trade_cap_pct / 100.0)
     whale_notional = whale_price * whale_size_shares
-    size_pct_of_their_book = whale_size_pct(whale_notional, whale_portfolio_value)
-    target_usd = our_bankroll * size_pct_of_their_book * max(wallet_weight_pct, 0.0)
+
+    if whale_portfolio_value > 0:
+        size_pct_of_their_book = whale_size_pct(whale_notional, whale_portfolio_value)
+        target_usd = our_bankroll * size_pct_of_their_book * max(wallet_weight_pct, 0.0)
+    else:
+        # Portfolio value unknown (zero / API failure / fresh wallet). Don't
+        # silently zero out — fall back to the per-trade cap so the user
+        # still mirrors *something* and the cap is the safety net.
+        target_usd = per_trade_cap_usd * max(wallet_weight_pct, 0.0)
 
     # Per-trade cap: clip (don't reject).
-    per_trade_cap_usd = our_bankroll * (per_trade_cap_pct / 100.0)
     target_usd = min(target_usd, per_trade_cap_usd)
 
     # Don't push wallet over its exposure cap.
