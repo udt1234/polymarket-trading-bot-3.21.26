@@ -47,3 +47,13 @@ MISC/
 
 # Playwright cache
 .playwright-mcp/
+
+# Cron alert runtime state (auto-generated)
+_DataMetricPulls/alert_state/
+
+# Large parquet/historical data (regenerable from API)
+_DataMetricPulls/whale_analysis/
+_DataMetricPulls/historical/
+
+# Generated analysis outputs (regenerable from scripts)
+_DataMetricPulls/bracket_spike_grids/

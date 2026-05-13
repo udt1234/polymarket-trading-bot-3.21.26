@@ -1,0 +1,20 @@
+# Railway cron service config for spike alerts.
+#
+# Deploy:
+#   1. In Railway: add a NEW service in the same project pointing to this repo
+#   2. Set this file as the service config
+#   3. Add env vars: SLACK_WEBHOOK_URL
+#   4. IMPORTANT: On the very first deploy, set SPIKE_ALERT_BASELINE_MODE=1
+#      to populate the dedup state without spamming Slack. Then remove that env
+#      var on the second deploy to switch to normal mode.
+#   5. Schedule: */5 * * * *  (every 5 minutes)
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "python scripts/cron_spike_alert.py"
+restartPolicyType = "never"
+
+[deploy.cron]
+schedule = "*/5 * * * *"

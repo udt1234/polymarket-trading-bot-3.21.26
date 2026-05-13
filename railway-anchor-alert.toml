@@ -1,0 +1,20 @@
+# Railway cron service config for anchor-trade alerts.
+#
+# Deploy:
+#   1. In Railway: New Service -> "Cron Job" (or copy this repo as a new service)
+#   2. Set this file as the railway config (RAILWAY_TOML or --service flag)
+#   3. Add env vars: SLACK_WEBHOOK_URL, ANCHOR_BANKROLL (optional, defaults to 1000)
+#   4. Schedule: */15 * * * *  (every 15 minutes)
+#
+# Alternative: link this as a second service in your existing project pointing
+# to the same repo, with a different start command.
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "python scripts/cron_anchor_alert.py"
+restartPolicyType = "never"
+
+[deploy.cron]
+schedule = "*/15 * * * *"
