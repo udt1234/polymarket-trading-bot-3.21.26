@@ -1,7 +1,7 @@
 # PolyMarket Bot — Handoff
 
-## Current State (2026-05-11)
-Bot LIVE on Trump + Elon (ensemble) + Spike Trading (multi-auction multi-strategy plugin architecture; paper-trading via global `PAPER_MODE=true`). All on Railway.
+## Current State (2026-05-13)
+Bot LIVE on Trump + Elon (ensemble) + Spike Trading (multi-auction multi-strategy plugin architecture; paper-trading via global `PAPER_MODE=true`). All on Railway. **Copy Trading module Phase 1 shipped 2026-05-13** — paper/shadow only, no wallets registered yet; user adds via SQL insert into `copy_trade_wallets` to activate. Dashboard + live promotion in Phase 2/3.
 
 ### 2026-05-11 — Dashboard cleanup + bracket-grid fixes
 - **Modules-list P&L** — `/api/modules/` now enriches each row with `pnl` (realized + unrealized for OPEN positions) and `open_positions` count. Card stops showing $0 / 0 placeholder.
