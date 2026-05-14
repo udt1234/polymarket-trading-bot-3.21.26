@@ -457,6 +457,33 @@ class SpikeTradingModule(BaseModule):
         }).eq("id", position["id"]).execute()
 
         if decision == "SELL-NOW":
+            # Phantom-position guard: a spike_positions row can sit in
+            # state=MONITORING with entry_size_shares=0 when the buy ladder
+            # placed orders that never filled (typical for the 0.3¢/0.5¢
+            # tiers). The LiveExecutor then queries the canonical `positions`
+            # table, finds no row, and raises 'No open BUY position to sell'.
+            # That fires every cycle (every 5 min) and trips the Degraded
+            # banner. Skip the SELL signal and liquidate the phantom row so
+            # it stops cycling forever.
+            try:
+                shares = float(position.get("entry_size_shares") or 0)
+            except (TypeError, ValueError):
+                shares = 0.0
+            if shares <= 0:
+                self._log(sb, module_id, "risk", "warning",
+                          f"[{label}] {market_id} SELL-NOW with 0 shares "
+                          f"(phantom row {position['id'][:8]}…). "
+                          f"Auto-liquidating spike_positions row; no SELL emitted.")
+                try:
+                    sb.table("spike_positions").update({
+                        "state": "LIQUIDATED",
+                        "closed_at": datetime.now(timezone.utc).isoformat(),
+                        "last_decision": "AUTO_LIQUIDATE_NO_SHARES",
+                        "last_decision_at": datetime.now(timezone.utc).isoformat(),
+                    }).eq("id", position["id"]).execute()
+                except Exception as e:
+                    log.warning(f"phantom liquidation update failed for {position['id']}: {e}")
+                return []
             return self._build_market_sell(sb, module_id, market, position, h_to_close)
         return []
 
