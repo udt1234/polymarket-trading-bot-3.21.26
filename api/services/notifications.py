@@ -6,7 +6,17 @@ from api.dependencies import get_supabase
 log = logging.getLogger(__name__)
 
 
-async def send_slack(message: str, blocks: list[dict] | None = None):
+async def send_slack(message: str, blocks: list[dict] | None = None, module: str | None = None):
+    """Send a Slack notification.
+
+    `module`: optional scope tag prepended to every message as `[<module>] `.
+    Use the human-friendly module name for per-module alerts ("Spike Trading"),
+    the handle for per-handle alerts ("elonmusk", "realDonaldTrump"), or
+    "engine" for engine-scoped alerts (bot_paused, daily heartbeat, global
+    stale-data). When None, the message is sent unprefixed (legacy callers).
+    """
+    if module:
+        message = f"[{module}] {message}"
     import os
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
 
@@ -117,48 +127,62 @@ async def notify_trade_executed(
     emoji = ":chart_with_upwards_trend:" if side == "BUY" else ":chart_with_downwards_trend:"
     mode = (executor or "paper").upper()
     notional = (size or 0) * (price or 0)
-    prefix = f"{emoji} *{side}* {bracket}"
-    if module_name:
-        prefix += f" | {module_name}"
+    # Module name is conveyed via the `[ModuleName]` prefix on every Slack
+    # message — don't duplicate it in the message body.
     await send_slack(
-        f"{prefix} | {size:.0f} shares @ ${price:.4f} (${notional:.2f} notional) | {mode}"
+        f"{emoji} *{side}* {bracket} | {size:.0f} shares @ ${price:.4f} (${notional:.2f} notional) | {mode}",
+        module=module_name or "engine",
     )
 
 
 async def notify_circuit_breaker(consecutive_losses: int, cooldown_minutes: int):
     await send_slack(
-        f":rotating_light: *Circuit Breaker Tripped* | {consecutive_losses} consecutive losses | Cooldown: {cooldown_minutes}min"
+        f":rotating_light: *Circuit Breaker Tripped* | {consecutive_losses} consecutive losses | Cooldown: {cooldown_minutes}min",
+        module="engine",
     )
 
 
 async def notify_daily_summary(portfolio_value: float, daily_return: float, total_pnl: float):
     emoji = ":white_check_mark:" if daily_return >= 0 else ":red_circle:"
     await send_slack(
-        f"{emoji} *Daily Summary* | Value: ${portfolio_value:.2f} | Return: {daily_return:+.2%} | Total P&L: ${total_pnl:.2f}"
+        f"{emoji} *Daily Summary* | Value: ${portfolio_value:.2f} | Return: {daily_return:+.2%} | Total P&L: ${total_pnl:.2f}",
+        module="engine",
     )
 
 
-async def notify_regime_shift(old_regime: str, new_regime: str, zscore: float):
+async def notify_regime_shift(old_regime: str, new_regime: str, zscore: float, handle: str | None = None):
     await send_slack(
-        f":warning: *Regime Shift* | {old_regime} -> {new_regime} | Z-score: {zscore:.2f}"
+        f":warning: *Regime Shift* | {old_regime} -> {new_regime} | Z-score: {zscore:.2f}",
+        module=handle or "engine",
     )
 
 
-async def notify_walk_forward_alert(module_id: str, reason: str, action: str):
+async def notify_walk_forward_alert(module_id: str, reason: str, action: str, module_name: str | None = None):
     await send_slack(
-        f":microscope: *Walk-Forward Alert* | Module: {module_id} | {reason} | Action: {action}"
+        f":microscope: *Walk-Forward Alert* | Module: {module_name or module_id} | {reason} | Action: {action}",
+        module=module_name or "engine",
     )
 
 
-async def notify_auction_gap(handle: str, last_end: str, hours_gap: float):
+async def notify_auction_gap(
+    handle: str, last_end: str, hours_gap: float, module_name: str | None = None,
+):
+    """Slack-prefix uses module_name when available (e.g. 'Elon Tweets')
+    rather than the raw handle ('elonmusk') — module names disambiguate
+    when multiple modules track the same handle."""
     await send_slack(
-        f":warning: *Auction Gap Detected* | {handle} | Last auction ended {last_end} | {hours_gap:.0f}h with no new auction | Check xTracker"
+        f":warning: *Auction Gap Detected* | {handle} | Last auction ended {last_end} | {hours_gap:.0f}h with no new auction | Check xTracker",
+        module=module_name or handle or "engine",
     )
 
 
-async def notify_new_auction(handle: str, title: str, start: str, end: str):
+async def notify_new_auction(
+    handle: str, title: str, start: str, end: str, module_name: str | None = None,
+):
+    """Slack-prefix uses module_name when available."""
     await send_slack(
-        f":new: *New Auction* | {handle} | {title} | {start} → {end}"
+        f":new: *New Auction* | {handle} | {title} | {start} → {end}",
+        module=module_name or handle or "engine",
     )
 
 
@@ -182,4 +206,4 @@ async def notify_divergence(
     if context:
         msg += f"\n_{context}_"
     msg += "\nAction: consider selling the over-priced bracket or buying the real winner."
-    await send_slack(msg)
+    await send_slack(msg, module=handle or "engine")
