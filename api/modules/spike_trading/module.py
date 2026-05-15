@@ -153,6 +153,11 @@ class SpikeTradingModule(BaseModule):
             {"key": "bracket_cap_pct_of_bankroll", "label": "Per-Cycle Bankroll Cap", "type": "number",
              "section": "risk", "min": 0.01, "max": 0.5, "step": 0.01,
              "help": "Max % of bankroll deployed per cycle (lottery sizing). Applies to each profile."},
+            {"key": "spike_total_commitment_usd", "label": "Total $ per auction (5-tier ladder)", "type": "number",
+             "section": "buy", "min": 5, "max": 35, "step": 5,
+             "help": "Total USD across all 5 buy tiers per auction. Default $25. Tier sizes "
+                     "scale proportionally. Capped at $35 until the kelly_pct→notional refactor "
+                     "lands — above $35 the cheapest tier trips the per-trade exposure cap."},
             {"key": "max_open_positions", "label": "Max Open Positions", "type": "number", "section": "risk",
              "min": 1, "max": 20, "step": 1,
              "help": "Cap concurrent open positions across ALL enabled profiles."},
@@ -469,43 +474,111 @@ class SpikeTradingModule(BaseModule):
         strategy, state, cfg: dict,
     ) -> list[Signal]:
         """Emit buy Signals using the strategy-supplied tier ladder.
-        Strategy returns abstract tier dicts; this wraps them into Signals
-        with adaptive_buy_price + module-wide bracket cap applied."""
+
+        2026-05-14 rewrite: tiers now carry `notional_usd` (dollar amount
+        per tier) instead of `pct`-of-bankroll. Size = notional_usd / price,
+        validated against the three Polymarket CLOB minimums before the
+        signal is emitted:
+          - price >= min_tick (e.g. 0.01); below-tick prices snap UP, but
+            we never silently snap by >50% — those tiers are dropped.
+          - notional_usd >= $1 (CLOB minimum notional)
+          - size >= 5 shares (orderMinSize on most markets, with a small
+            cushion for the live-fill-price difference)
+        Tiers that fail any check are dropped with a warning instead of
+        being sent to the executor for rejection.
+        """
         signals: list[Signal] = []
         bid = float(market.get("best_bid") or 0.0)
         ask = float(market.get("best_ask") or 1.0)
-        bracket_cap = float(cfg.get("bracket_cap_pct_of_bankroll", 0.05))
         bracket = profile.get("bracket")
-        # Tick + size constraints from Polymarket CLOB. Limit prices below
-        # min_tick get snapped UP to the nearest valid tick so live mode
-        # accepts the order (paper now mirrors the same rejection rule).
         min_tick = float(market.get("min_tick_size") or 0.01)
+        clob_min_shares = float(market.get("min_order_size") or 5)
+        # Hard floor for CLOB notional (the API doesn't expose this; it's a
+        # platform-wide rule the user has confirmed).
+        clob_min_notional_usd = 1.0
 
-        for tier in strategy.build_buy_ladder(state, params):
+        # Determine if the prior 2-day auction settled outside <40 (i.e.
+        # >=40 won). Spike's strategy widens the top tier from 15¢ to 22¢
+        # in that regime. Cached in cfg for the duration of the auction;
+        # `_resolve_prior_above_bracket` queries auction_archive once.
+        params_with_context = dict(params or {})
+        try:
+            params_with_context["prior_above_bracket"] = self._resolve_prior_above_bracket(
+                module_id, cfg,
+            )
+        except Exception as exc:
+            log.warning(f"prior-above-bracket lookup failed: {exc}")
+            params_with_context["prior_above_bracket"] = False
+        # Total commitment override (default $25, user-editable from cfg).
+        # Hard-cap at $35 — above that the cheapest tier's share count makes
+        # `kelly_pct = size/1000` exceed the per-trade exposure cap (0.15)
+        # and the risk manager rejects every signal. Until the kelly→notional
+        # refactor lands, this ceiling keeps the ladder shippable.
+        total_commitment = cfg.get("spike_total_commitment_usd")
+        if total_commitment is not None:
+            tc = float(total_commitment)
+            if tc > 35.0:
+                log.warning(
+                    f"spike_total_commitment_usd={tc} > $35 cap; clamping. "
+                    f"Above $35 the cheapest tier trips the per-trade kelly cap."
+                )
+                tc = 35.0
+            params_with_context["spike_total_commitment_usd"] = tc
+
+        for tier in strategy.build_buy_ladder(state, params_with_context):
             target = float(tier.get("price", 0))
-            pct = float(tier.get("pct", 0))
-            if target <= 0 or pct <= 0:
+            notional_usd = float(tier.get("notional_usd", 0))
+            label = tier.get("label", "tier")
+            if target <= 0 or notional_usd <= 0:
                 continue
+
+            # 1) Resolve actual limit price using the adaptive_buy_price
+            #    helper (jumps the queue if the ask is already cheaper than
+            #    our target), then snap to the market's min_tick.
             limit_price = adaptive_buy_price(bid, ask, target)
-            # Snap to nearest tick. If the strategy wanted $0.003 on a
-            # min_tick=0.01 market, we round to $0.01 (cheapest valid tick).
+            pre_snap = limit_price
             if min_tick > 0:
-                pre_snap = limit_price
                 snapped = round(limit_price / min_tick) * min_tick
                 if snapped < min_tick:
-                    snapped = min_tick  # never go below 1 tick
+                    snapped = min_tick
                 limit_price = round(snapped, 4)
-                # Loud warning when the snap moved the price by more than 50%
-                # of what the strategy intended. The classic case: 0.3¢ tier
-                # silently becoming 1¢ on a standard min_tick=0.01 market.
-                # Strategy intent diverges from execution; user should know.
-                if pre_snap > 0 and abs(limit_price - pre_snap) / pre_snap > 0.5:
-                    log.warning(
-                        f"Spike tier price snap: tier={tier.get('label')} "
-                        f"intended={pre_snap:.4f} actual={limit_price:.4f} "
-                        f"min_tick={min_tick} bracket={bracket} market={market.get('market_id')}. "
-                        f"Strategy is paying {limit_price / pre_snap:.1f}x intended price."
-                    )
+
+            # 2) If the tick-snap moved price by >50% of the strategy's
+            #    intent, the tier is no longer the strategy the user picked.
+            #    Drop it rather than overpaying silently.
+            if pre_snap > 0 and abs(limit_price - pre_snap) / pre_snap > 0.5:
+                log.warning(
+                    f"Spike tier price snapped >50%: label={label} "
+                    f"intended={pre_snap:.4f} snapped={limit_price:.4f} "
+                    f"min_tick={min_tick} — dropping tier."
+                )
+                continue
+
+            # 3) Compute shares from notional. The CLOB enforces 5-share
+            #    AND $1-notional minimums; both must pass.
+            size = round(notional_usd / limit_price)
+            if size < clob_min_shares:
+                log.warning(
+                    f"Spike tier below min shares: label={label} "
+                    f"notional=${notional_usd:.2f} price={limit_price:.4f} "
+                    f"size={size} < min_order_size={clob_min_shares} — dropping tier."
+                )
+                continue
+            actual_notional = size * limit_price
+            if actual_notional < clob_min_notional_usd:
+                log.warning(
+                    f"Spike tier below CLOB min notional: label={label} "
+                    f"notional=${actual_notional:.2f} < ${clob_min_notional_usd:.2f} "
+                    f"— dropping tier."
+                )
+                continue
+
+            # kelly_pct kept for backward-compat with the executor's sizing
+            # API and downstream reporting. The executor's `size = 1000 *
+            # kelly_pct` math gives us the right share count when we set
+            # kelly_pct = size / 1000.
+            kelly_pct = size / 1000.0
+
             signals.append(Signal(
                 module_id=module_id,
                 market_id=market["market_id"],
@@ -514,7 +587,7 @@ class SpikeTradingModule(BaseModule):
                 edge=0.0,
                 model_prob=0.0,
                 market_price=limit_price,
-                kelly_pct=pct * bracket_cap,
+                kelly_pct=kelly_pct,
                 confidence=0.5,
                 best_bid=bid,
                 best_ask=ask,
@@ -524,15 +597,80 @@ class SpikeTradingModule(BaseModule):
                     "strategy_name": strategy.name,
                     "profile_label": profile.get("label"),
                     "tier": tier.get("tier"),
-                    "tier_label": tier.get("label"),
+                    "tier_label": label,
                     "tier_type": "buy",
+                    "tier_notional_usd": round(notional_usd, 2),
+                    "tier_shares": int(size),
                     "skip_edge_check": True,
                     "target_price": target,
                     "adaptive_price": limit_price,
+                    "prior_above_bracket": bool(params_with_context.get("prior_above_bracket")),
                     "event_slug": market.get("slug"),
                 },
             ))
         return signals
+
+    def _resolve_prior_above_bracket(self, module_id: str, cfg: dict) -> bool:
+        """Did the most recent resolved 2-day auction settle OUTSIDE <40?
+
+        Used to widen the top tier (15¢ → 22¢). Queries auction_archive
+        for the last `(handle, window_days~2)` resolved row. Returns True
+        when `winning_bracket` is set and is NOT '<40' AND parses to >=40.
+        """
+        try:
+            handle = self.get_handle()
+        except Exception:
+            handle = None
+        if not handle:
+            return False
+        try:
+            sb = get_supabase()
+            res = (
+                sb.table("auction_archive")
+                .select("winning_bracket")
+                .eq("handle", handle)
+                .gte("window_days", 1.5)
+                .lte("window_days", 2.5)
+                .lt("end_date", datetime.now(timezone.utc).isoformat())
+                .order("end_date", desc=True)
+                .limit(1)
+                .execute()
+            )
+            row = (res.data or [None])[0]
+            if not row:
+                return False
+            wb = (row.get("winning_bracket") or "").strip()
+            if not wb or wb == "<40":
+                return False
+            # Parse numeric lower edge of the winning bracket; '>=40' wins
+            # the widening regime. '40-49', '50-59', ..., '240+' all qualify.
+            lo = self._bracket_lower_edge(wb)
+            return lo >= 40
+        except Exception:
+            return False
+
+    @staticmethod
+    def _bracket_lower_edge(label: str) -> int:
+        """Numeric lower edge for a bracket label. '<40'→0, '40-49'→40,
+        '240+'→240. Returns 0 on parse failure (safe default — won't
+        trip the widening regime)."""
+        label = (label or "").strip()
+        if not label or label.startswith("<"):
+            return 0
+        if label.endswith("+"):
+            try:
+                return int(label[:-1])
+            except ValueError:
+                return 0
+        if "-" in label:
+            try:
+                return int(label.split("-", 1)[0])
+            except ValueError:
+                return 0
+        try:
+            return int(label)
+        except ValueError:
+            return 0
 
     # Legacy single-bracket builder kept for backwards-compat with any code
     # that may still call it. New callers should use _build_buy_ladder_for_profile.
