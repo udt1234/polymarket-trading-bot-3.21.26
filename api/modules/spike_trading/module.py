@@ -524,6 +524,21 @@ class SpikeTradingModule(BaseModule):
         # platform-wide rule the user has confirmed).
         clob_min_notional_usd = 1.0
 
+        # Skip-dying-market guard: if best_ask has already collapsed to the
+        # market's tick floor, the auction is essentially resolved against
+        # this bracket — buying any quantity is throwing money away because
+        # the bracket cannot recover above 1¢ before settlement. Drop the
+        # whole ladder here instead of emitting tiers that the risk manager
+        # will reject anyway (and that previously produced kelly_pct=3.0/5.0
+        # nonsense on neg_risk markets where min_tick=0.001).
+        if ask > 0 and ask <= min_tick * 1.5:
+            log.info(
+                f"Spike skipping market {market.get('market_id')} bracket={bracket}: "
+                f"best_ask={ask} at/below tick floor (min_tick={min_tick}). "
+                f"Auction is resolving against us; no buy ladder emitted."
+            )
+            return signals
+
         # Determine if the prior 2-day auction settled outside <40 (i.e.
         # >=40 won). Spike's strategy widens the top tier from 15¢ to 22¢
         # in that regime. Cached in cfg for the duration of the auction;
@@ -600,11 +615,15 @@ class SpikeTradingModule(BaseModule):
                 )
                 continue
 
-            # kelly_pct kept for backward-compat with the executor's sizing
-            # API and downstream reporting. The executor's `size = 1000 *
-            # kelly_pct` math gives us the right share count when we set
-            # kelly_pct = size / 1000.
-            kelly_pct = size / 1000.0
+            # kelly_pct = real dollar notional / bankroll. The risk manager
+            # uses kelly_pct as "fraction of bankroll deployed" — at 1¢ tick
+            # that math worked, but at 0.001 (neg_risk) tick, size/1000 was
+            # bogus: $3 notional at 0.001 price = 3000 shares, kelly_pct =
+            # 3.0 (300% of bankroll!) which the risk manager correctly
+            # rejected. Compute kelly_pct from the real notional instead.
+            from api.config import get_settings as _gs
+            _bankroll = float(getattr(_gs(), "bankroll", 1000.0) or 1000.0)
+            kelly_pct = actual_notional / _bankroll if _bankroll > 0 else 0.0
 
             signals.append(Signal(
                 module_id=module_id,

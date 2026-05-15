@@ -77,7 +77,19 @@ class PaperExecutor:
             raw_size = float(existing.get("size") or 0)
             size = min(raw_size, max_depth) if max_depth > 0 else raw_size
         else:
-            raw_size = self.balance * signal.kelly_pct
+            # Emitters that compute size explicitly stash it in
+            # metadata.tier_shares. Trust that over the legacy
+            # balance*kelly_pct formula (which assumes self.balance is the
+            # real bankroll — not true for the new notional-based ladders).
+            md = signal.metadata or {}
+            explicit_size = md.get("tier_shares")
+            if explicit_size is not None:
+                try:
+                    raw_size = float(explicit_size)
+                except (TypeError, ValueError):
+                    raw_size = self.balance * signal.kelly_pct
+            else:
+                raw_size = self.balance * signal.kelly_pct
             size = min(raw_size, max_depth) if max_depth > 0 else raw_size
 
         if size <= 0:
@@ -302,7 +314,22 @@ class LiveExecutor:
                 raise ValueError(f"Lost race to concurrent exit on {signal.bracket}")
             size = float(existing_position.get("size") or 0)
         else:
-            size = 1000.0 * signal.kelly_pct
+            # Emitters that compute size explicitly (e.g. spike_trading's
+            # notional-based ladder) can stash it in metadata.tier_shares
+            # to bypass the legacy `1000 * kelly_pct` formula. The legacy
+            # formula assumes a $1000 bankroll and breaks on neg_risk
+            # markets (min_tick=0.001) where kelly_pct = notional/bankroll
+            # produces tiny share counts. Trust the emitter when it
+            # specifies size explicitly.
+            md = signal.metadata or {}
+            explicit_size = md.get("tier_shares")
+            if explicit_size is not None:
+                try:
+                    size = float(explicit_size)
+                except (TypeError, ValueError):
+                    size = 1000.0 * signal.kelly_pct
+            else:
+                size = 1000.0 * signal.kelly_pct
         if size <= 0:
             raise ValueError(f"Invalid order size: {size}")
         now = datetime.now(timezone.utc).isoformat()
