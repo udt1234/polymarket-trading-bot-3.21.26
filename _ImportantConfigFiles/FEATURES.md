@@ -114,16 +114,21 @@ correlated (30%), duplicate, cross-module, settlement decay, spread, liquidity
 - ENV guard required for live execution (PAPER_MODE check)
 
 ## Claude Code Tooling (.claude/)
-### Agents (7)
+### Agents (9)
 | Agent | Purpose | When to Use |
 |-------|---------|-------------|
-| `@qa-reviewer` | Bugs, edge cases, security | After code changes, before commit |
+| `@qa-code-bug-hunter` | Runtime bugs, edge cases, security, performance, trading-specific risks | After code changes, before commit (chained in /pre-commit) |
+| `@qa-code-quality` | Orphan code, dupes, hotfix layering, bloat, bad abstractions | Weekly or before major refactors — NOT per-PR |
+| `@qa-architecture-quality` | Module boundaries, abstraction leaks, dependency direction, convention compliance | Monthly or before adding new module — NOT per-PR |
 | `@verify-bot` | End-to-end paper mode verification | Before PRs on trading code |
 | `@strategy-reviewer` | Validate against strategy rules | Before committing signal/pacing changes |
 | `@api-integrator` | API endpoint integration | Adding new data sources or endpoints |
 | `@doc-updater` | Auto-update docs from git diff | After feature completion or session end |
 | `@module-scaffolder` | New module package creation | When adding new trading modules |
 | `@risk-auditor` | Audit all money-touching code | Before going live |
+
+### External code-quality tooling
+- **SonarCloud** — runs on every PR via GitHub Action. Free for public repos. Catches cyclomatic complexity, real bugs, dead code, security smells. Findings appear as PR comments.
 
 ### Skills (2)
 - `polymarket-api` — API rules, rate limits, endpoint reference

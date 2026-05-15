@@ -115,7 +115,7 @@ For Spike Rider, pick the tracking with the **largest `endDate - now`** (most ti
 1. Apply migration with just `position_exit_state` table
 2. Insert "Spike Rider — Elon" module row in `paper` status
 3. `python -c "from api.modules.spike_rider_elon import Module; print(Module().evaluate())"` — should return BUY signals when an active auction exists with brackets in band
-4. Run @qa-reviewer on the diff
+4. Run @qa-code-bug-hunter on the diff
 5. Run @verify-bot end-to-end (paper trades land in `positions` table)
 6. Watch first multi-stage tranche fire when a bracket hits 2x entry — confirm `position_exit_state.stage_1_done = true` and `positions.size` halved/thirded
 7. Flip `paper → active` only after seeing at least one full entry → tranche → final exit cycle
