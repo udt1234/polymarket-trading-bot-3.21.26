@@ -111,13 +111,24 @@ See `_ImportantConfigFiles/MODULE_ARCHITECTURE.md` for the full guide. Quick rul
 8. **When refactoring:** if you touch shared code, run the test suite for ALL modules. If you touch one module's code, you should NOT need to touch any other module's files — if you do, the abstraction is wrong.
 
 ## Available Agents
-- `@qa-reviewer` — after implementation, before PR
-- `@verify-bot` — end-to-end paper trading verification (NOT a backtester)
+
+**Per-PR (runs in /pre-commit chain):**
+- `@qa-code-bug-hunter` — bugs, edge cases, security, performance, trading-specific risks. After implementation, before PR.
 - `@strategy-reviewer` — before committing signal/pacing/projection changes
+- `@risk-auditor` — before going live, audit all money-touching code
+- `@verify-bot` — end-to-end paper trading verification (NOT a backtester)
+
+**Periodic deep sweeps (NOT per-PR — invoke on demand):**
+- `@qa-code-quality` — orphan code, duplicates, hotfix layering, bloat, bad abstractions. Run weekly or before major refactors.
+- `@qa-architecture-quality` — module boundaries, abstraction leaks, dependency direction, convention compliance vs CLAUDE.md. Run monthly or before adding a new module.
+
+**On-demand utilities:**
 - `@api-integrator` — adding new Polymarket or data source endpoints
 - `@doc-updater` — after any feature merge or at end of session
 - `@module-scaffolder` — creating new trading modules
-- `@risk-auditor` — before going live, audit all money-touching code
+
+**External non-AI tooling**:
+- **SonarCloud** runs on every PR via GitHub Action. Catches cyclomatic complexity, real bugs, dead code, security smells. Free (public repo). Findings show up as PR comments — review them alongside the agent reports.
 
 ## Available Commands
 - `/pre-commit` — chain QA + strategy + risk + verify before commit
@@ -130,7 +141,7 @@ See `_ImportantConfigFiles/MODULE_ARCHITECTURE.md` for the full guide. Quick rul
 
 ## Conventions
 - Feature branches for strategy changes; /feature-dev for 3+ file changes
-- Test with docker-compose before deploy; subagents for research; @qa-reviewer for code review
+- Test with docker-compose before deploy; subagents for research; @qa-code-bug-hunter for code review
 
 ## Autonomy
 - **Use Claude in Chrome and Claude Preview MCP tools proactively whenever the task is browser-actionable.** This includes Railway deploys, redeploys, dashboard checks, deploy log inspection, and any other web-based action that would otherwise require user clicks. Do not ask the user to "open the dashboard" or "click redeploy" — drive the browser via MCP and report results.

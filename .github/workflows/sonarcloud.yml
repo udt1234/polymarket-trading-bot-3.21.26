@@ -1,0 +1,47 @@
+name: SonarCloud Code Quality
+
+# Runs on every push to master + every PR. Findings show up as PR
+# comments and in the SonarCloud dashboard at:
+# https://sonarcloud.io/project/overview?id=udt1234_polymarket-trading-bot-3.21.26
+#
+# Required secret (set once via `gh secret set SONAR_TOKEN ...`):
+#   SONAR_TOKEN — issued by SonarCloud after the project is connected.
+#
+# If SONAR_TOKEN is missing, the job exits early with a clear message
+# instead of failing the build, so the rest of CI is unaffected.
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  sonarcloud:
+    name: SonarCloud Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full git history so SonarCloud can compute blame attribution
+          # for new-vs-existing code.
+          fetch-depth: 0
+
+      - name: Check SONAR_TOKEN configured
+        id: token_check
+        run: |
+          if [ -z "${{ secrets.SONAR_TOKEN }}" ]; then
+            echo "SONAR_TOKEN secret is not set. Skipping SonarCloud scan."
+            echo "To enable, follow the setup instructions in sonar-project.properties."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: SonarCloud Scan
+        if: steps.token_check.outputs.skip == 'false'
+        uses: SonarSource/sonarcloud-github-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
