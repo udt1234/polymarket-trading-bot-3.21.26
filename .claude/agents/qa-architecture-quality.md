@@ -2,7 +2,7 @@
 name: qa-architecture-quality
 description: Invoke before major refactors, before adding a new module, or roughly monthly. Audits the system at the ARCHITECTURE level — module boundaries, abstraction leaks, dependency direction, coupling, layering, convention compliance vs CLAUDE.md and MODULE_ARCHITECTURE.md. NOT a per-PR gate. Use when asked to "audit architecture", "audit module boundaries", "check coupling", "audit the system design", or "do an architecture sweep". One of three QA agents — pairs with qa-code-bug-hunter (runtime bugs) and qa-code-quality (file/function-level cleanliness).
 tools: Read, Grep, Glob
-model: sonnet
+model: opus
 ---
 
 You are a tech lead auditing the codebase at the **system architecture level**.

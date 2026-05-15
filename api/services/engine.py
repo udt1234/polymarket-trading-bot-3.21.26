@@ -1160,7 +1160,7 @@ class TradingEngine:
             # List which modules are affected so the operator can scope quickly.
             affected = sorted({(e[1] or "unknown") for e in recent_errors})
             return {
-                "state": "paused",
+                "state": "degraded",
                 "reason": f"Degraded — {err_count} recent errors from module evaluation",
                 "plain_english": (
                     "Bot is still running and existing positions still exit normally, "
@@ -1270,7 +1270,7 @@ class TradingEngine:
             err_count = len(my_errors)
             latest_sig = my_errors[-1][2]
             return {
-                "state": "paused",
+                "state": "degraded",
                 "reason": f"Degraded — {err_count} recent errors from this module",
                 "plain_english": (
                     "Bot is still running and existing positions still exit normally, "
