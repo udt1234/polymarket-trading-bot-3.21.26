@@ -92,7 +92,11 @@ async def notify_bot_paused(reason: str, scope: str = "engine", details: dict | 
         f"*Reason:* {reason}{detail_str}\n"
         f"_Bot will not place new trades until resumed. Exits still fire._"
     )
-    await send_slack(msg)
+    # `scope` is an internal dedupe discriminator ("engine", "circuit_breaker",
+    # "deploy", etc) — not a human-readable display name. Always tag the
+    # Slack prefix with `engine` so the operator sees `[engine] Bot Paused —
+    # circuit_breaker` rather than the awkward `[circuit_breaker] Bot Paused — circuit_breaker`.
+    await send_slack(msg, module="engine")
 
 
 async def notify_module_status_change(
@@ -113,13 +117,18 @@ async def notify_module_status_change(
     msg = f"{emoji} *Module status: {name}*\n*{old_status}* -> *{new_status}*"
     if reason:
         msg += f"\n_Reason: {reason}_"
-    await send_slack(msg)
+    await send_slack(msg, module=name or "engine")
 
 
 async def notify_repeated_errors(
     error_signature: str, count: int, time_window_minutes: float, sample: str = "",
+    module_name: str | None = None,
 ):
-    """Same error signature has fired N+ times in a window."""
+    """Same error signature has fired N+ times in a window.
+
+    `module_name`: optional Slack-prefix scope. Used to tag the message so
+    the operator can immediately see which module is throwing. Falls back
+    to "engine" when None (cross-module signature)."""
     if not _is_alert_enabled("repeated_errors"):
         return
     key = f"alert_repeated_errors:{error_signature[:80]}"
@@ -132,11 +141,19 @@ async def notify_repeated_errors(
     )
     if sample:
         msg += f"\n_Latest: {sample[:200]}_"
-    await send_slack(msg)
+    await send_slack(msg, module=module_name or "engine")
 
 
-async def notify_stale_data(handle: str, hours: float, source: str = "xTracker"):
-    """Data source hasn't updated in too long."""
+async def notify_stale_data(
+    handle: str, hours: float, source: str = "xTracker",
+    affected_handles: list[str] | None = None,
+):
+    """Data source hasn't updated in too long.
+
+    `affected_handles`: when handle='all' (engine-wide stall sentinel),
+    pass a list of currently-active module handles so the alert body lists
+    which feeds the operator should check. Optional; omitted when caller
+    doesn't have a handy module-handle inventory."""
     if not _is_alert_enabled("stale_data"):
         return
     key = f"alert_stale_data:{handle}:{source}"
@@ -146,10 +163,14 @@ async def notify_stale_data(handle: str, hours: float, source: str = "xTracker")
     # "handle='all'" is the sentinel meaning "engine cycle is stalled" (the
     # decision-log freshness probe). Make the message readable in both cases.
     if handle == "all":
+        affected_line = ""
+        if affected_handles:
+            affected_line = f"\n*Affected modules:* {', '.join(sorted(set(affected_handles)))}"
         msg = (
             f":warning: *Engine cycle stalled — no {source} updates in {hours:.1f}h*\n"
             f"Bot will skip new entries until the next successful cycle. "
             f"Check Railway deploy logs for module evaluation errors."
+            f"{affected_line}"
         )
     else:
         msg = (
@@ -157,7 +178,9 @@ async def notify_stale_data(handle: str, hours: float, source: str = "xTracker")
             f"Handle *{handle}* has not updated in *{hours:.1f}h*. "
             f"Bot will skip new entries until data refreshes."
         )
-    await send_slack(msg)
+    # 'all' is the engine-wide cycle-stall sentinel; otherwise scope to the
+    # affected handle so the operator sees which feed went stale.
+    await send_slack(msg, module="engine" if handle == "all" else handle)
 
 
 async def notify_daily_module_status_digest():
@@ -202,7 +225,7 @@ async def notify_daily_module_status_digest():
         sb = get_supabase()
         mods = sb.table("modules").select("id,name,status,inactive_reason,inactive_detail").execute().data or []
         if not mods:
-            await send_slack(":bell: *Daily Bot Heartbeat* — no modules configured.")
+            await send_slack(":bell: *Daily Bot Heartbeat* — no modules configured.", module="engine")
             return
 
         lines = []
@@ -238,7 +261,7 @@ async def notify_daily_module_status_digest():
         else:
             header = f":bell: *Daily Bot Heartbeat — {n_down}/{len(mods)} not active*"
 
-        await send_slack(header + "\n\n" + "\n\n".join(lines))
+        await send_slack(header + "\n\n" + "\n\n".join(lines), module="engine")
     except Exception as e:
         log.warning(f"daily module digest failed: {e}")
 
@@ -286,4 +309,4 @@ async def notify_rejection_spike(
     if auction_lines:
         msg += "\n*Auctions blocked:*\n" + "\n".join(auction_lines)
     msg += "\n_Often means a config knob (edge threshold, exposure cap) is misaligned._"
-    await send_slack(msg)
+    await send_slack(msg, module=module_name or "engine")

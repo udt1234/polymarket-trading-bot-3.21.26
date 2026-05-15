@@ -16,6 +16,12 @@ log = logging.getLogger(__name__)
 
 STALE_DATA_THRESHOLD_HOURS = 2
 
+# Minimum errors in the 15-min window before the dashboard banner flips to
+# "Degraded". A single transient httpx "Server disconnected" or 5xx blip is
+# noise — the engine retries on the next 5-min cycle. Two+ errors in 15 min
+# is a real persistent problem worth flagging.
+DEGRADED_BANNER_MIN_ERRORS = 2
+
 
 def _run_async(coro):
     """Run an async coroutine from a sync context (e.g. APScheduler thread).
@@ -263,10 +269,22 @@ class TradingEngine:
         if not self._check_data_freshness():
             log.warning(f"Stale data detected (>{STALE_DATA_THRESHOLD_HOURS}h) — exits ran, skipping new entries this cycle")
             # Fire stale-data alert. Cooldown inside notify_stale_data prevents
-            # spam if it stays stale for hours.
+            # spam if it stays stale for hours. Include the active-module
+            # handles so the alert tells the operator which feeds to check.
             try:
                 from api.services.alerts import notify_stale_data
-                _fire_and_forget_async(notify_stale_data(handle="all", hours=STALE_DATA_THRESHOLD_HOURS, source="signals"))
+                affected = []
+                for m in self.registry.active_modules():
+                    try:
+                        h = m.get_handle()
+                        if h:
+                            affected.append(h)
+                    except Exception:
+                        pass
+                _fire_and_forget_async(notify_stale_data(
+                    handle="all", hours=STALE_DATA_THRESHOLD_HOURS, source="signals",
+                    affected_handles=affected,
+                ))
             except Exception:
                 pass
             return
@@ -798,7 +816,10 @@ class TradingEngine:
                     gap_hours = (now - most_recent_end).total_seconds() / 3600
                     if gap_hours > 2:
                         _fire_and_forget_async(
-                            notify_auction_gap(handle, most_recent_end.strftime("%Y-%m-%d %H:%M"), gap_hours)
+                            notify_auction_gap(
+                                handle, most_recent_end.strftime("%Y-%m-%d %H:%M"), gap_hours,
+                                module_name=mod.get("name"),
+                            )
                         )
                         log.warning(f"Auction gap for {handle}: {gap_hours:.0f}h since last auction ended")
 
@@ -816,7 +837,11 @@ class TradingEngine:
                     tid = str(t.get("id") or t.get("trackingId") or "")
                     if tid and tid not in known_ids:
                         _fire_and_forget_async(
-                            notify_new_auction(handle, t.get("title", ""), t.get("startDate", "")[:10], t.get("endDate", "")[:10])
+                            notify_new_auction(
+                                handle, t.get("title", ""),
+                                t.get("startDate", "")[:10], t.get("endDate", "")[:10],
+                                module_name=mod.get("name"),
+                            )
                         )
                         sb.table("logs").insert({
                             "log_type": "system", "severity": "info", "module_id": mod["id"],
@@ -1039,6 +1064,7 @@ class TradingEngine:
                     count=same_count,
                     time_window_minutes=15.0,
                     sample=error_msg,
+                    module_name=module_name,
                 ))
             except Exception:
                 pass
@@ -1098,20 +1124,22 @@ class TradingEngine:
                 "details": {"action": "Resume modules from the dashboard",
                             "circuit_breaker": cb},
             }
-        # Degraded state: if module evaluation has been throwing errors in the
-        # last 15 min, the bot isn't actually trading even though the engine
-        # is "running". Surface that explicitly so the operator can investigate
-        # rather than the badge silently saying "trading".
+        # Degraded state: 2+ errors in last 15 min means we have a persistent
+        # problem (one transient httpx blip is noise). The engine retries on
+        # the next 5-min cycle, so single errors self-heal silently.
         recent_errors = self._recent_errors
-        if recent_errors:
+        if len(recent_errors) >= DEGRADED_BANNER_MIN_ERRORS:
             err_count = len(recent_errors)
             # _recent_errors is (ts, module_name, signature, sample). Show the most-recent signature.
-            latest_sig = recent_errors[-1][2] if recent_errors else "unknown"
+            latest_sig = recent_errors[-1][2]
+            # List which modules are affected so the operator can scope quickly.
+            affected = sorted({(e[1] or "unknown") for e in recent_errors})
             return {
                 "state": "paused",
-                "reason": f"Degraded — {err_count} recent error{'s' if err_count != 1 else ''} from module evaluation",
+                "reason": f"Degraded — {err_count} recent errors from module evaluation",
                 "details": {
                     "latest_error": latest_sig[:100],
+                    "affected_modules": affected,
                     "window_minutes": 15,
                     "active_modules": len(active),
                     "circuit_breaker": cb,
@@ -1189,12 +1217,12 @@ class TradingEngine:
         if resolved is not None:
             canonical = resolved.name
         my_errors = [e for e in self._recent_errors if (e[1] or "").lower() == canonical]
-        if my_errors:
+        if len(my_errors) >= DEGRADED_BANNER_MIN_ERRORS:
             err_count = len(my_errors)
             latest_sig = my_errors[-1][2]
             return {
                 "state": "paused",
-                "reason": f"Degraded — {err_count} recent error{'s' if err_count != 1 else ''} from this module",
+                "reason": f"Degraded — {err_count} recent errors from this module",
                 "details": {"latest_error": latest_sig[:100], "window_minutes": 15, "module": module_name,
                             "circuit_breaker": cb},
             }
