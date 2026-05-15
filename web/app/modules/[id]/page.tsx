@@ -12,6 +12,7 @@ import {
 import { DailyPacingTable } from "./components/daily-pacing-table"
 import { ConfidenceBands, EnsembleBreakdown } from "./components/pacing-analysis"
 import { BracketAnalysisCard } from "./components/bracket-analysis-card"
+import { WhaleWatchingCard } from "./components/whale-watching-card"
 import { PostingPatternsCard } from "./components/posting-patterns-card"
 import { PriceByDowHourHeatmap, PriceByElapsedDayHeatmap } from "./components/price-heatmaps"
 import { PositionsTable } from "./components/positions-table"
@@ -1539,6 +1540,14 @@ export default function ModuleDetailPage() {
           />
         </CollapsibleCard>
       </div>
+
+      {/* Whale Watching (per spec WHALE_BRACKET_CARDS_SPEC.md Phase 2) — full
+          width, generic across all modules. Headline above the card box.
+          Renders ABOVE the bracket card so the "who is in this market" context
+          frames the bracket-level performance numbers below. */}
+      <CollapsibleCard id="whale-watching" title="Whale Watching">
+        <WhaleWatchingCard moduleId={module.id} />
+      </CollapsibleCard>
 
       {/* Bracket Analysis (per spec WHALE_BRACKET_CARDS_SPEC.md) — full width,
           generic across all modules. Headline above the card box. */}
