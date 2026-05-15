@@ -13,6 +13,7 @@ interface CircuitBreaker {
 interface Health {
   state: "trading" | "watching" | "paused" | "killed"
   reason: string
+  plain_english?: string  // Optional layman-terms explanation rendered under the technical reason.
   details?: Record<string, any>
 }
 
@@ -84,6 +85,11 @@ export function BotHealthBanner({ moduleId }: { moduleId?: string } = {}) {
           <span className="text-foreground">{health.reason}</span>
           {cb && <CircuitBreakerPill cb={cb} />}
         </div>
+        {health.plain_english && (
+          <div className="text-xs text-foreground/80 mt-1">
+            {health.plain_english}
+          </div>
+        )}
         {detailsLine && (
           <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
             {detailsLine}

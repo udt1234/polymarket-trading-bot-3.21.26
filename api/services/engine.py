@@ -340,8 +340,15 @@ class TradingEngine:
                         self._log_rejection(signal, reason)
                         self._track_rejection(module.name, signal, reason)
             except Exception as e:
-                log.error(f"Module {module.name} error: {e}")
-                self._log_error(module.name, str(e))
+                # Capture the full traceback. `str(e)` alone gives the message
+                # but not the line. With the bot running on Railway behind
+                # auth, the Supabase log is the only reliable place to read
+                # back a Python stack trace. Without this, we waste cycles
+                # grep'ing static code for needles.
+                import traceback as _tb
+                tb_str = _tb.format_exc()
+                log.error(f"Module {module.name} error: {e}\n{tb_str}")
+                self._log_error(module.name, str(e), traceback=tb_str)
                 # Repeated-error alert: track unique error signatures.
                 self._track_error(module.name, str(e))
 
@@ -997,14 +1004,20 @@ class TradingEngine:
         except Exception:
             pass
 
-    def _log_error(self, module_name, error_msg):
+    def _log_error(self, module_name, error_msg, traceback: str | None = None):
         try:
             sb = get_supabase()
-            sb.table("logs").insert({
+            row = {
                 "log_type": "system",
                 "severity": "error",
                 "message": f"Module {module_name} error: {error_msg}",
-            }).execute()
+            }
+            if traceback:
+                # Cap traceback at 4000 chars to keep the logs row under
+                # Supabase's JSONB practical limit. The exception line is
+                # always in the FIRST few frames, so head-truncating is fine.
+                row["metadata"] = {"traceback": traceback[:4000]}
+            sb.table("logs").insert(row).execute()
         except Exception:
             pass
 
@@ -1095,6 +1108,7 @@ class TradingEngine:
             return {
                 "state": "paused",
                 "reason": "Engine stopped",
+                "plain_english": "Bot is fully stopped. No trading, no monitoring. Manually resume to bring it back online.",
                 "details": {"action": "Use /api/engine/start to resume",
                             "circuit_breaker": cb},
             }
@@ -1103,6 +1117,11 @@ class TradingEngine:
             return {
                 "state": "paused",
                 "reason": "Circuit breaker tripped",
+                "plain_english": (
+                    f"Bot hit the consecutive-loss safety limit and is in a "
+                    f"{round(cooldown_remaining_s / 60, 0):.0f}-minute cooldown. "
+                    "Existing positions can still exit, but no new trades."
+                ),
                 "details": {
                     "cooldown_remaining_min": round(cooldown_remaining_s / 60, 1),
                     "circuit_breaker": cb,
@@ -1112,6 +1131,11 @@ class TradingEngine:
             return {
                 "state": "paused",
                 "reason": f"Engine cycle stalled — no decision logs in over {STALE_DATA_THRESHOLD_HOURS}h",
+                "plain_english": (
+                    "The bot's main cycle hasn't run in over 2 hours. Likely "
+                    "a deployment issue or Supabase/API outage. No new trades "
+                    "until the next successful cycle."
+                ),
                 "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS,
                             "action": "Check Railway deploy logs for module evaluation errors",
                             "circuit_breaker": cb},
@@ -1121,6 +1145,7 @@ class TradingEngine:
             return {
                 "state": "paused",
                 "reason": "No active modules",
+                "plain_english": "All trading modules are paused. Resume at least one from the dashboard.",
                 "details": {"action": "Resume modules from the dashboard",
                             "circuit_breaker": cb},
             }
@@ -1137,6 +1162,13 @@ class TradingEngine:
             return {
                 "state": "paused",
                 "reason": f"Degraded — {err_count} recent errors from module evaluation",
+                "plain_english": (
+                    "Bot is still running and existing positions still exit normally, "
+                    "but one or more modules are throwing errors during their evaluation "
+                    "cycle — so they can't place new buy orders right now. "
+                    "The bot self-heals if errors stop for 15 minutes; if they persist, "
+                    "check the latest_error field for the Python exception."
+                ),
                 "details": {
                     "latest_error": latest_sig[:100],
                     "affected_modules": affected,
@@ -1158,6 +1190,11 @@ class TradingEngine:
                 return {
                     "state": "watching",
                     "reason": "Regime in transition — bot waiting for trend to clear",
+                    "plain_english": (
+                        "Bot is running but the market regime is unclear right now, "
+                        "so it's intentionally not opening new positions. It will "
+                        "resume trading when the regime stabilizes."
+                    ),
                     "details": {"active_modules": len(active),
                                 "circuit_breaker": cb},
                 }
@@ -1166,6 +1203,7 @@ class TradingEngine:
         return {
             "state": "trading",
             "reason": "Bot is actively scanning markets",
+            "plain_english": "Bot is healthy and looking for trade opportunities every 5 minutes.",
             "details": {"active_modules": len(active), "cycle_count": self._cycle_count,
                         "circuit_breaker": cb},
         }
@@ -1195,16 +1233,27 @@ class TradingEngine:
 
         if not self._running:
             return {"state": "paused", "reason": "Engine stopped",
+                    "plain_english": "Bot is fully stopped. No trading, no monitoring. Manually resume to bring it back online.",
                     "details": {"action": "Use /api/engine/start to resume",
                                 "circuit_breaker": cb}}
         if self.risk_manager.circuit_breaker_tripped:
             cooldown_remaining_s = max(0, int(self.risk_manager._cooldown_until - time.time()))
             return {"state": "paused", "reason": "Circuit breaker tripped",
+                    "plain_english": (
+                        f"Bot hit the consecutive-loss safety limit and is in a "
+                        f"{round(cooldown_remaining_s / 60, 0):.0f}-minute cooldown. "
+                        "Existing positions can still exit, but no new trades."
+                    ),
                     "details": {"cooldown_remaining_min": round(cooldown_remaining_s / 60, 1),
                                 "circuit_breaker": cb}}
         if self._stale_data:
             return {"state": "paused",
                     "reason": f"Engine cycle stalled — no decision logs in over {STALE_DATA_THRESHOLD_HOURS}h",
+                    "plain_english": (
+                        "The bot's main cycle hasn't run in over 2 hours. Likely a "
+                        "deployment issue or Supabase/API outage. No new trades until "
+                        "the next successful cycle."
+                    ),
                     "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS,
                                 "circuit_breaker": cb}}
 
@@ -1223,6 +1272,13 @@ class TradingEngine:
             return {
                 "state": "paused",
                 "reason": f"Degraded — {err_count} recent errors from this module",
+                "plain_english": (
+                    "Bot is still running and existing positions still exit normally, "
+                    "but this module is throwing errors during its evaluation cycle — "
+                    "so it can't place new buy orders right now. The bot self-heals if "
+                    "errors stop for 15 minutes; if they persist, check the latest_error "
+                    "field for the Python exception."
+                ),
                 "details": {"latest_error": latest_sig[:100], "window_minutes": 15, "module": module_name,
                             "circuit_breaker": cb},
             }
@@ -1230,6 +1286,7 @@ class TradingEngine:
         return {
             "state": "trading",
             "reason": "Module is actively evaluating",
+            "plain_english": "This module is healthy and looking for trades every 5 minutes.",
             "details": {"module": module_name, "cycle_count": self._cycle_count,
                         "circuit_breaker": cb},
         }
