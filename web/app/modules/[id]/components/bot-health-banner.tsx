@@ -11,7 +11,7 @@ interface CircuitBreaker {
 }
 
 interface Health {
-  state: "trading" | "watching" | "paused" | "killed"
+  state: "trading" | "watching" | "degraded" | "paused" | "killed"
   reason: string
   plain_english?: string  // Optional layman-terms explanation rendered under the technical reason.
   details?: Record<string, any>
@@ -20,6 +20,7 @@ interface Health {
 const STYLES: Record<Health["state"], { bg: string; border: string; text: string; iconClass: string; Icon: any; label: string }> = {
   trading:  { bg: "bg-success/10",      border: "border-success/40",      text: "text-success",       iconClass: "text-success",       Icon: CheckCircle2, label: "Trading actively" },
   watching: { bg: "bg-amber-500/10",    border: "border-amber-500/40",    text: "text-amber-500",     iconClass: "text-amber-500",     Icon: Eye,          label: "Watching" },
+  degraded: { bg: "bg-amber-500/10",    border: "border-amber-500/40",    text: "text-amber-500",     iconClass: "text-amber-500",     Icon: ShieldAlert,  label: "Degraded" },
   paused:   { bg: "bg-destructive/10",  border: "border-destructive/40",  text: "text-destructive",   iconClass: "text-destructive",   Icon: Pause,        label: "Paused" },
   killed:   { bg: "bg-muted",           border: "border-muted-foreground", text: "text-muted-foreground", iconClass: "text-muted-foreground", Icon: Skull,    label: "Killed" },
 }
