@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation"
 import { useState, useEffect, useCallback } from "react"
-import { useApi, useMutation } from "@/lib/hooks"
+import { useApi, useMutation, useDocumentTitle } from "@/lib/hooks"
 import { apiFetch } from "@/lib/api"
 import { formatCurrency, formatDate, formatDateShort, cn, fmtPrice } from "@/lib/utils"
 import {
@@ -145,6 +145,10 @@ export default function ModuleDetailPage() {
     (m) => m.id === moduleId || m.name.toLowerCase().replace(/\s+/g, "-") === moduleId
   )
   const id = module?.id
+
+  // Set browser tab title to the module name so multiple module tabs are
+  // distinguishable. Falls back to "PolyBot" when the module isn't loaded.
+  useDocumentTitle(module?.name)
 
   const { data: moduleSignals } = useApi<Signal[]>(
     id ? `/api/dashboard/recent-signals?limit=50&module_id=${id}` : null

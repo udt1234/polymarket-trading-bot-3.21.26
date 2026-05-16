@@ -1,6 +1,6 @@
 "use client"
 
-import { useApi } from "@/lib/hooks"
+import { useApi, useDocumentTitle } from "@/lib/hooks"
 import { formatCurrency, cn } from "@/lib/utils"
 import { Card } from "@/components/shared/card"
 import {
@@ -17,6 +17,7 @@ function Empty() {
 }
 
 export default function AnalyticsPage() {
+  useDocumentTitle("Analytics")
   const { data: summary } = useApi<any>("/api/analytics/summary")
   const { data: roi } = useApi<any>("/api/analytics/roi")
   const { data: drawdown } = useApi<any[]>("/api/analytics/drawdown")

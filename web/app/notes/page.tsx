@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { cn } from "@/lib/utils"
+import { useDocumentTitle } from "@/lib/hooks"
 import { Card } from "@/components/shared/card"
 
 const tabs = [
@@ -377,6 +378,7 @@ function ChangelogTab() {
 }
 
 export default function NotesPage() {
+  useDocumentTitle("Notes")
   const [activeTab, setActiveTab] = useState("setup")
 
   const tabContent: Record<string, JSX.Element> = {

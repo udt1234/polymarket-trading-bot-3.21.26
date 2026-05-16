@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { useApi, useMutation, useDebounce } from "@/lib/hooks"
+import { useApi, useMutation, useDebounce, useDocumentTitle } from "@/lib/hooks"
 import { apiFetch } from "@/lib/api"
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -112,6 +112,7 @@ function RiskField({ label, fieldKey, value, type, risk, onSave }: {
 }
 
 export default function SettingsPage() {
+  useDocumentTitle("Settings")
   const { data: risk, refetch: refetchRisk } = useApi<any>("/api/settings/risk")
   const { data: profileData, refetch: refetchProfiles } = useApi<any>("/api/settings/profiles")
   const { data: notifications, refetch: refetchNotifications } = useApi<any>("/api/settings/notifications")

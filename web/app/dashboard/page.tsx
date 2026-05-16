@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useApi } from "@/lib/hooks"
+import { useApi, useDocumentTitle } from "@/lib/hooks"
 import { MetricCard } from "@/components/dashboard/metric-card"
 import { PerformanceChart } from "@/components/dashboard/performance-chart"
 import { Activity, DollarSign, TrendingUp, BarChart3, Wallet, ChevronDown, ChevronRight } from "lucide-react"
@@ -140,6 +140,7 @@ function AuctionRow({ auction }: { auction: Auction }) {
 }
 
 export default function DashboardPage() {
+  useDocumentTitle("Dashboard")
   const { data: metrics } = useApi<Metrics>("/api/dashboard/metrics", [], 30000)
   const { data: engine } = useApi<EngineStatus>("/api/engine/status", [], 15000)
   const { data: auctions } = useApi<Auction[]>("/api/dashboard/auctions", [], 60000)
