@@ -59,18 +59,7 @@ class SpikeTradingModule(BaseModule):
     # BaseModule contract
     # ------------------------------------------------------------------
 
-    def evaluate(self) -> list[Signal]:
-        """Sync entry point used by the engine cycle. Wraps the async impl."""
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Engine cycle is async-unfriendly — run in a worker thread
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    return pool.submit(lambda: asyncio.run(self._evaluate_async())).result(timeout=60)
-            return loop.run_until_complete(self._evaluate_async())
-        except RuntimeError:
-            return asyncio.run(self._evaluate_async())
+    # evaluate() inherited from BaseModule — delegates to _evaluate_async().
 
     def get_status(self) -> dict:
         return {

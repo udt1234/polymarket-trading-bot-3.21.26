@@ -59,16 +59,7 @@ class ElonTweetsModule(BaseModule):
     def get_auction_title_filter(self) -> str:
         return "tweets"
 
-    def evaluate(self) -> list[Signal]:
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    return pool.submit(lambda: asyncio.run(self._evaluate_async())).result(timeout=60)
-            return loop.run_until_complete(self._evaluate_async())
-        except RuntimeError:
-            return asyncio.run(self._evaluate_async())
+    # evaluate() inherited from BaseModule — delegates to _evaluate_async().
 
     async def _evaluate_async(self) -> list[Signal]:
         sb = get_supabase()
