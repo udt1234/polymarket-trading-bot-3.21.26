@@ -72,6 +72,7 @@ class TradingEngine:
         self.registry = ModuleRegistry()
         self._running = False
         self._cycle_count = 0
+        self._cycle_last_run_ts = 0.0  # set on every successful _run_cycle; watchdog reads this
         self._multi_mode = False
         self._stale_data = False
         # Tracker state — initialized here so it always exists, even if a
@@ -116,23 +117,48 @@ class TradingEngine:
             log.info("Live executor ready — modules with status='active' will trade real money")
 
         self.registry.discover()
-        self.scheduler.add_job(self._run_cycle, "interval", seconds=interval, max_instances=1)
-        self.scheduler.add_job(self._run_walk_forward, "interval", hours=6, max_instances=1)
-        self.scheduler.add_job(self._run_resolutions, "interval", minutes=30, max_instances=1)
-        self.scheduler.add_job(self._run_auction_monitor, "interval", hours=1, max_instances=1)
+        # Scheduler hardening (added 2026-05-16 after global stall): every
+        # interval job gets coalesce=True (drop backlog, just run latest) +
+        # misfire_grace_time=120s (don't drop on small clock skews). Without
+        # these, APScheduler's default behavior can permanently kill a job
+        # after one missed firing.
+        self.scheduler.add_job(self._run_cycle, "interval", seconds=interval,
+                               max_instances=1, coalesce=True, misfire_grace_time=120,
+                               id="run_cycle", replace_existing=True)
+        self.scheduler.add_job(self._run_walk_forward, "interval", hours=6,
+                               max_instances=1, coalesce=True, misfire_grace_time=300)
+        self.scheduler.add_job(self._run_resolutions, "interval", minutes=30,
+                               max_instances=1, coalesce=True, misfire_grace_time=120)
+        self.scheduler.add_job(self._run_auction_monitor, "interval", hours=1,
+                               max_instances=1, coalesce=True, misfire_grace_time=300)
         # Insta-buy: detect newly-opened auctions every 1 min and fire a
         # _run_cycle so ladder orders post within ~60s of auction start
         # instead of waiting up to 5 min for the next regular cycle.
-        self.scheduler.add_job(self._run_instabuy_check, "interval", minutes=1, max_instances=1)
-        self.scheduler.add_job(self._run_order_ttl_sweep, "interval", minutes=5, max_instances=1)
-        self.scheduler.add_job(self._run_order_book_snapshot, "interval", minutes=5, max_instances=1)
-        self.scheduler.add_job(self._run_post_count_snapshot, "interval", minutes=5, max_instances=1)
+        self.scheduler.add_job(self._run_instabuy_check, "interval", minutes=1,
+                               max_instances=1, coalesce=True, misfire_grace_time=30)
+        self.scheduler.add_job(self._run_order_ttl_sweep, "interval", minutes=5,
+                               max_instances=1, coalesce=True, misfire_grace_time=120)
+        self.scheduler.add_job(self._run_order_book_snapshot, "interval", minutes=5,
+                               max_instances=1, coalesce=True, misfire_grace_time=120)
+        self.scheduler.add_job(self._run_post_count_snapshot, "interval", minutes=5,
+                               max_instances=1, coalesce=True, misfire_grace_time=120)
         # Daily module-status digests at 9 AM ET (13 UTC) and 5 PM ET (21 UTC).
         # Silent on all-clear days. Each fires independently with its own
         # 12h dedupe window so missing one doesn't block the other.
-        self.scheduler.add_job(self._run_daily_module_digest, "cron", hour=13, minute=0, max_instances=1, id="digest_9am")
-        self.scheduler.add_job(self._run_daily_module_digest, "cron", hour=21, minute=0, max_instances=1, id="digest_5pm")
+        self.scheduler.add_job(self._run_daily_module_digest, "cron", hour=13, minute=0,
+                               max_instances=1, id="digest_9am", coalesce=True, misfire_grace_time=600)
+        self.scheduler.add_job(self._run_daily_module_digest, "cron", hour=21, minute=0,
+                               max_instances=1, id="digest_5pm", coalesce=True, misfire_grace_time=600)
+        # Watchdog: every 5 minutes, verify the main cycle has run within the
+        # last 3 × interval (default 15 min). If not, the scheduler job is
+        # dead — re-register it. Self-healing guarantee.
+        self.scheduler.add_job(self._cycle_watchdog, "interval", minutes=5,
+                               max_instances=1, coalesce=True, misfire_grace_time=60,
+                               id="cycle_watchdog")
         self.scheduler.start()
+        # Seed last-run timestamp so the watchdog has a baseline (otherwise
+        # it would fire immediately on the first 5-min check).
+        self._cycle_last_run_ts = time.time()
         self._running = True
         log.info(f"Engine started: interval={interval}s, paper={settings.paper_mode}, multi={self._multi_mode}")
 
@@ -252,7 +278,79 @@ class TradingEngine:
         except Exception as e:
             log.error(f"Exit check error: {e}")
 
+    def _cycle_watchdog(self):
+        """Self-healing scheduler watchdog. Fires every 5 minutes.
+
+        If `_run_cycle` hasn't completed within 3 × interval (default 15
+        min), the scheduler job is presumed dead. Re-register it.
+
+        This is defense-in-depth on top of `_run_cycle`'s try/except wrap.
+        That wrapper catches Python exceptions; the watchdog catches
+        APScheduler-level pathologies (worker thread dies, BackgroundScheduler
+        stalls, max_instances=1 blocks all future runs after a hang)."""
+        try:
+            from api.config import get_settings
+            settings = get_settings()
+            interval = float(getattr(settings, "default_interval", 300))
+            staleness_threshold = max(3 * interval, 600.0)  # at least 10 min
+            now = time.time()
+            age = now - (self._cycle_last_run_ts or 0)
+            if age <= staleness_threshold:
+                return
+            log.warning(
+                f"WATCHDOG: cycle stale ({age:.0f}s > {staleness_threshold:.0f}s threshold). "
+                f"Re-registering scheduler job. last_run_ts={self._cycle_last_run_ts}"
+            )
+            try:
+                # Remove the stale job (if any). replace_existing=True on
+                # add_job makes this idempotent, but explicit remove is
+                # safer in case the job is mid-firing.
+                try:
+                    self.scheduler.remove_job("run_cycle")
+                except Exception:
+                    pass
+                self.scheduler.add_job(
+                    self._run_cycle, "interval", seconds=interval,
+                    max_instances=1, coalesce=True, misfire_grace_time=120,
+                    id="run_cycle", replace_existing=True,
+                )
+                # Bump timestamp so the watchdog doesn't loop-fire if the
+                # re-registered job takes a moment to spin up.
+                self._cycle_last_run_ts = now
+                try:
+                    self._log_error("engine_watchdog",
+                                    f"Cycle stalled ({age:.0f}s old); job re-registered")
+                except Exception:
+                    pass
+            except Exception as e:
+                log.error(f"WATCHDOG re-registration failed: {e}")
+        except Exception as e:
+            log.error(f"WATCHDOG itself errored (rare): {e}")
+
     def _run_cycle(self):
+        """Top-level scheduler entry. WRAPPED in try/except so any bug in a
+        downstream helper (sync_risk_state, _run_exits, _check_data_freshness,
+        etc.) cannot escape and kill the APScheduler job.
+
+        2026-05-16 bug: uncaught exceptions outside the per-module try/except
+        bubbled to APScheduler. Combined with max_instances=1 + no
+        misfire_grace_time, the next firing was silently skipped and the job
+        effectively died — ALL modules went stale globally because the cycle
+        stopped firing for everyone. The watchdog wrapper guarantees the job
+        re-fires on schedule even if a single cycle blows up."""
+        try:
+            self._run_cycle_inner()
+            self._cycle_last_run_ts = time.time()
+        except Exception as e:
+            import traceback as _tb
+            tb_str = _tb.format_exc()
+            log.error(f"_run_cycle UNCAUGHT (watchdog caught): {e}\n{tb_str}")
+            try:
+                self._log_error("engine_cycle", str(e), traceback=tb_str)
+            except Exception:
+                pass
+
+    def _run_cycle_inner(self):
         self._cycle_count += 1
 
         # Exits run UNCONDITIONALLY — must fire even when the circuit breaker is
