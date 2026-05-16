@@ -353,15 +353,20 @@ class LiveExecutor:
         try:
             client = self._get_client()
             from py_clob_client.order_builder.constants import BUY, SELL
+            from py_clob_client.clob_types import OrderArgs
             side = BUY if signal.side == "BUY" else SELL
 
-            order = client.create_and_post_order({
-                "tokenID": signal.token_id,
-                "price": signal.market_price,
-                "size": size,
-                "side": side,
-                "type": "GTC",
-            })
+            # py_clob_client requires the typed OrderArgs dataclass, not a
+            # dict. Passing a dict raises:
+            #   AttributeError: 'dict' object has no attribute 'token_id'
+            # at py_clob_client/client.py line 503. Confirmed against the
+            # installed SDK 2026-05-16.
+            order = client.create_and_post_order(OrderArgs(
+                token_id=signal.token_id,
+                price=signal.market_price,
+                size=size,
+                side=side,
+            ))
 
             # CLOB order ID is the field py-clob-client returns as "orderID"
             # (or "id" depending on SDK version). Save it so the TTL sweep
