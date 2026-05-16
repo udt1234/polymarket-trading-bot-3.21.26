@@ -1,5 +1,9 @@
+import asyncio
+import logging
 from abc import ABC, abstractmethod
 from api.services.risk_manager import Signal
+
+log = logging.getLogger(__name__)
 
 
 class BaseModule(ABC):
@@ -22,10 +26,33 @@ class BaseModule(ABC):
     # it. Used by the modules-list endpoint + dashboard timeline.
     gates_by_regime: bool = True
 
-    @abstractmethod
     def evaluate(self) -> list[Signal]:
-        """Run the module's strategy and return trade signals."""
-        ...
+        """Sync entry point used by the engine cycle. Default: wrap the
+        module's async impl (_evaluate_async) for use from synchronous
+        scheduler callbacks. Override only if you have a fully-sync strategy.
+
+        Three identical implementations in truth_social/elon_tweets/spike_trading
+        were collapsed here 2026-05-16 (audit P2).
+
+        Modules that implement strategy in async should override
+        `_evaluate_async()` instead of `evaluate()`."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Engine cycle is async-unfriendly — run in a worker thread
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    return pool.submit(
+                        lambda: asyncio.run(self._evaluate_async())
+                    ).result(timeout=60)
+            return loop.run_until_complete(self._evaluate_async())
+        except RuntimeError:
+            return asyncio.run(self._evaluate_async())
+
+    async def _evaluate_async(self) -> list[Signal]:
+        """Async strategy implementation. Override this on async modules.
+        BaseModule.evaluate() handles the sync/async bridging."""
+        return []
 
     @abstractmethod
     def get_status(self) -> dict:
