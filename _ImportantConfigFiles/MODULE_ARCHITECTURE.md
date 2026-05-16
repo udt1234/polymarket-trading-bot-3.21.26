@@ -18,9 +18,8 @@ api/modules/
 │   ├── news.py              # Google News RSS fetch (any handle)
 │   ├── price_timing.py      # Should-defer-signal logic
 │   └── polymarket.py        # (Phase B) xTracker/Gamma/CLOB client
-├── truth_social/            # Trump module
+├── truth_social/            # Trump module (ensemble)
 │   ├── module.py            # TruthSocialModule(BaseModule)
-│   ├── data.py              # ONLY Trump-specific (truthsocial_direct, parquet)
 │   ├── module_config.py
 │   ├── parquet_history.py   # Trump's price history archive
 │   ├── schedule.py          # Presidential schedule (Trump-specific)
@@ -29,12 +28,32 @@ api/modules/
 │   ├── truthsocial_direct.py
 │   ├── truthsocial_via_cnn.py
 │   └── __init__.py
-└── elon_tweets/             # Elon module
-    ├── module.py            # ElonTweetsModule(BaseModule)
-    ├── data.py              # ONLY Elon-specific
+├── elon_tweets/             # Elon module (ensemble)
+│   ├── module.py            # ElonTweetsModule(BaseModule)
+│   ├── lunarcrush.py        # Sentiment integration
+│   ├── module_config.py
+│   └── __init__.py
+├── spike_trading/           # Lottery-ticket ladder (Elon 2-day primary)
+│   ├── module.py            # SpikeTradingModule(BaseModule)
+│   ├── data.py
+│   ├── decision.py          # adaptive_buy_price, slow_bleed_sell_price
+│   ├── module_config.py
+│   ├── strategies/          # Pluggable strategy plugins
+│   │   ├── cheap_lottery_pacing.py
+│   │   ├── mid_range_spike.py
+│   │   └── big_hold_monthly.py
+│   └── __init__.py
+└── copy_trading/            # Mirrors whale trades from a target wallet
+    ├── module.py
+    ├── data.py
     ├── module_config.py
     └── __init__.py
 ```
+
+Note: `data.py` is OPTIONAL per module — Trump and Elon inline their data
+fetchers into `module.py` because most of the work routes through
+`shared/polymarket.py`. Required only when the module has handle/source-
+specific fetchers (spike_trading uses it for the series-API path).
 
 ## The Rules
 
@@ -69,7 +88,7 @@ Each module has its own row in the Supabase `modules` table. Settings, toggles, 
 `/api/engine/health?module_id=X` returns health scoped to that module. The dashboard banner on a module page MUST pass its `module_id`. Global states (engine stopped, circuit breaker, stale data) still apply to all, but recent errors are filtered.
 
 ### 6. Adding a new module
-Use `@module-scaffolder`. It enforces the structure. If you go manual, the new folder MUST contain: `__init__.py`, `module.py`, `data.py`, `module_config.py`. Register it by inheriting `BaseModule` — the registry auto-discovers it via `pkgutil`.
+Use `@module-scaffolder`. It enforces the structure. If you go manual, the new folder MUST contain: `__init__.py`, `module.py`, `module_config.py`. `data.py` is OPTIONAL — add it when your module has handle/source-specific fetchers; if you only consume `shared/polymarket.py`, inline whatever lives in `data.py` into `module.py`. Register the module by inheriting `BaseModule` — the registry auto-discovers it via `pkgutil`.
 
 ### 7. Refactoring rule
 - Touching `shared/` → re-run tests for ALL modules
@@ -114,6 +133,26 @@ class MyModule(BaseModule):
     # e.g. Spike Trading returns 2.0 to filter out 7-day / monthly Elon
     # auctions. Default None = accept all window sizes.
     def get_auction_window_days(self) -> float | None: ...
+
+    # OPTIONAL — buy-order TTL for the engine's order-cancel sweep. Default
+    # 5min. Override on deep-ladder strategies (spike: 24h) so the engine
+    # doesn't yank limits that need patience. Added 2026-05-16.
+    def get_buy_order_ttl_hours(self) -> float: ...
+
+    # OPTIONAL — UI hints exposed via /api/modules/{id} so the dashboard
+    # renders module-id-driven (no name-string branching in JSX). Added
+    # 2026-05-16 to remove `name.includes("trump"|"elon")` in page.tsx.
+    def get_auction_slug_patterns(self) -> list[str]: ...    # ["truth-social","trump"]
+    def supports_post_count_divergence(self) -> bool: ...    # True iff direct+xTracker
+
+    # OPTIONAL — strategy plugin metadata for modules with selectable
+    # strategies (spike_trading). Default [].
+    def get_strategy_metadata(self) -> list[dict]: ...
+
+    # OPTIONAL — whale watching support (spec WHALE_BRACKET_CARDS_SPEC.md).
+    def get_market_universe(self, window_days: float | None = None) -> list[str]: ...
+    def get_brackets(self) -> list[str]: ...
+    def archive_resolved_auction(self, module_id: str, auction_slug: str) -> dict | None: ...
 ```
 
 The engine resolves modules from Supabase rows via `engine.registry.for_db_row(row)` — never by inspecting `row["name"]` for substrings.
