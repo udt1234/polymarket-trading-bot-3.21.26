@@ -502,13 +502,38 @@ class TruthSocialModule(BaseModule):
             except Exception as e:
                 log.warning(f"low-window price snapshot fetch failed: {e}")
 
+        # MIN_PRICE_FLOOR must match api/services/executor.py to avoid emitting
+        # signals the executor will silently reject. 0.001 = 0.1¢ tick.
+        MIN_PRICE_FLOOR = 0.001
+
+        def _snap_to_tick(price: float, tick: float) -> float:
+            """Round price to the nearest valid multiple of tick. Live CLOB
+            rejects orders that aren't on the tick grid (0.01 standard,
+            0.001 neg_risk). Snap defensively at emit so the executor's
+            below_min_tick_size rejection (~145 rejections last 24h on
+            Truth Social) is no longer reached."""
+            if tick is None or tick <= 0:
+                return price
+            return round(round(price / tick) * tick, 6)
+
         signals = []
+        rejected_floor = 0
         for bracket_label, model_prob in bracket_probs.items():
             if bracket_label not in top_bracket_names:
                 continue
             market_price = market_prices.get(bracket_label, 0)
             if market_price <= 0 or market_price >= 1:
                 continue
+            if market_price < MIN_PRICE_FLOOR:
+                rejected_floor += 1
+                continue
+            book_pre = order_books.get(bracket_label, {})
+            tick = book_pre.get("min_tick_size")
+            if tick:
+                market_price = _snap_to_tick(market_price, float(tick))
+                if market_price < MIN_PRICE_FLOOR:
+                    rejected_floor += 1
+                    continue
 
             sizing = kelly_sizing(
                 model_prob, market_price,
@@ -593,6 +618,10 @@ class TruthSocialModule(BaseModule):
                     },
                 )
                 signals.append(signal)
+
+        if rejected_floor:
+            self._log(sb, module_id, "decision", "info",
+                      f"Pre-emit floor filter dropped {rejected_floor} brackets (price < {MIN_PRICE_FLOOR} after tick-snap)")
 
         self._log(sb, module_id, "decision", "info",
                   f"Cycle: slug={slug}, total={running_total}, elapsed={elapsed_days:.1f}/{total_days:.1f}d, "
