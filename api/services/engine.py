@@ -1112,8 +1112,12 @@ class TradingEngine:
                 "message": msg,
                 "metadata": metadata,
             }).execute()
-        except Exception:
-            pass
+        except Exception as e:
+            # Was silently swallowed prior to 2026-05-16. Surface so the
+            # next break is visible in Railway logs even if Supabase write
+            # is what failed (so we don't double-fault by trying to log
+            # to the same broken DB).
+            log.error(f"_log_execution failed (audit-trail row dropped): {e}")
 
     def _log_rejection(self, signal, reason):
         try:
@@ -1125,8 +1129,8 @@ class TradingEngine:
                 "message": f"Rejected {signal.side} {signal.bracket}: {reason}",
                 "metadata": {"edge": signal.edge, "kelly": signal.kelly_pct, "reason": reason},
             }).execute()
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"_log_rejection failed (audit-trail row dropped): {e}")
 
     def _log_error(self, module_name, error_msg, traceback: str | None = None):
         try:
@@ -1142,8 +1146,8 @@ class TradingEngine:
                 # always in the FIRST few frames, so head-truncating is fine.
                 row["metadata"] = {"traceback": traceback[:4000]}
             sb.table("logs").insert(row).execute()
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"_log_error failed (error row dropped, original was: {module_name}: {error_msg[:100]}): {e}")
 
     def _track_rejection(self, module_name: str, signal, reason: str):
         """Append to in-memory rejection streak. Fires rejection_spike alert
