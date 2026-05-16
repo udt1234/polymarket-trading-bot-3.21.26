@@ -65,6 +65,22 @@ class CopyTradingModule(BaseModule):
     def get_display_keywords(self) -> list[str]:
         return ["copy trading", "copy_trading", "copy"]
 
+    def get_handle(self) -> str:
+        """Copy-trading mirrors a wallet, not a single social handle. Returns
+        empty string — engine helpers that depend on a handle (insta-buy
+        check, price snapshot, post-count snapshot) skip handle-less
+        modules. Without this override, BaseModule's default raises
+        NotImplementedError on every cycle and breaks sibling jobs."""
+        return ""
+
+    def get_platform(self) -> str:
+        """Same reasoning as get_handle — no single platform."""
+        return ""
+
+    def get_auction_title_filter(self) -> str:
+        """No title filter — copy trading mirrors trades on any market."""
+        return ""
+
     def get_config(self, module_id: str) -> dict:
         return get_module_config(module_id)
 

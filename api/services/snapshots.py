@@ -43,8 +43,13 @@ def _take_price_snapshot_sync():
         module = engine.registry.for_db_row(mod)
         if module is None:
             continue
-        handle = module.get_handle()
-        platform = module.get_platform()
+        try:
+            handle = module.get_handle()
+            platform = module.get_platform()
+        except NotImplementedError:
+            continue
+        if not handle or not platform:
+            continue
         slug = None
         active_tracking = None
 
