@@ -59,7 +59,7 @@ class CopyTradingModule(BaseModule):
             "name": self.name,
             "enabled": self.enabled,
             "status": "active" if self.enabled else "paused",
-            "strategy": "copy_trading_v1",
+            "strategy": "copy_trading",
         }
 
     def get_display_keywords(self) -> list[str]:
@@ -182,6 +182,13 @@ class CopyTradingModule(BaseModule):
             return []
 
         wallets = await asyncio.to_thread(self._fetch_enabled_wallets, sb, module_id)
+        # Heartbeat: write one decision log per cycle even when there are no
+        # enabled wallets, so dashboards can show "module is alive" instead of
+        # "no logs for 24h" silence.
+        await asyncio.to_thread(
+            self._log, sb, module_id, "decision", "info",
+            f"Cycle: enabled_wallets={len(wallets)} shadow_mode={cfg.get('shadow_mode')}",
+        )
         if not wallets:
             return []
 
