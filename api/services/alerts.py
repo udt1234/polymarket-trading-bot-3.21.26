@@ -77,13 +77,29 @@ def _dedupe_check_and_record(key: str, cooldown_hours: float, payload: dict[str,
         return True
 
 
+async def _dispatch_alert(
+    alert_type: str,
+    dedupe_key: str,
+    dedupe_payload: dict[str, Any],
+    message: str,
+    module: str = "engine",
+) -> bool:
+    """Common pipeline: enable-check → dedupe → send_slack. Returns True
+    when the alert was actually sent.
+
+    Audit P2 (2026-05-16): each notify_* function previously inlined this
+    4-step boilerplate. Extracted here so callers stay focused on payload
+    shape + message formatting; pipeline lives in one place."""
+    if not _is_alert_enabled(alert_type):
+        return False
+    if not _dedupe_check_and_record(dedupe_key, _cooldown_hours(alert_type), dedupe_payload):
+        return False
+    await send_slack(message, module=module)
+    return True
+
+
 async def notify_bot_paused(reason: str, scope: str = "engine", details: dict | None = None):
     """Engine globally paused or circuit breaker tripped or manual kill."""
-    if not _is_alert_enabled("bot_paused"):
-        return
-    key = f"alert_bot_paused:{scope}"
-    if not _dedupe_check_and_record(key, _cooldown_hours("bot_paused"), {"reason": reason}):
-        return
     detail_str = ""
     if details:
         detail_str = "\n" + "\n".join(f"• {k}: {v}" for k, v in details.items())
@@ -94,21 +110,20 @@ async def notify_bot_paused(reason: str, scope: str = "engine", details: dict | 
     )
     # `scope` is an internal dedupe discriminator ("engine", "circuit_breaker",
     # "deploy", etc) — not a human-readable display name. Always tag the
-    # Slack prefix with `engine` so the operator sees `[engine] Bot Paused —
-    # circuit_breaker` rather than the awkward `[circuit_breaker] Bot Paused — circuit_breaker`.
-    await send_slack(msg, module="engine")
+    # Slack prefix with `engine`.
+    await _dispatch_alert(
+        alert_type="bot_paused",
+        dedupe_key=f"alert_bot_paused:{scope}",
+        dedupe_payload={"reason": reason},
+        message=msg,
+        module="engine",
+    )
 
 
 async def notify_module_status_change(
     module_id: str, name: str, old_status: str, new_status: str, reason: str = "",
 ):
     """A module went from one status to another (active <-> paused/killed)."""
-    if not _is_alert_enabled("module_status_change"):
-        return
-    key = f"alert_module_status:{module_id}:{new_status}"
-    if not _dedupe_check_and_record(key, _cooldown_hours("module_status_change"),
-                                    {"old": old_status, "new": new_status}):
-        return
     emoji = {
         "inactive": ":no_entry:",
         "active": ":white_check_mark:",
@@ -117,7 +132,13 @@ async def notify_module_status_change(
     msg = f"{emoji} *Module status: {name}*\n*{old_status}* -> *{new_status}*"
     if reason:
         msg += f"\n_Reason: {reason}_"
-    await send_slack(msg, module=name or "engine")
+    await _dispatch_alert(
+        alert_type="module_status_change",
+        dedupe_key=f"alert_module_status:{module_id}:{new_status}",
+        dedupe_payload={"old": old_status, "new": new_status},
+        message=msg,
+        module=name or "engine",
+    )
 
 
 async def notify_repeated_errors(
@@ -126,22 +147,20 @@ async def notify_repeated_errors(
 ):
     """Same error signature has fired N+ times in a window.
 
-    `module_name`: optional Slack-prefix scope. Used to tag the message so
-    the operator can immediately see which module is throwing. Falls back
-    to "engine" when None (cross-module signature)."""
-    if not _is_alert_enabled("repeated_errors"):
-        return
-    key = f"alert_repeated_errors:{error_signature[:80]}"
-    if not _dedupe_check_and_record(key, _cooldown_hours("repeated_errors"),
-                                    {"signature": error_signature[:120], "count": count}):
-        return
+    `module_name`: optional Slack-prefix scope. Falls back to "engine"."""
     msg = (
         f":warning: *Repeated Error*\n"
         f"`{error_signature[:120]}` — *{count}* occurrences in {time_window_minutes:.0f} min"
     )
     if sample:
         msg += f"\n_Latest: {sample[:200]}_"
-    await send_slack(msg, module=module_name or "engine")
+    await _dispatch_alert(
+        alert_type="repeated_errors",
+        dedupe_key=f"alert_repeated_errors:{error_signature[:80]}",
+        dedupe_payload={"signature": error_signature[:120], "count": count},
+        message=msg,
+        module=module_name or "engine",
+    )
 
 
 async def notify_stale_data(
@@ -152,16 +171,7 @@ async def notify_stale_data(
 
     `affected_handles`: when handle='all' (engine-wide stall sentinel),
     pass a list of currently-active module handles so the alert body lists
-    which feeds the operator should check. Optional; omitted when caller
-    doesn't have a handy module-handle inventory."""
-    if not _is_alert_enabled("stale_data"):
-        return
-    key = f"alert_stale_data:{handle}:{source}"
-    if not _dedupe_check_and_record(key, _cooldown_hours("stale_data"),
-                                    {"hours": hours}):
-        return
-    # "handle='all'" is the sentinel meaning "engine cycle is stalled" (the
-    # decision-log freshness probe). Make the message readable in both cases.
+    which feeds the operator should check."""
     if handle == "all":
         affected_line = ""
         if affected_handles:
@@ -178,9 +188,13 @@ async def notify_stale_data(
             f"Handle *{handle}* has not updated in *{hours:.1f}h*. "
             f"Bot will skip new entries until data refreshes."
         )
-    # 'all' is the engine-wide cycle-stall sentinel; otherwise scope to the
-    # affected handle so the operator sees which feed went stale.
-    await send_slack(msg, module="engine" if handle == "all" else handle)
+    await _dispatch_alert(
+        alert_type="stale_data",
+        dedupe_key=f"alert_stale_data:{handle}:{source}",
+        dedupe_payload={"hours": hours},
+        message=msg,
+        module="engine" if handle == "all" else handle,
+    )
 
 
 async def notify_daily_module_status_digest():
@@ -277,12 +291,6 @@ async def notify_rejection_spike(
     event_slug, reason). When provided, the message lists each distinct
     auction with a Polymarket link so the user can click straight to the
     market that's being blocked."""
-    if not _is_alert_enabled("rejection_spike"):
-        return
-    key = f"alert_rejection_spike:{module_id}"
-    if not _dedupe_check_and_record(key, _cooldown_hours("rejection_spike"),
-                                    {"count": count}):
-        return
     reasons_str = "\n".join(f"• {r}" for r in top_reasons[:3])
 
     # Distinct (slug, bracket) pairs from the recent window, preserving
@@ -309,4 +317,10 @@ async def notify_rejection_spike(
     if auction_lines:
         msg += "\n*Auctions blocked:*\n" + "\n".join(auction_lines)
     msg += "\n_Often means a config knob (edge threshold, exposure cap) is misaligned._"
-    await send_slack(msg, module=module_name or "engine")
+    await _dispatch_alert(
+        alert_type="rejection_spike",
+        dedupe_key=f"alert_rejection_spike:{module_id}",
+        dedupe_payload={"count": count},
+        message=msg,
+        module=module_name or "engine",
+    )
