@@ -1089,14 +1089,26 @@ class TradingEngine:
             s["multi_profiles"] = self.executor.profile_names
         return s
 
-    @property
-    def health(self):
-        """Bot health snapshot for the dashboard banner.
+    def _cb_status(self) -> dict:
+        """Snapshot of the circuit-breaker counter. Always returns the trio
+        so the dashboard can render `X/Y losses (tripped?)` regardless of
+        which health state the module is in."""
+        from api.config import get_settings
+        s = get_settings()
+        return {
+            "consecutive_losses": int(self.risk_manager.consecutive_losses or 0),
+            "max_consecutive_losses": int(getattr(s, "circuit_breaker_max_consecutive_losses", 5) or 5),
+            "tripped": bool(self.risk_manager.circuit_breaker_tripped),
+        }
 
-        Returns: { state: 'trading'|'watching'|'paused'|'killed',
-                   reason: str, details: {...} }
-        """
-        cb = self._cb_status()
+    def _global_health_state(self, cb: dict) -> dict | None:
+        """Return a health dict when a GLOBAL engine condition takes precedence
+        over per-module logic (engine stopped / circuit breaker / stale data).
+        Returns None when no global condition fires — caller continues with
+        its own per-scope logic.
+
+        Extracted from `.health` + `.health_for_module()` to remove ~50 lines
+        of duplicated guards (audit P2)."""
         if not self._running:
             return {
                 "state": "paused",
@@ -1133,6 +1145,18 @@ class TradingEngine:
                             "action": "Check Railway deploy logs for module evaluation errors",
                             "circuit_breaker": cb},
             }
+        return None
+
+    @property
+    def health(self):
+        """Bot health snapshot for the dashboard banner.
+
+        Returns: { state, reason, plain_english, details }
+        """
+        cb = self._cb_status()
+        global_state = self._global_health_state(cb)
+        if global_state is not None:
+            return global_state
         active = self.registry.active_modules()
         if not active:
             return {
@@ -1201,18 +1225,6 @@ class TradingEngine:
                         "circuit_breaker": cb},
         }
 
-    def _cb_status(self) -> dict:
-        """Snapshot of the circuit-breaker counter. Always returns the trio
-        so the dashboard can render `X/Y losses (tripped?)` regardless of
-        which health state the module is in."""
-        from api.config import get_settings
-        s = get_settings()
-        return {
-            "consecutive_losses": int(self.risk_manager.consecutive_losses or 0),
-            "max_consecutive_losses": int(getattr(s, "circuit_breaker_max_consecutive_losses", 5) or 5),
-            "tripped": bool(self.risk_manager.circuit_breaker_tripped),
-        }
-
     def health_for_module(self, module_name: str) -> dict:
         """Per-module health. Global engine state (stopped, circuit breaker,
         stale data) still applies to every module — but recent errors are
@@ -1223,32 +1235,9 @@ class TradingEngine:
         warn 'X/5 losses → auto-pause incoming'.
         """
         cb = self._cb_status()
-
-        if not self._running:
-            return {"state": "paused", "reason": "Engine stopped",
-                    "plain_english": "Bot is fully stopped. No trading, no monitoring. Manually resume to bring it back online.",
-                    "details": {"action": "Use /api/engine/start to resume",
-                                "circuit_breaker": cb}}
-        if self.risk_manager.circuit_breaker_tripped:
-            cooldown_remaining_s = max(0, int(self.risk_manager._cooldown_until - time.time()))
-            return {"state": "paused", "reason": "Circuit breaker tripped",
-                    "plain_english": (
-                        f"Bot hit the consecutive-loss safety limit and is in a "
-                        f"{round(cooldown_remaining_s / 60, 0):.0f}-minute cooldown. "
-                        "Existing positions can still exit, but no new trades."
-                    ),
-                    "details": {"cooldown_remaining_min": round(cooldown_remaining_s / 60, 1),
-                                "circuit_breaker": cb}}
-        if self._stale_data:
-            return {"state": "paused",
-                    "reason": f"Engine cycle stalled — no decision logs in over {STALE_DATA_THRESHOLD_HOURS}h",
-                    "plain_english": (
-                        "The bot's main cycle hasn't run in over 2 hours. Likely a "
-                        "deployment issue or Supabase/API outage. No new trades until "
-                        "the next successful cycle."
-                    ),
-                    "details": {"threshold_hours": STALE_DATA_THRESHOLD_HOURS,
-                                "circuit_breaker": cb}}
+        global_state = self._global_health_state(cb)
+        if global_state is not None:
+            return global_state
 
         # Resolve the human-friendly DB name (e.g. "Elon Tweets") to the
         # canonical registry name ("elon_tweets") via the registry's keyword
