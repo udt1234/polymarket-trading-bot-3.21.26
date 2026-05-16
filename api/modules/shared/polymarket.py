@@ -752,3 +752,58 @@ async def fetch_market_brackets(slug: str) -> list[str]:
             if raw:
                 brackets.append(raw.strip())
         return sorted(brackets, key=_bracket_sort_key)
+
+
+async def fetch_active_auctions_from_series(
+    series_slug: str,
+    lookahead_days: float = 7.0,
+) -> list[dict]:
+    """Return live + soon-to-start auctions from a Polymarket Series.
+
+    Generic Polymarket Gamma helper — moved from spike_trading.data to
+    shared/polymarket.py 2026-05-16 so the engine doesn't import from
+    a specific module (audit P1).
+
+    Series tickers like 'elon-tweets-48h' surface every recurring auction
+    (past, current, future) in one API call. Filtered to:
+      - LIVE: startDate <= now <= endDate
+      - PRE: startDate within `lookahead_days` from now
+    """
+    url = f"{GAMMA_BASE}/series"
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            r = await client.get(url, params={"slug": series_slug})
+            r.raise_for_status()
+            payload = r.json()
+        except Exception as e:
+            log.warning(f"fetch_active_auctions_from_series({series_slug}) failed: {e}")
+            return []
+
+    if not isinstance(payload, list) or not payload:
+        return []
+    events = payload[0].get("events") or []
+    now = datetime.now(timezone.utc)
+    out = []
+    for e in events:
+        sd, ed = e.get("startDate", ""), e.get("endDate", "")
+        if not (sd and ed):
+            continue
+        try:
+            s = datetime.fromisoformat(sd.replace("Z", "+00:00"))
+            edt = datetime.fromisoformat(ed.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        if edt < now:
+            continue
+        if (s - now).total_seconds() / 86400.0 > lookahead_days:
+            continue
+        slug = e.get("slug") or ""
+        out.append({
+            "id": str(e.get("id", "")),
+            "title": e.get("title", ""),
+            "startDate": sd,
+            "endDate": ed,
+            "marketLink": f"https://polymarket.com/event/{slug}" if slug else "",
+            "source": "gamma_series",
+        })
+    return out

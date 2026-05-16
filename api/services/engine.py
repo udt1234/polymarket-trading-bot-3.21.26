@@ -547,7 +547,7 @@ class TradingEngine:
                 # Resolve series_slug -> active event slugs via Gamma /series.
                 if series_slugs:
                     try:
-                        from api.modules.spike_trading.data import fetch_active_auctions_from_series
+                        from api.modules.shared.polymarket import fetch_active_auctions_from_series
                         for ss in series_slugs:
                             evts = _run_async(fetch_active_auctions_from_series(ss))
                             for e in evts or []:
@@ -709,32 +709,15 @@ class TradingEngine:
             log.error(f"Post count snapshot error: {e}")
 
     def _run_order_ttl_sweep(self):
-        """Cancel stale unfilled orders.
-
-        Default TTL: 5 min (most strategies should fill near top-of-book quickly).
-        Spike trading orders (deep limits at 0.3-0.5¢) need a longer TTL — they
-        live up to 24h waiting for a price drop. We exempt them from the default
-        sweep and let the spike module's own buy_cancel_after_hours config govern.
+        """Cancel stale unfilled orders. Per-module TTL comes from
+        `BaseModule.get_buy_order_ttl_hours()` — no more module-name
+        branching in the engine.
         """
-        ORDER_TTL_MINUTES = 5
+        from datetime import timedelta
         try:
             sb = get_supabase()
-            cutoff = datetime.now(timezone.utc).replace(microsecond=0)
-            from datetime import timedelta
-            cutoff = (cutoff - timedelta(minutes=ORDER_TTL_MINUTES)).isoformat()
+            now = datetime.now(timezone.utc).replace(microsecond=0)
 
-            # Identify spike_trading module IDs to exempt (strategy match,
-            # name-keyword fallback) — covers duplicated modules too.
-            spike_modules = sb.table("modules").select("id,name,strategy").execute()
-            spike_ids = [
-                m["id"] for m in (spike_modules.data or [])
-                if (m.get("strategy") or "").lower().strip() == "spike_trading"
-                or "spike" in (m.get("name") or "").lower()
-            ]
-
-            # Live mode also needs to tell the CLOB to cancel — without that,
-            # a past-TTL GTC limit at the CLOB can STILL fill. Pull metadata
-            # for stale orders so we can extract clob_order_id.
             def _cancel_at_clob(stale_rows):
                 if not stale_rows:
                     return
@@ -754,27 +737,37 @@ class TradingEngine:
                     if cid:
                         exec_for_cancel.cancel_clob_order(cid)
 
-            q = sb.table("orders").select("id,metadata").in_("status", ["submitted", "live"]).lt("created_at", cutoff)
-            if spike_ids:
-                q = q.not_.in_("module_id", spike_ids)
-            stale = q.execute()
-            if stale.data:
-                _cancel_at_clob(stale.data)
-                ids = [o["id"] for o in stale.data]
+            # Group module rows by TTL bucket via the BaseModule contract.
+            # Modules the registry can't resolve fall back to the default TTL.
+            DEFAULT_TTL_HOURS = 5.0 / 60.0  # 5 minutes
+            module_rows = sb.table("modules").select("id,name,strategy").execute().data or []
+            ttl_buckets: dict[float, list[str]] = {}
+            for m in module_rows:
+                mod = self.registry.for_db_row(m)
+                ttl_h = DEFAULT_TTL_HOURS
+                if mod is not None:
+                    try:
+                        ttl_h = float(mod.get_buy_order_ttl_hours())
+                    except Exception:
+                        pass
+                ttl_buckets.setdefault(ttl_h, []).append(m["id"])
+
+            for ttl_h, module_ids in ttl_buckets.items():
+                cutoff_iso = (now - timedelta(hours=ttl_h)).isoformat()
+                stale = sb.table("orders").select("id,metadata").in_(
+                    "status", ["submitted", "live"]
+                ).in_("module_id", module_ids).lt("created_at", cutoff_iso).execute()
+                rows = stale.data or []
+                if not rows:
+                    continue
+                _cancel_at_clob(rows)
+                ids = [o["id"] for o in rows]
                 for oid in ids:
                     sb.table("orders").update({"status": "cancelled"}).eq("id", oid).execute()
-                log.info(f"Order TTL sweep: cancelled {len(ids)} stale orders older than {ORDER_TTL_MINUTES}min")
-
-            # Spike-specific TTL: 24h on buy orders (config-driven later)
-            if spike_ids:
-                spike_cutoff = (datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=24)).isoformat()
-                spike_stale = sb.table("orders").select("id,metadata").in_("status", ["submitted", "live"]).in_("module_id", spike_ids).eq("side", "BUY").lt("created_at", spike_cutoff).execute()
-                if spike_stale.data:
-                    _cancel_at_clob(spike_stale.data)
-                    sids = [o["id"] for o in spike_stale.data]
-                    for oid in sids:
-                        sb.table("orders").update({"status": "cancelled"}).eq("id", oid).execute()
-                    log.info(f"Spike TTL sweep: cancelled {len(sids)} stale spike BUYs older than 24h")
+                log.info(
+                    f"Order TTL sweep: cancelled {len(ids)} stale orders "
+                    f"older than {ttl_h:.2f}h (module_ids={module_ids})"
+                )
         except Exception as e:
             log.error(f"Order TTL sweep error: {e}")
 

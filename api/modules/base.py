@@ -126,6 +126,40 @@ class BaseModule(ABC):
                 out[k] = cfg[k]
         return out
 
+    def get_auction_slug_patterns(self) -> list[str]:
+        """Substrings used by the dashboard to filter wallet-history auctions
+        to those that belong to this module. Returned as lowercase keywords.
+
+        Default: derive from get_handle() (lowercased). Override per-module
+        when a single handle isn't enough — e.g. Trump module returns both
+        `truth-social` and `trump` so we capture market slugs from either era.
+        """
+        try:
+            h = (self.get_handle() or "").lower()
+        except (NotImplementedError, Exception):
+            return []
+        return [h] if h else []
+
+    def supports_post_count_divergence(self) -> bool:
+        """True if the dashboard should render the 'xTracker vs Direct'
+        post-count divergence card for this module. Defaults False;
+        override on modules that have a direct post-count source separate
+        from xTracker (currently: truth_social via TruthSocial Direct)."""
+        return False
+
+    def get_buy_order_ttl_hours(self) -> float:
+        """How long a resting BUY limit order stays live before the engine
+        cancels it. Default 5min (5/60h ≈ 0.083h) — most ensembles fill near
+        top-of-book quickly. Override on modules with deep-ladder strategies
+        (spike: 24h) so the engine doesn't yank limits that need patience."""
+        return 5.0 / 60.0
+
+    def get_strategy_metadata(self) -> list[dict]:
+        """Strategy plugin info surfaced to the dashboard for module-config
+        editors that have multiple strategy choices. Default []. Override
+        only when the module has selectable strategy plugins (spike_trading)."""
+        return []
+
     def archive_resolved_auction(self, module_id: str, auction_slug: str) -> dict | None:
         """Hook for modules to supply a custom auction_archive row.
 

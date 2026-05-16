@@ -16,7 +16,7 @@ from api.modules.shared.enhanced_pacing import (
     recency_weighted_averages, dow_variance, pace_acceleration,
     dow_deviation, ensemble_confidence_bands, floor_bracket_probs,
 )
-from api.modules.truth_social.parquet_history import (
+from api.modules.shared.parquet_history import (
     search_parquet_markets, download_and_cache_parquet, preview_parquet_data,
 )
 from api.modules.shared.projection import expected_value_bracket
@@ -268,9 +268,28 @@ async def get_module(module_id: str):
     try:
         from api.services.engine import engine
         inst = engine.registry.for_db_row(row)
-        row["gates_by_regime"] = bool(getattr(inst, "gates_by_regime", True)) if inst else True
+        if inst:
+            row["gates_by_regime"] = bool(getattr(inst, "gates_by_regime", True))
+            # Module-id-driven UI hints exposed via BaseModule contract — the
+            # dashboard previously branched on `name.includes("trump"|"elon")`
+            # which violated the no-name-branching rule. Now the dashboard
+            # reads these fields and renders generically.
+            try:
+                row["auction_slug_patterns"] = list(inst.get_auction_slug_patterns() or [])
+            except Exception:
+                row["auction_slug_patterns"] = []
+            try:
+                row["supports_post_count_divergence"] = bool(inst.supports_post_count_divergence())
+            except Exception:
+                row["supports_post_count_divergence"] = False
+        else:
+            row["gates_by_regime"] = True
+            row["auction_slug_patterns"] = []
+            row["supports_post_count_divergence"] = False
     except Exception:
         row.setdefault("gates_by_regime", True)
+        row.setdefault("auction_slug_patterns", [])
+        row.setdefault("supports_post_count_divergence", False)
     return row
 
 

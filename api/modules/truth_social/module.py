@@ -99,6 +99,15 @@ class TruthSocialModule(BaseModule):
     def supports_direct_post_count(self) -> bool:
         return True
 
+    def supports_post_count_divergence(self) -> bool:
+        """Truth Social has both xTracker AND a direct TruthSocial Direct
+        feed — the dashboard renders a divergence chart for this module."""
+        return True
+
+    def get_auction_slug_patterns(self) -> list[str]:
+        """Trump auctions ship under both 'truth-social' and 'trump' slugs."""
+        return ["truth-social", "trump", "realdonaldtrump"]
+
     async def count_posts_in_window(self, window_start, window_end) -> dict:
         from api.modules.truth_social.truthsocial_direct import count_posts_in_window
         return await count_posts_in_window(window_start, window_end, handle=self.HANDLE)
