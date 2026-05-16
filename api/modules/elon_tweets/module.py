@@ -45,6 +45,10 @@ class ElonTweetsModule(BaseModule):
     def get_display_keywords(self) -> list[str]:
         return ["elon"]
 
+    def get_auction_slug_patterns(self) -> list[str]:
+        """Elon auctions use 'elon' or 'tweets' in their slugs."""
+        return ["elon", "tweets"]
+
     def get_config(self, module_id: str) -> dict:
         return get_module_config(module_id)
 

@@ -122,6 +122,11 @@ class SpikeTradingModule(BaseModule):
         at = self._first_enabled_auction()
         return at.get("handle", "elonmusk") if at else "elonmusk"
 
+    def get_buy_order_ttl_hours(self) -> float:
+        """Spike places deep limits (0.3-15¢) that can sit on the book up to
+        24h waiting for a price drop. Override BaseModule's 5-min default."""
+        return 24.0
+
     def get_platform(self) -> str:
         at = self._first_enabled_auction()
         return at.get("platform", "x") if at else "x"

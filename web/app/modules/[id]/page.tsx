@@ -295,18 +295,16 @@ export default function ModuleDetailPage() {
     refetchPacing()
   }, [localConfig, saveConfig, refetchConfig, refetchPacing])
 
-  // Use real wallet data when available, fallback to paper positions
-  const moduleName = module?.name?.toLowerCase() || ""
+  // Use real wallet data when available, fallback to paper positions.
+  // Module-id-driven slug filtering: backend exposes auction_slug_patterns
+  // on the module response (set per-module via BaseModule). Frontend renders
+  // generically — no `name.includes("trump"|"elon")` branching here.
+  const slugPatterns: string[] = (module as any)?.auction_slug_patterns || []
   const isLive = walletAuctions && walletAuctions.length > 0
   const relevantAuctions = (walletAuctions || []).filter((a: any) => {
     const slug = (a.slug || "").toLowerCase()
-    if (moduleName.includes("truth") || moduleName.includes("trump")) {
-      return slug.includes("truth-social") || slug.includes("trump")
-    }
-    if (moduleName.includes("elon")) {
-      return slug.includes("elon") || slug.includes("tweets")
-    }
-    return false
+    if (slugPatterns.length === 0) return false
+    return slugPatterns.some((p: string) => slug.includes(p))
   })
 
   // Get the selected auction's slug for filtering positions
@@ -1665,7 +1663,7 @@ export default function ModuleDetailPage() {
                 <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} trackingId={activeTrackingId} />
               </CollapsibleCard>
             )}
-            {(moduleName.includes("truth") || moduleName.includes("trump")) && (
+            {(module as any)?.supports_post_count_divergence && (
               <CollapsibleCard id="post-count-divergence" title="xTracker vs Truth Social Direct">
                 <PostCountDivergenceChart moduleId={module.id} trackingId={activeTrackingId || (pacing as any)?.tracking_id} />
               </CollapsibleCard>

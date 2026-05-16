@@ -19,67 +19,13 @@ from api.modules.shared.polymarket import (
     parse_hourly_counts,
     compute_running_total,
     compute_elapsed_days,
+    # Re-exported from shared/polymarket.py 2026-05-16 (audit P1: engine
+    # was importing this from a specific module — now lives in shared/).
+    # Spike's own callers continue to import via this module for inertia.
+    fetch_active_auctions_from_series,  # noqa: F401 re-export
 )
 
 log = logging.getLogger(__name__)
-
-
-async def fetch_active_auctions_from_series(
-    series_slug: str,
-    lookahead_days: float = 7.0,
-) -> list[dict]:
-    """Return live + soon-to-start auctions from a Polymarket Series.
-
-    This is the canonical Polymarket-native discovery path — independent of
-    xTracker. Series tickers like 'elon-tweets-48h' surface every recurring
-    auction (past, current, and future) in a single API call. We filter to:
-      - LIVE: Polymarket startDate <= now <= endDate (betting open right now)
-      - PRE: Polymarket startDate is within `lookahead_days` from now
-        (betting NOT open yet but auction listed; we want to act the moment
-        startDate hits, OR ahead of it if config allows pre-launch entry)
-
-    Returns a list of pseudo-tracking dicts shaped to be drop-in-compatible
-    with the older xTracker tracking format used downstream:
-      { id, title, startDate, endDate, marketLink, source: 'gamma_series' }
-    """
-    url = f"{GAMMA_BASE}/series"
-    async with httpx.AsyncClient(timeout=15) as client:
-        try:
-            r = await client.get(url, params={"slug": series_slug})
-            r.raise_for_status()
-            payload = r.json()
-        except Exception as e:
-            log.warning(f"fetch_active_auctions_from_series({series_slug}) failed: {e}")
-            return []
-
-    if not isinstance(payload, list) or not payload:
-        return []
-    events = payload[0].get("events") or []
-    now = datetime.now(timezone.utc)
-    out = []
-    for e in events:
-        sd, ed = e.get("startDate", ""), e.get("endDate", "")
-        if not (sd and ed):
-            continue
-        try:
-            s = datetime.fromisoformat(sd.replace("Z", "+00:00"))
-            edt = datetime.fromisoformat(ed.replace("Z", "+00:00"))
-        except (ValueError, TypeError):
-            continue
-        if edt < now:
-            continue  # already past
-        if (s - now).total_seconds() / 86400.0 > lookahead_days:
-            continue  # too far in the future
-        slug = e.get("slug") or ""
-        out.append({
-            "id": str(e.get("id", "")),
-            "title": e.get("title", ""),
-            "startDate": sd,
-            "endDate": ed,
-            "marketLink": f"https://polymarket.com/event/{slug}" if slug else "",
-            "source": "gamma_series",
-        })
-    return out
 
 
 async def fetch_active_short_window_trackings(
