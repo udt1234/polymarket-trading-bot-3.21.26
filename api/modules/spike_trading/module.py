@@ -39,12 +39,7 @@ from api.modules.spike_trading.data import (
 )
 from api.modules.spike_trading.decision import (
     PositionState,
-    classify_decision,
-    classify_decision_v2,
-    should_market_sell,
-    should_cancel_aggressive_tiers,
     adaptive_buy_price,
-    trailing_stop_price,
     slow_bleed_sell_price,
 )
 from api.modules.spike_trading.strategies import get_strategy, all_strategy_names
@@ -718,46 +713,10 @@ class SpikeTradingModule(BaseModule):
         except ValueError:
             return 0
 
-    # Legacy single-bracket builder kept for backwards-compat with any code
-    # that may still call it. New callers should use _build_buy_ladder_for_profile.
-    def _build_buy_ladder(self, module_id: str, market: dict, cfg: dict) -> list[Signal]:
-        signals = []
-        bid = float(market.get("best_bid") or 0.0)
-        ask = float(market.get("best_ask") or 1.0)
-        ladder = cfg.get("buy_ladder")
-        if isinstance(ladder, list) and ladder:
-            tiers = [
-                (i + 1, float(t.get("price", 0.0)), float(t.get("pct", 0.0)),
-                 t.get("label", f"tier{i+1}"))
-                for i, t in enumerate(ladder)
-            ]
-        else:
-            tiers = [
-                (1, float(cfg.get("buy_tier_1_price", 0.0)), float(cfg.get("buy_tier_1_pct", 0.0)), "tier1"),
-                (2, float(cfg.get("buy_tier_2_price", 0.0)), float(cfg.get("buy_tier_2_pct", 0.0)), "tier2"),
-            ]
-        for tier_idx, target, pct, label in tiers:
-            if target <= 0 or pct <= 0:
-                continue
-            limit_price = adaptive_buy_price(bid, ask, target)
-            signals.append(Signal(
-                module_id=module_id,
-                market_id=market["market_id"],
-                bracket=cfg.get("bracket_pattern", "<40"),
-                side="BUY",
-                edge=0.0, model_prob=0.0, market_price=limit_price,
-                kelly_pct=pct * cfg.get("bracket_cap_pct_of_bankroll", 0.05),
-                confidence=0.5,
-                best_bid=bid, best_ask=ask,
-                token_id=market.get("token1"),
-                metadata={
-                    "strategy": "spike_trading", "signal_type": "spike", "tier": tier_idx, "tier_label": label,
-                    "tier_type": "buy", "skip_edge_check": True,
-                    "target_price": target, "adaptive_price": limit_price,
-                    "event_slug": market.get("slug"),
-                },
-            ))
-        return signals
+    # Legacy single-bracket builder (`_build_buy_ladder`) removed 2026-05-16.
+    # Only `_build_buy_ladder_for_profile` is in use. Legacy config keys
+    # (`buy_ladder` with pct, `buy_tier_*_price/pct`, `bracket_pattern`)
+    # also dropped — see `module_config.py` for the canonical schema.
 
     # Minimum acceptable bid for a SELL-NOW exit. Below this we don't dump
     # at the bid (would functionally be a market order at 0). Instead we
