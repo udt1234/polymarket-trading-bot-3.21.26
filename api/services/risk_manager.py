@@ -54,8 +54,13 @@ class RiskManager:
                 self.circuit_breaker_tripped = state.get("tripped", False)
                 self._cooldown_until = state.get("cooldown_until", 0)
                 log.info(f"Loaded circuit breaker state: losses={self.consecutive_losses}, tripped={self.circuit_breaker_tripped}")
-        except Exception:
-            pass
+        except Exception as e:
+            # Was silently swallowed pre-2026-05-16. If state load fails on
+            # boot, we silently default to consecutive_losses=0 + tripped=False,
+            # which means a real prior trip would be FORGOTTEN and the bot
+            # would resume trading despite the recent loss streak. Surface so
+            # the operator can investigate before that becomes a real loss.
+            log.error(f"_load_persisted_state failed — circuit breaker resumes at DEFAULT (0 losses, not tripped); investigate: {e}")
 
     def _persist_state(self):
         try:
@@ -68,8 +73,12 @@ class RiskManager:
                     "cooldown_until": self._cooldown_until,
                 },
             }).execute()
-        except Exception:
-            pass
+        except Exception as e:
+            # If persist fails, the next process restart will read whatever
+            # was last successfully persisted. That could roll BACK a real
+            # circuit-breaker trip, causing the bot to resume trading on a
+            # losing streak. Surface to logs.
+            log.error(f"_persist_state failed — circuit-breaker state may not survive restart (losses={self.consecutive_losses}, tripped={self.circuit_breaker_tripped}): {e}")
 
     def check(self, signal: Signal) -> tuple[bool, str]:
         settings = get_settings()
