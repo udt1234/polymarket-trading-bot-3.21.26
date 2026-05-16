@@ -16,7 +16,9 @@ DEFAULT_CONFIG = {
     "daily_loss_circuit_pct": -2.0,
     "whale_perf_gate_window": 10,
     "whale_perf_gate_min_roi_pct": -30.0,
-    "shadow_mode": True,
+    # Default OFF so a freshly enabled module emits signals immediately.
+    # Operators can flip this on per-module from the dashboard for dry-run.
+    "shadow_mode": False,
 }
 
 
