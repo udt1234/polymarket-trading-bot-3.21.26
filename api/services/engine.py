@@ -366,6 +366,22 @@ class TradingEngine:
 
         if not self._check_data_freshness():
             log.warning(f"Stale data detected (>{STALE_DATA_THRESHOLD_HOURS}h) — exits ran, skipping new entries this cycle")
+            # Write a decision-log heartbeat even on the stale-data path so
+            # the freshness check can self-recover. Without this, an
+            # initially-stale cycle never writes a 'decision' log, so the
+            # NEXT cycle's freshness check still sees stale data → return →
+            # never writes a decision log → deadlock forever (observed
+            # 2026-05-15: 24h cycle stall recovered only via manual SQL).
+            try:
+                sb = get_supabase()
+                sb.table("logs").insert({
+                    "log_type": "decision",
+                    "severity": "info",
+                    "message": f"Cycle: skipped entries (stale data >{STALE_DATA_THRESHOLD_HOURS}h); exits + alerts still ran. cycle={self._cycle_count}",
+                    "metadata": {"trigger": "stale_data_skip"},
+                }).execute()
+            except Exception:
+                pass
             # Fire stale-data alert. Cooldown inside notify_stale_data prevents
             # spam if it stays stale for hours. Include the active-module
             # handles so the alert tells the operator which feeds to check.
@@ -377,7 +393,7 @@ class TradingEngine:
                         h = m.get_handle()
                         if h:
                             affected.append(h)
-                    except Exception:
+                    except (NotImplementedError, Exception):
                         pass
                 _fire_and_forget_async(notify_stale_data(
                     handle="all", hours=STALE_DATA_THRESHOLD_HOURS, source="signals",
@@ -719,8 +735,13 @@ class TradingEngine:
                 module = self.registry.for_db_row(m)
                 if not module:
                     continue
-                handle = module.get_handle()
-                platform = module.get_platform()
+                try:
+                    handle = module.get_handle()
+                    platform = module.get_platform()
+                except NotImplementedError:
+                    continue
+                if not handle or not platform:
+                    continue
 
                 try:
                     # Window-aware: spike-style modules ignore Elon's monthly
@@ -888,8 +909,13 @@ class TradingEngine:
                 module = self.registry.for_db_row(mod)
                 if not module:
                     continue
-                handle = module.get_handle()
-                platform = module.get_platform()
+                try:
+                    handle = module.get_handle()
+                    platform = module.get_platform()
+                except NotImplementedError:
+                    continue
+                if not handle or not platform:
+                    continue
 
                 trackings = _run_async(_fetch_trackings_raw(handle, platform))
                 if not trackings:
@@ -971,8 +997,15 @@ class TradingEngine:
                 module = self.registry.for_db_row(mod)
                 if not module:
                     continue
-                handle = module.get_handle()
-                platform = module.get_platform()
+                try:
+                    handle = module.get_handle()
+                    platform = module.get_platform()
+                except NotImplementedError:
+                    # Module doesn't expose a single handle (e.g. copy_trading
+                    # mirrors a wallet, not a social feed). Skip insta-buy.
+                    continue
+                if not handle or not platform:
+                    continue
                 try:
                     trackings = _run_async(_fetch_trackings_raw(handle, platform))
                 except Exception as e:
