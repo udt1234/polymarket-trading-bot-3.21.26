@@ -279,11 +279,27 @@ class ElonTweetsModule(BaseModule):
         except Exception as e:
             log.warning(f"divergence detector failed (non-blocking): {e}")
 
+        # MIN_PRICE_FLOOR must match api/services/executor.py to avoid emitting
+        # signals the executor will silently reject. 0.001 = 0.1¢, the
+        # Polymarket CLOB tick. Anything below is impossible to fill.
+        MIN_PRICE_FLOOR = 0.001
+
         signals = []
+        rejected_floor = 0
+        empty_book_brackets: list[str] = []
         for bracket_label, model_prob in bracket_probs.items():
             market_price = market_prices.get(bracket_label, 0)
             if market_price <= 0 or market_price >= 1:
                 continue
+            if market_price < MIN_PRICE_FLOOR:
+                rejected_floor += 1
+                continue
+            # Diagnostic: if this bracket is in our top-N (we tried to fetch a
+            # book) but the book came back empty, log it so we can detect
+            # bracket-name mismatches between Gamma's `groupItemTitle` and the
+            # CLOB key (root cause: normalize_bracket round-trip drift).
+            if bracket_label in top_bracket_names and not order_books.get(bracket_label):
+                empty_book_brackets.append(bracket_label)
 
             sizing = kelly_sizing(
                 model_prob, market_price,
@@ -342,6 +358,14 @@ class ElonTweetsModule(BaseModule):
         # which loads stop_loss_pct from module config via the BaseModule API
         # and runs every cycle. Don't append SELL signals here — they would
         # be rejected by _check_edge_threshold (edge=0 < min_edge_threshold).
+
+        if empty_book_brackets:
+            self._log(sb, module_id, "decision", "warning",
+                      f"Empty order books for top brackets: {empty_book_brackets} — possible "
+                      f"normalize_bracket() mismatch between Gamma and CLOB.")
+        if rejected_floor:
+            self._log(sb, module_id, "decision", "info",
+                      f"Pre-emit floor filter dropped {rejected_floor} brackets (price < {MIN_PRICE_FLOOR})")
 
         self._log(sb, module_id, "decision", "info",
                   f"Cycle: slug={slug}, total={running_total}, elapsed={elapsed_days:.1f}/{total_days:.1f}d, "
