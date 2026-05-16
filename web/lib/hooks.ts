@@ -83,3 +83,21 @@ export function useDebounce<T>(value: T, delay: number): T {
   }, [value, delay])
   return debounced
 }
+
+/**
+ * Set the browser tab title. Appends " — PolyBot" so multiple open tabs
+ * are distinguishable at a glance. Pass null to fall back to the root
+ * title from app/layout.tsx (just "PolyBot").
+ *
+ * Examples:
+ *   useDocumentTitle("Dashboard")           // tab shows "Dashboard — PolyBot"
+ *   useDocumentTitle(module?.name ?? null)  // tab shows "Spike Trading V2 — PolyBot"
+ */
+export function useDocumentTitle(title: string | null | undefined) {
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    const prev = document.title
+    document.title = title ? `${title} — PolyBot` : "PolyBot"
+    return () => { document.title = prev }
+  }, [title])
+}

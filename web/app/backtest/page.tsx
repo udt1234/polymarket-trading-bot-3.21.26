@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { apiFetch } from "@/lib/api"
+import { useDocumentTitle } from "@/lib/hooks"
 import { cn, formatCurrency } from "@/lib/utils"
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -82,6 +83,7 @@ function StatCard({ label, value, sub, positive }: { label: string; value: strin
 }
 
 export default function BacktestPage() {
+  useDocumentTitle("Backtest")
   const [query, setQuery] = useState("")
   const [events, setEvents] = useState<GammaEvent[]>([])
   const [searching, setSearching] = useState(false)

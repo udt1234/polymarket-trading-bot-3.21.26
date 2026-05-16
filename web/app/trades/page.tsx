@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useApi } from "@/lib/hooks"
+import { useApi, useDocumentTitle } from "@/lib/hooks"
 import { DataTable } from "@/components/shared/data-table"
 import { TabToggle } from "@/components/shared/tab-toggle"
 
@@ -24,6 +24,7 @@ function exportCsv(columns: string[], rows: Record<string, any>[], filename: str
 }
 
 export default function TradesPage() {
+  useDocumentTitle("Trades")
   const [view, setView] = useState("bot")
   const { data } = useApi<{ data: any[]; total: number }>("/api/trades/")
   const { data: walletTrades } = useApi<any>("/api/dashboard/wallet/trades", [view])

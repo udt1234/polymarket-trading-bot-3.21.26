@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { useApi, useMutation } from "@/lib/hooks"
+import { useApi, useMutation, useDocumentTitle } from "@/lib/hooks"
 import { ModuleCard } from "@/components/modules/module-card"
 
 export default function ModulesPage() {
+  useDocumentTitle("Modules")
   const { data: modules, refetch } = useApi<any[]>("/api/modules/")
   const { mutate: createModule, loading: creating } = useMutation<any>("/api/modules/", "POST")
 

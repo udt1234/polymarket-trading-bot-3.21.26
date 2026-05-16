@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useApi } from "@/lib/hooks"
+import { useApi, useDocumentTitle } from "@/lib/hooks"
 import { cn, fmtPrice } from "@/lib/utils"
 import { Database, FileText, BarChart3, DollarSign } from "lucide-react"
 
@@ -15,6 +15,7 @@ const HANDLES = [
 const DOWS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 export default function DataExplorerPage() {
+  useDocumentTitle("Data Explorer")
   const [handle, setHandle] = useState("realDonaldTrump")
   const [view, setView] = useState<View>("raw_posts")
   const [start, setStart] = useState("")

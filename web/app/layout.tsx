@@ -9,7 +9,13 @@ import { MobileNav } from "@/components/layout/mobile-nav"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "PolyMarket Bot",
+  // Template applies to every child page that exports its own `title`.
+  // Module pages also set `document.title` dynamically per-module (see
+  // web/app/modules/[id]/page.tsx) so each open tab shows the module name.
+  title: {
+    default: "PolyBot",
+    template: "%s — PolyBot",
+  },
   description: "Polymarket prediction market trading platform",
   manifest: "/manifest.json",
 }

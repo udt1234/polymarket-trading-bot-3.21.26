@@ -1,12 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { useApi } from "@/lib/hooks"
+import { useApi, useDocumentTitle } from "@/lib/hooks"
 import { DataTable } from "@/components/shared/data-table"
 import { TabToggle } from "@/components/shared/tab-toggle"
 import { formatCurrency } from "@/lib/utils"
 
 export default function PortfolioPage() {
+  useDocumentTitle("Portfolio")
   const [view, setView] = useState("bot")
   const { data: positions } = useApi<any[]>("/api/portfolio/positions")
   const { data: exposure } = useApi<any>("/api/portfolio/exposure")
