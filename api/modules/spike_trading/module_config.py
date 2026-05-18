@@ -122,7 +122,7 @@ DEFAULT_CONFIG = {
     "buy_tier_1_pct":   0.30,
     "buy_tier_2_price": 0.005,
     "buy_tier_2_pct":   0.30,
-    "buy_cancel_after_hours": 24,
+    "buy_cancel_after_hours": 0,  # 0 = disabled (lottery strategy holds to resolution)
     "sell_multipliers": [1.5, 2.0, 4.0, 8.0],
     "sell_multiplier_pcts": [0.30, 0.30, 0.20, 0.20],
     "take_profit_pct": 7.0,

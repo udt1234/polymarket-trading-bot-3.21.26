@@ -47,7 +47,7 @@ class CheapLotteryPacing(Strategy):
             {"price": 0.10, "notional_usd": 5.0, "label": "pay_up"},
             {"price": 0.22, "notional_usd": 5.0, "label": "wider_insurance"},
         ],
-        "buy_cancel_after_hours": 24,
+        "buy_cancel_after_hours": 0,  # 0 = disabled (buy to resolution)
         "enter_after_hours_elapsed": 0,    # buy from auction start
         "sell_multipliers": [1.5, 2.0, 4.0, 8.0],
         "sell_multiplier_pcts": [0.30, 0.30, 0.20, 0.20],
@@ -62,11 +62,15 @@ class CheapLotteryPacing(Strategy):
     }
 
     def can_enter(self, state, params):
-        cancel_after = float(params.get("buy_cancel_after_hours", 24))
+        # buy_cancel_after_hours = 0 disables the cutoff entirely. Spike's
+        # lottery-ticket strategy buys ALL the way to resolution — there's
+        # no asymmetric downside to a 47h entry vs a 1h entry when prices
+        # are 0.3¢-12¢ and we hold to resolution.
+        cancel_after = float(params.get("buy_cancel_after_hours", 0))
         enter_after = float(params.get("enter_after_hours_elapsed", 0))
         if state.elapsed_hours < enter_after:
             return False, f"too early (elapsed {state.elapsed_hours:.1f}h < threshold {enter_after}h)"
-        if state.elapsed_hours > cancel_after:
+        if cancel_after > 0 and state.elapsed_hours > cancel_after:
             return False, f"past cutoff (elapsed {state.elapsed_hours:.1f}h > {cancel_after}h)"
         return True, "ok"
 
