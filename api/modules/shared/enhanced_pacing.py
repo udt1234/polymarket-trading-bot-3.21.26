@@ -113,7 +113,11 @@ def dow_deviation(
     expected = dow_avg * cumulative_pct
 
     deviation = current_count - expected
-    deviation_pct = (deviation / expected * 100) if expected > 0 else 0
+    # Guard against tiny `expected` values producing absurd percentages
+    # (we've seen +15044% / +752% from expected ~0.6). Require at least
+    # 5 expected posts before reporting a percentage — below that the
+    # ratio is statistical noise, not a real DOW signal.
+    deviation_pct = (deviation / expected * 100) if expected >= 5 else 0
 
     if deviation_pct > 10:
         status = "ahead"

@@ -266,16 +266,23 @@ class LiveExecutor:
             if not all([api_key, secret, passphrase, private_key]):
                 raise ValueError("Missing Polymarket credentials in active profile")
 
+            # py_clob_client requires the typed ApiCreds dataclass, not a
+            # plain dict. ClobClient.__init__ accepts the dict without error,
+            # but the first order call fails with:
+            #   AttributeError: 'dict' object has no attribute 'api_key'
+            # at py_clob_client/client.py:631 (post_order -> order_to_json).
+            # Confirmed against the installed SDK 2026-05-17.
             from py_clob_client.client import ClobClient
+            from py_clob_client.clob_types import ApiCreds
             self._client = ClobClient(
                 host="https://clob.polymarket.com",
                 key=private_key,
                 chain_id=137,
-                creds={
-                    "apiKey": api_key,
-                    "secret": secret,
-                    "passphrase": passphrase,
-                },
+                creds=ApiCreds(
+                    api_key=api_key,
+                    api_secret=secret,
+                    api_passphrase=passphrase,
+                ),
             )
         return self._client
 
