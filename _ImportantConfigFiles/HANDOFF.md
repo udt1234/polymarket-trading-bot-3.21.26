@@ -1,5 +1,35 @@
 # PolyMarket Bot — Handoff
 
+## 🔮 Backlog (parked, prioritized later)
+
+### Gnosis-Safe Deployer Watcher — front-running new market listings (deferred 2026-05-18)
+**Status**: Researched + scoped. NOT building yet — current modules' fill problems must clear first.
+
+**Edge thesis** (validated via outside research):
+Polymarket deploys new auction markets from a deterministic gnosis-safe wallet
+on Polygon. Other bots wait for the Polymarket REST API to surface new
+markets, which lags the on-chain deploy by 5-30 min. A bot watching the
+deployer wallet directly on Polygon catches a new listing 5-15 min before
+the REST-polling bots, hitting the order book while it is still thin.
+
+**Build plan when prioritized**:
+1. Identify the deployer wallet (Polygonscan trace on 5-10 recent Polymarket
+   market contracts; confirm a single deterministic source address).
+2. Subscribe to Polygon `newPendingTransactions` via Alchemy free tier
+   (300M compute units / mo, plenty for one-address filter).
+3. Decode calldata on detection -> extract new conditionId / market slug.
+4. Bridge to existing `engine.insta_buy()` ladder once Polymarket CLOB API
+   exposes the new market (poll for ~30-120s after on-chain confirmation).
+
+**Effort**: ~1 day of focused work.
+
+**Why deferred**: insta-buying new auctions is solving the wrong problem
+when the bot is rejecting ~1000+ signals/day on auctions that ARE already
+listed. Fix existing-market fill quality first (PRs #71-75 + this PR),
+then revisit.
+
+---
+
 ## Current State (2026-05-13)
 Bot LIVE on Trump + Elon (ensemble) + Spike Trading (multi-auction multi-strategy plugin architecture; paper-trading via global `PAPER_MODE=true`). All on Railway. **Copy Trading module Phase 1 shipped 2026-05-13** — paper/shadow only, no wallets registered yet; user adds via SQL insert into `copy_trade_wallets` to activate. Dashboard + live promotion in Phase 2/3.
 

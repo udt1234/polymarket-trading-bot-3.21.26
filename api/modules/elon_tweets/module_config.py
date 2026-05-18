@@ -13,14 +13,22 @@ DEFAULT_CONFIG = {
     "enabled_models": ["pace", "bayesian", "dow", "historical", "hawkes"],
     "strategy_preset": "full",
     "entry_gate_pct": 0.0,
+    # 2026-05-18: regime_modifier OFF by default for Elon. QUIET regime was
+    # shrinking every Kelly bet by 10% (0.90×), pushing model edge below the
+    # min_edge_threshold and silently emitting 0 signals every cycle. The
+    # backtest already validated leaving it off; Sir flipped it after seeing
+    # 24h of `signals=0` cycles.
     "use_signal_modifier": False,
-    "use_regime_modifier": True,
+    "use_regime_modifier": False,
     "use_hawkes_modifier": True,
     "stop_loss_pct": 0.30,
     "take_profit_pct": 0.0,
     "trailing_stop_pct": 0.30,
     "max_brackets_per_cycle": 5,
-    "min_edge_threshold": 0.02,
+    # Lowered 2026-05-18: 0.02 was blocking every Elon signal in QUIET regime
+    # because model_prob × 0.90 (regime damp) - market_price rarely cleared
+    # 2¢. With regime_modifier now off AND threshold at 1¢, signals can pass.
+    "min_edge_threshold": 0.01,
     "floor_brackets_by_running_total": True,
     "auction_aggregate_price_ceiling": 0.65,
     "historical_blend_weight": 0.70,

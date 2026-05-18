@@ -482,6 +482,14 @@ class RiskManager:
         # AND condition only matched when BOTH defaults were present, leaving a
         # gap where best_bid=0.0 + a non-1 ask passed through.
         if signal.best_bid == 0.0 or signal.best_ask == 1.0:
+            # Cheap-lottery BUYs intentionally target thin/empty books — buying
+            # 0.3¢-5¢ tickets and holding to resolution is the whole thesis.
+            # Killing them because Gamma returned bestBid=null was eating 90%
+            # of Truth Social's signals on 100-119 / 120-139 brackets where
+            # nobody else is bidding. Let cheap BUYs through; SELLs still
+            # require a real book (crossing on exit is real slippage).
+            if signal.side == "BUY" and signal.market_price < 0.10:
+                return True, ""
             return False, "no order book data available — cannot verify spread"
         spread = signal.best_ask - signal.best_bid
         if spread <= 0:
