@@ -216,14 +216,33 @@ class SpikeTradingModule(BaseModule):
             return []
 
         all_signals: list[Signal] = []
+        any_active_auction = False
         for module_db in matching_rows:
             try:
-                all_signals.extend(await self._evaluate_one_row(sb, module_db))
+                sigs, had_active = await self._evaluate_one_row(sb, module_db)
+                all_signals.extend(sigs)
+                any_active_auction = any_active_auction or had_active
             except Exception as e:
                 log.error(f"_evaluate_one_row failed for module_id={module_db.get('id')}: {e}", exc_info=True)
+
+        # Health assertions fire ONCE per engine cycle, not once per DB row.
+        # Spike has two DB rows ("Spike Trading" + "Spike Trading V2") sharing
+        # this class — firing inside _evaluate_one_row would double-count the
+        # 6-hour cycle history (20 samples in 10 real cycles) and trigger
+        # false-positive "module ran N cycles with 0 signals" assertions.
+        try:
+            self._record_cycle(
+                signals=all_signals,
+                context={"active_auction": any_active_auction},
+            )
+            health = self._run_health_assertions()
+            self._persist_health(health)
+        except Exception as he:
+            log.warning(f"[{self.name}] health hook failed: {he}")
+
         return all_signals
 
-    async def _evaluate_one_row(self, sb, module_db: dict) -> list[Signal]:
+    async def _evaluate_one_row(self, sb, module_db: dict) -> tuple[list[Signal], bool]:
         module_id = module_db["id"]
         # DB status semantics:
         #   'active' or 'paper' -> evaluate normally; the engine's executor
@@ -231,15 +250,16 @@ class SpikeTradingModule(BaseModule):
         #   'inactive' (or anything else) -> short-circuit, no signals.
         db_status = (module_db.get("status") or "").lower()
         if db_status not in ("active", "paper"):
-            return []
+            return [], False
         cfg = get_module_config(module_id)
 
         signals: list[Signal] = []
+        any_active_auction = False
         auction_types = cfg.get("auction_types") or []
         if not auction_types:
             self._log(sb, module_id, "decision", "warning",
                       "No auction_types configured — module idle")
-            return []
+            return [], False
 
         for at in auction_types:
             if not at.get("enabled"):
@@ -254,6 +274,8 @@ class SpikeTradingModule(BaseModule):
                     target_window_days=at.get("window_days", 2),
                     series_slug=at.get("series_slug"),
                 )
+                if trackings:
+                    any_active_auction = True
             except Exception as e:
                 log.exception(f"discovery failed for {at.get('id')}: {e}")
                 self._log(sb, module_id, "system", "error",
@@ -284,7 +306,7 @@ class SpikeTradingModule(BaseModule):
                         self._log(sb, module_id, "system", "error",
                                   f"profile {profile.get('label')} failed: {e}")
 
-        return signals
+        return signals, any_active_auction
 
     # ------------------------------------------------------------------
     # Per-market state machine
