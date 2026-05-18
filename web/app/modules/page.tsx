@@ -115,6 +115,7 @@ export default function ModulesPage() {
             inactiveReasonHuman={m.inactive_reason_human}
             pnl={Number(m.pnl) || 0}
             positions={Number(m.open_positions) || 0}
+            realtimeHealth={m.realtime_health}
           />
         ))}
       </div>
