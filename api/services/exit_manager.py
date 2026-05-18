@@ -25,6 +25,10 @@ def release_stuck_closing_positions() -> int:
     try:
         # Supabase doesn't support a single conditional bulk update with a
         # timestamp WHERE on `updated_at`, so we list and individually release.
+        # `updated_at` is added by migration 020_positions_updated_at.sql
+        # with a trigger that auto-bumps it on UPDATE. Before that migration
+        # this query failed every cycle ("column does not exist") and stuck
+        # positions never recovered.
         stuck = sb.table("positions").select("id,updated_at,bracket,module_id").eq("status", "closing").lt("updated_at", cutoff).execute()
         released = 0
         for row in (stuck.data or []):

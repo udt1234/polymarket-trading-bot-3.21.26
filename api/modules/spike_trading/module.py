@@ -225,21 +225,13 @@ class SpikeTradingModule(BaseModule):
             except Exception as e:
                 log.error(f"_evaluate_one_row failed for module_id={module_db.get('id')}: {e}", exc_info=True)
 
-        # Health assertions fire ONCE per engine cycle, not once per DB row.
-        # Spike has two DB rows ("Spike Trading" + "Spike Trading V2") sharing
-        # this class — firing inside _evaluate_one_row would double-count the
-        # 6-hour cycle history (20 samples in 10 real cycles) and trigger
-        # false-positive "module ran N cycles with 0 signals" assertions.
-        try:
-            self._record_cycle(
-                signals=all_signals,
-                context={"active_auction": any_active_auction},
-            )
-            health = self._run_health_assertions()
-            self._persist_health(health)
-        except Exception as he:
-            log.warning(f"[{self.name}] health hook failed: {he}")
-
+        # Health hook removed 2026-05-18: a prior session deleted the
+        # supporting methods (_record_cycle / _run_health_assertions /
+        # _persist_health) from BaseModule. The call sites here were left
+        # behind, logging a warning every cycle. The Spike-only realtime
+        # health story is now covered by /api/modules/{id}/realtime-health
+        # (PR #74) which reads logs + trades directly — no per-module hook
+        # needed.
         return all_signals
 
     async def _evaluate_one_row(self, sb, module_db: dict) -> tuple[list[Signal], bool]:
