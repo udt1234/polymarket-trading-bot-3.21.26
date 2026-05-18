@@ -464,7 +464,12 @@ class SpikeTradingModule(BaseModule):
             except (TypeError, ValueError):
                 shares = 0.0
             if shares <= 0:
-                self._log(sb, module_id, "risk", "warning",
+                # Self-healing path — severity=info because the row is
+                # auto-liquidated on the same tick. Was 'warning' which
+                # painted the dashboard yellow every cycle for benign
+                # 0-share rows that never got buy fills (typical for the
+                # 0.3¢/0.5¢ tiers on the spike ladder).
+                self._log(sb, module_id, "risk", "info",
                           f"[{label}] {market_id} SELL-NOW with 0 shares "
                           f"(phantom row {position['id'][:8]}…). "
                           f"Auto-liquidating spike_positions row; no SELL emitted.")
