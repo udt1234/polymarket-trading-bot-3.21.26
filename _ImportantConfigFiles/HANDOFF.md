@@ -30,109 +30,85 @@ then revisit.
 
 ---
 
-## Current State (2026-05-13)
-Bot LIVE on Trump + Elon (ensemble) + Spike Trading (multi-auction multi-strategy plugin architecture; paper-trading via global `PAPER_MODE=true`). All on Railway. **Copy Trading module Phase 1 shipped 2026-05-13** — paper/shadow only, no wallets registered yet; user adds via SQL insert into `copy_trade_wallets` to activate. Dashboard + live promotion in Phase 2/3.
+## 2026-05-18 — Module fill quality + observability sprint (PRs #68-76)
 
-### 2026-05-11 — Dashboard cleanup + bracket-grid fixes
-- **Modules-list P&L** — `/api/modules/` now enriches each row with `pnl` (realized + unrealized for OPEN positions) and `open_positions` count. Card stops showing $0 / 0 placeholder.
-- **Bracket Analysis current-grid filter** — `auction_archive` rows are now filtered to the current Polymarket bracket grid (≥50% overlap) before computing stats. Stops mixing Elon's old 0-9/10-19/.../80+ grid into the current `<40, 40-64, ..., 240+` grid. Resilient to empty `bracket_outcomes` by walking back up to 5 rows.
-- **Numeric bracket sort everywhere** — `<40` first, `240+` last via `sortBrackets()` helper in `web/lib/utils.ts`. Applied to price heatmaps, auction-deep-dive, bracket_stats backend (`_bracket_lo`).
-- **Posting Patterns mega-card** — replaced 4 redundant cards (Post Timing Heatmap, Post Frequency, DOW Averages Heatmap, Hourly Posts Heatmap) with one card + 3 tabs (Day×Hour grid, Hour-of-Day strip, Auction Progress) + plain-English headline. New `historical_daily` field on pacing payload (per-elapsed-day post curve from completed matching-window trackings). Deleted `post-timing-grid.tsx` + `post-frequency-chart.tsx`.
+**Outcome**: Truth Social trading actively (12+ fills/24h). Elon + Copy Trading cycling cleanly with new gates. Dashboard now surfaces "is this module ACTUALLY working" separately from operator-intent status. Daily QA agent scheduled (free, runs under subscription).
 
-## ⭐ Cross-Module Patterns (apply to ALL modules going forward)
+### Shipped
+- **PR #68** copy_trading — shadow_mode default → False, heartbeat log, strategy string aligned
+- **PR #69** elon_tweets — pre-emit MIN_PRICE_FLOOR + empty-book diagnostic
+- **PR #70** truth_social — tick-snap at emit + pre-emit floor filter
+- **PR #71** spike — CLOB ApiCreds dataclass fix (was crashing 100% of cycles)
+- **PR #72** spike — health hook moved out of per-row loop (later removed in PR #76, methods never existed)
+- **PR #73** spike — removed 24h `buy_cancel_after_hours` cutoff on Cheap_Lottery_Pacing (lottery = hold to resolution, no cutoff needed)
+- **PR #74** dashboard — `realtime_health` field + HealthBadge component (Trading/Cycling/Stuck)
+- **PR #75** risk_manager — thin-book BUY bypass for cheap-lottery (<10¢) signals + Elon QUIET regime damp disabled + min_edge_threshold lowered 0.02→0.01
+- **PR #76** cleanup — orphan `_record_cycle` calls removed + migration 020 added `positions.updated_at` column + auto-bump trigger (was erroring exit_manager every cycle) + Spike Trading dropped active→paper to clear Polymarket regional geoblock
 
-These are architectural patterns proven on Spike Trading. **Other modules should adopt them.** Each module's `module.py` + dashboard surface should match.
+### Live config patches (not just code — applied directly to Supabase)
+- Copy Trading: `max_trade_age_sec` 300→900, `max_price_drift_pct` 20→10, `shadow_mode` true→false
+- Elon Tweets: `use_regime_modifier` true→false, `min_edge_threshold` 0.02→0.01
+- Spike Trading: `status` active→paper (Polymarket 403 geoblock)
 
-### 1. Pluggable Strategy Plugins
-- Module picks logic via a `Strategy` subclass registry (`api/modules/spike_trading/strategies/`).
-- Each strategy implements `can_enter`, `build_buy_ladder`, `classify`, `sell_targets`, `display_label`, `describe` + sets `DEFAULT_PARAMS`.
-- Auto-discovered via `__init_subclass__`. Adding a strategy = drop a file.
-- Registry pattern: `api/modules/spike_trading/strategies/__init__.py` (good model to copy).
+### Daily QA agent scheduled
+- `polymarket-bot-daily-qa` runs every day at 9 AM ET local
+- Cost $0 (runs under Sir's Claude Code subscription, NOT paid API)
+- Notify-only-on-failure: outputs `silent_pass` when all 8 checks green
+- 8 checks: cycles flowing, no critical errors, Truth Social fills, Copy whale polling, engine cycle freshness, rejection-volume sanity, geoblock watch, migration sanity
+- Caveat: only runs while Claude Code is open; if missed, fires on next launch
+- Task file: `C:\Users\darwi\.claude\scheduled-tasks\polymarket-bot-daily-qa\SKILL.md`
 
-### 2. Multi-Auction × Multi-Profile Config
-- Each module's config has `auction_types: [...]` list — each auction type holds a `bracket_profiles` list.
-- Per profile: `strategy_name`, `bracket_max_count`, `params` overrides.
-- Module's `_evaluate_async` iterates enabled auction_types × profiles, dispatches to plugin.
-- Frontend: `<AuctionTypesEditor>` component (in spike_trading components) handles nested editing.
-
-### 3. Pacing Prior — DOW-Aware + Recent-Regime
-- **Lesson** (2026-05-07): historical "weekly_totals" averages are stale. Past 2-day Elon auction means (94.7) didn't reflect his recent 23/day rate.
-- **Fix shipped in `api/routers/modules.py:get_pacing`**: blends three priors in this order:
-  1. `recency_weighted_averages(weekly_history)` — past matching-window event totals
-  2. **Recent flat-rate** — last N days of post counts × auction window length
-  3. **DOW-aware** — for each day in the auction window, sum the historical per-DOW avg
-- Helper: `fetch_recent_post_history(handle, platform, days=30)` in `polymarket.py` returns daily counts AND by-DOW breakdown.
-- Blend weight on recent prior tapers from 0.85 (fresh) to 0.20 (late).
-- **Apply to Trump + Elon ensemble**: their pacing endpoints currently only use the historical weekly mean. Should adopt the same recent + DOW prior.
-
-### 4. Polymarket-Native Bracket Discovery
-- **Always** pull bracket labels from the actual Polymarket auction (via `fetch_market_prices` + Gamma `/events` fallback for closed markets).
-- Don't hardcode bracket grids. Trump's old 11-bracket assumption was wrong for Elon.
-- Pattern: `api/routers/modules.py` lines 1080-1110 (computes `dynamic_brackets`).
-
-### 5. Window-Length Filter on Historical Means
-- `fetch_historical_weekly_totals(handle, weeks, platform, target_window_days=...)` filters past trackings by matching window length (±0.5d).
-- Without this, Elon's 7-day + monthly mixed into a "weekly" mean → garbage 2-day projections.
-- Same `target_window_days` param needed in any new module that pulls historical priors.
-
-### 6. Confidence Bands UI — Bot vs Polymarket
-- `<ConfidenceBands>` component shows BOT probability AND Polymarket price side-by-side per bracket.
-- Highlights edge (signed delta when ≥5pp disagreement).
-- Pattern: `web/app/modules/[id]/components/pacing-analysis.tsx`.
-- **Apply to Trump + Elon dashboards**: same component, same `marketPrices` prop.
-
-### 7. Schema-Driven Editable Config
-- `BaseModule.get_config_schema()` returns field descriptors.
-- Frontend `<DynamicConfigForm>` auto-renders editable inputs.
-- Adding a config knob = add to schema, no React work.
-
-### 8. Status Model: active / paper / inactive
-- 3 states only. `inactive` carries a structured `inactive_reason` (manual_pause / kill_switch / circuit_breaker / data_stale / error / scaffold).
-- Single dashboard dropdown: Real $Trades / Paper Trades / Pause.
-- Per-module executor routing: env `PAPER_MODE` is override-only; module status decides paper-vs-live per signal.
-
-### 9. Closed-Auction Override
-- When `is_complete=True`, projections override to actual outcome (100% on the winning bracket).
-- Lesson: never extrapolate past `remaining_days <= 0`.
-- Pattern: `api/routers/modules.py:get_pacing` — `if is_complete and running_total > 0` block.
-
-### 10. Verified-Parquet Ground Truth
-- Backtests should pull per-event winners from parquet via `verify_winrate_v2.py` pattern (group by event_stem, find winning bracket per event).
-- The `pct_resolved_yes` column in `per_bracket_end_price.csv` is **per-bracket, not per-event** — easy to misread. Always re-verify with per-event grouping.
+### Known issues remaining
+- Spike Trading + V2 don't write a `Cycle:` heartbeat log — Health Badge shows "Stuck" even when they're cycling. Next session: add a heartbeat log line at end of Spike's `_evaluate_async`.
+- APScheduler skipping some Spike cycles ("max running instances reached") — cycle takes >30s. Throughput half what config suggests. Investigate cycle latency.
+- Google Trends 429 rate-limited every Truth Social cycle. Cosmetic, falls back. Add caching or accept the noise.
 
 ---
 
-## Module Status
+## Current State (2026-05-13)
+Bot LIVE on Trump + Elon (ensemble) + Spike Trading (multi-auction multi-strategy plugin architecture; paper-trading via global `PAPER_MODE=true`). All on Railway. **Copy Trading module Phase 1 shipped 2026-05-13** — paper/shadow only, no wallets registered yet; user adds via SQL insert into `copy_trade_wallets` to activate. Dashboard + live promotion in Phase 2/3.
+
+## ⭐ Cross-Module Patterns (proven on Spike — apply to all)
+
+Documented in code now; one-liners here for the index.
+
+1. **Pluggable Strategy Plugins** — `api/modules/spike_trading/strategies/` registry. Drop file = new strategy.
+2. **Multi-Auction × Multi-Profile Config** — `auction_types[].bracket_profiles[]` with per-profile strategy + params.
+3. **Pacing Prior** — recent + DOW + window-filtered historical, blended (`api/routers/modules.py:get_pacing`).
+4. **Polymarket-Native Bracket Discovery** — pull from Gamma, never hardcode grid.
+5. **Window-Length Filter on Historical Means** — `target_window_days` filter on past trackings.
+6. **Confidence Bands UI** — bot prob vs Polymarket price side-by-side (`web/.../pacing-analysis.tsx`).
+7. **Schema-Driven Editable Config** — `BaseModule.get_config_schema()` + `<DynamicConfigForm>`.
+8. **Status Model** — active / paper / inactive with structured `inactive_reason`. Per-module executor routing.
+9. **Closed-Auction Override** — `is_complete=True` snaps projection to actual outcome.
+10. **Verified-Parquet Ground Truth** — per-event grouping for winrate, not per-bracket aggregate.
+11. **Realtime Health Badge** (2026-05-18) — runtime "actually working" state separate from operator-intent status. `/api/modules/{id}/realtime-health`.
+
+---
+
+## Module Status (as of 2026-05-18)
 
 | Module | Strategy | Status | Notes |
 |---|---|---|---|
-| **Trump (truth_social)** | ensemble (legacy) | active (paper) | NOT touched per user 2026-05-06 |
-| **Elon (elon_tweets)** | ensemble (legacy) | active (paper) | NOT touched |
-| **Spike Trading** | pluggable plugins | active (paper) | New architecture (commit 75d3567 + hardening 95cbf18) |
+| **Truth Social Posts** | ensemble | paper | 🟢 Trading — 12+ fills/24h |
+| **Elon Tweets** | ensemble | paper | 🟡 Cycling — QUIET regime + lowered edge threshold |
+| **Spike Trading** | pluggable plugins | paper | Dropped from active 2026-05-18 (Polymarket geoblock) |
+| **Spike Trading V2** | pluggable plugins | paper | Shares Python class with V1 |
+| **Copy Trading** | copy_trading | paper | 🟡 Cycling, polling Pestle wallet |
 
-### Spike Trading Plugin Inventory
-- `Cheap_Lottery_Pacing` — 5-tier descending ladder for `<40` brackets. Pacing classifier + sellnow grid + slow-bleed.
-- `Mid_Range_Spike` — 6h delayed entry, mid-priced ladder, absolute sell targets at 30/50/70¢. For arc-tradeable brackets (65-89, 90-114, 40-64).
-- `Big_Hold_Monthly` — week-1-only entry, hold to resolution, very loose stop. For monthly 1400+.
-
-Adding a strategy = new file in `api/modules/spike_trading/strategies/`.
+Spike plugin inventory: `Cheap_Lottery_Pacing` (5-tier `<40`), `Mid_Range_Spike` (6h delayed, arc 65-89/90-114/40-64), `Big_Hold_Monthly` (1400+).
 
 ---
 
 ## Open Work
 
 ### 🚦 LIVE-FLIP PROCEDURE (Spike Trading)
-1. **Run the token_id backfill** for any pre-existing open positions:
-   ```
-   python scripts/backfill_position_token_ids.py            # dry-run, prints would-write actions
-   python scripts/backfill_position_token_ids.py --apply    # writes
-   ```
-   Live SELLs refuse to submit when `positions.token_id IS NULL`. Backfill or close any paper-era open positions first.
-2. **Apply migration 015** (`positions_token_id.sql`) — adds the `token_id` column.
-3. **Verify Railway env vars on Bot-API service**: `PAPER_MODE=false`, `ENV=production`.
-4. **Verify `SLACK_WEBHOOK_URL`** (or equivalent — `notifications.py:send_slack`) is set; daily digests run at 9 AM ET + 5 PM ET.
-5. **Open the Spike Trading module dashboard** → status dropdown → "Real $ Trades". This writes `status='active'` to the modules row.
-6. **Watch the next cycle log** for `"Live executor ready"` and confirm the first signal is routed via LiveExecutor (or rejected with `signal has no token_id` if backfill missed something).
+1. **Polymarket geoblocks Railway US IP** (confirmed 2026-05-18 via 403 errors). Need VPN/region change BEFORE flipping live.
+2. Run `python scripts/backfill_position_token_ids.py --apply` (lives SELLs need `positions.token_id`).
+3. Apply migration 015 (`positions_token_id.sql`).
+4. Railway env: `PAPER_MODE=false`, `ENV=production`; `SLACK_WEBHOOK_URL` set.
+5. Dashboard → Spike module → status → "Real $ Trades" (writes `status='active'`).
+6. Watch next cycle log for `"Live executor ready"`.
 
 ### Whale Watching card (Phase 2 of `WHALE_BRACKET_CARDS_SPEC.md`)
 Zero files exist yet. Needs: `whale_snapshots` + `whale_wallet_profiles` Supabase tables, `whale_classifier.py` (5-archetype detection: Market-Maker / Tail Scooper / Spike Trader (=us) / Pace Chaser / Tail Punter), `whale_snapshot.py` orchestrator, nightly Railway cron, `/api/modules/{id}/whales` endpoint, 5 TSX components. Recommend: Spike-only first + 90-day backfill (~half a day). Spec estimate: 8-10 hr full Phase 2.

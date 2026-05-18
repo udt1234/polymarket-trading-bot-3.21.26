@@ -7,8 +7,14 @@
 - **Shadow Mode**: Paper trades alongside live for comparison
 - **Circuit Breaker**: Auto-halt after N consecutive losses, cooldown
 - **Auto-Kill Switch**: Pause module after N consecutive losses (default 5, togglable)
-- **Price Floor**: Reject paper trades with market_price < 0.01 (1¢)
+- **Price Floor**: Reject paper trades with market_price < 0.001 (0.1¢ tick floor)
+- **Tick-snap at emit** (2026-05-18): truth_social rounds market_price to bracket's min_tick_size before signal build, eliminates `below_min_tick_size` rejection
+- **Thin-book BUY bypass** (2026-05-18): risk_manager._check_spread lets cheap-lottery BUYs (<10¢) through when Gamma returns null bid (lottery thesis = buy thin, hold to resolution)
 - **Liquidity Check**: Paper fills at actual best ask/bid, capped at available depth
+
+## Observability
+- **HealthBadge** (2026-05-18): runtime "is this module actually working" badge on every module card + detail page. States: 🟢 Trading (fills <24h) / 🟡 Cycling (cycling but 0 fills, shows reason) / 🔴 Stuck (errors or no heartbeat). Computed server-side via `/api/modules/{id}/realtime-health` — 3 small Supabase reads per module
+- **Daily QA agent** (2026-05-18): scheduled task runs every 9 AM ET, 8 health checks, notifies Sir only on failure. Free under Claude Code subscription. Task file at `~/.claude/scheduled-tasks/polymarket-bot-daily-qa/`
 
 ## Trump Module (Full Feature Set)
 - **5-Model Ensemble**: Linear Pace, Bayesian, DOW-Hourly, Historical, Hawkes
