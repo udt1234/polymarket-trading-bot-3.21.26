@@ -23,6 +23,7 @@ import { PnlCurve } from "./components/pnl-curve"
 import { BotHealthBanner } from "./components/bot-health-banner"
 import { NextAuctionCountdown } from "./components/next-auction-countdown"
 import { LiveStatusBadge } from "./components/live-status-badge"
+import { HealthBadge } from "@/components/shared/health-badge"
 import { StatusDropdown } from "./components/status-dropdown"
 import { DynamicConfigForm, type ConfigSchemaField } from "./components/dynamic-config-form"
 import { BiddingStrategyPanel } from "./components/bidding-strategy-panel"
@@ -390,13 +391,14 @@ export default function ModuleDetailPage() {
     <div className="space-y-6">
       {/* Top Bar */}
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl font-bold">{module.name}</h1>
           <LiveStatusBadge
             displayBadge={(module as any).display_badge}
             inactiveReasonHuman={(module as any).inactive_reason_human}
             inactiveDetail={(module as any).inactive_detail}
           />
+          <HealthBadge health={(module as any).realtime_health} showReason />
         </div>
         {auctions && auctions.length > 0 && (() => {
           const activeAuctions = auctions.filter((a) => a.status === "active" || a.status === "future")

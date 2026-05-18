@@ -188,6 +188,101 @@ _INACTIVE_REASON_LABELS = {
 }
 
 
+def _compute_realtime_health(sb, module_id: str) -> dict:
+    """Compute a 'is this module ACTUALLY working' badge for the dashboard.
+
+    Three states surface separately from DB status (which is operator intent,
+    not runtime reality):
+      - 'trading'  — trades executed in last 24h
+      - 'cycling'  — cycling cleanly but no fills (gives a reason)
+      - 'stuck'    — errors OR no cycle heartbeat in 30 min
+
+    Returns {badge, reason, trades_24h, errors_1h, last_cycle_at}.
+    Falls back to {'badge': 'unknown', ...} on any DB error so the dashboard
+    doesn't crash if Supabase hiccups.
+    """
+    now = datetime.now(timezone.utc)
+    try:
+        # Trades in last 24h
+        try:
+            tr = sb.table("trades").select("module_id,executed_at").eq(
+                "module_id", module_id
+            ).gte("executed_at", (now - timedelta(hours=24)).isoformat()).execute()
+            trades_24h = len(tr.data or [])
+        except Exception:
+            trades_24h = 0
+
+        # Last cycle heartbeat (logs.message ILIKE 'Cycle:%')
+        try:
+            cy = sb.table("logs").select("created_at,message").eq(
+                "module_id", module_id
+            ).ilike("message", "Cycle%").order(
+                "created_at", desc=True
+            ).limit(1).execute()
+            cy_rows = cy.data or []
+            last_cycle_at = cy_rows[0]["created_at"] if cy_rows else None
+            last_cycle_msg = (cy_rows[0]["message"] if cy_rows else "") or ""
+        except Exception:
+            last_cycle_at, last_cycle_msg = None, ""
+
+        # Error logs in last 1h
+        try:
+            er = sb.table("logs").select("severity,message").eq(
+                "module_id", module_id
+            ).eq("severity", "error").gte(
+                "created_at", (now - timedelta(hours=1)).isoformat()
+            ).limit(10).execute()
+            error_rows = er.data or []
+            errors_1h = len(error_rows)
+            top_error_msg = error_rows[0]["message"] if error_rows else None
+        except Exception:
+            errors_1h, top_error_msg = 0, None
+
+        # Stuck = either erroring or no cycle in 30 min
+        cycle_stale = True
+        if last_cycle_at:
+            try:
+                last = datetime.fromisoformat(last_cycle_at.replace("Z", "+00:00"))
+                cycle_stale = (now - last).total_seconds() > (30 * 60)
+            except Exception:
+                cycle_stale = False
+
+        if errors_1h > 0:
+            badge = "stuck"
+            reason = f"{errors_1h} error(s) in last 1h"
+            if top_error_msg:
+                # Trim to one line for the badge tooltip
+                snippet = top_error_msg.split("\n", 1)[0][:120]
+                reason = f"{reason} — {snippet}"
+        elif cycle_stale and last_cycle_at is None:
+            badge = "stuck"
+            reason = "no cycle heartbeat in 30+ min"
+        elif cycle_stale:
+            badge = "stuck"
+            reason = f"last cycle was {last_cycle_at[:19]}Z (stale)"
+        elif trades_24h > 0:
+            badge = "trading"
+            reason = f"{trades_24h} trade(s) in last 24h"
+        else:
+            # Cycling cleanly, no fills. Surface the most informative recent
+            # heartbeat snippet so Sir can see WHY at a glance.
+            badge = "cycling"
+            snippet = last_cycle_msg.replace("Cycle:", "").strip()[:160]
+            reason = f"cycling, 0 fills 24h{' — ' + snippet if snippet else ''}"
+
+        return {
+            "badge": badge,
+            "reason": reason,
+            "trades_24h": trades_24h,
+            "errors_1h": errors_1h,
+            "last_cycle_at": last_cycle_at,
+        }
+    except Exception as e:
+        log.warning(f"_compute_realtime_health failed for {module_id}: {e}")
+        return {"badge": "unknown", "reason": "health check failed",
+                "trades_24h": 0, "errors_1h": 0, "last_cycle_at": None}
+
+
 def _decorate_with_badge(module_row: dict) -> dict:
     """Compute display_badge + inactive_reason_human server-side so the
     frontend stays dumb. Three badges:
@@ -255,6 +350,12 @@ async def list_modules():
         for m in modules:
             m["pnl"] = round(pnl_by_mod.get(m["id"], 0.0), 2)
             m["open_positions"] = open_by_mod.get(m["id"], 0)
+
+        # Realtime-health: compute per module so the dashboard can surface
+        # 'trading' / 'cycling' / 'stuck' separately from operator-intent
+        # status. Each call is 3 small Supabase reads — cheap on this scale.
+        for m in modules:
+            m["realtime_health"] = _compute_realtime_health(sb, m["id"])
     return modules
 
 
@@ -265,6 +366,7 @@ async def get_module(module_id: str):
     if not res.data:
         raise HTTPException(status_code=404, detail="Module not found")
     row = _decorate_with_badge(res.data)
+    row["realtime_health"] = _compute_realtime_health(sb, module_id)
     try:
         from api.services.engine import engine
         inst = engine.registry.for_db_row(row)
