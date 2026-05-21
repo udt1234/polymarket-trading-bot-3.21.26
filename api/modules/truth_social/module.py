@@ -206,6 +206,56 @@ class TruthSocialModule(BaseModule):
             self._log(sb, module_id, "decision", "info",
                       f"No hourly data; using aggregate total={running_total}")
 
+        # --- Divergence reconciliation (2026-05-21) ---
+        # xTracker is the default trading source. If it disagrees with
+        # TruthSocial Direct by >5 posts, query CNN Archive as a 3rd source.
+        # If CNN confirms Direct -> swap running_total to Direct's count
+        # (every downstream calc keys off this var). If sources disagree
+        # 3-ways -> pause the module for this cycle.
+        try:
+            from api.modules.truth_social.truthsocial_direct import (
+                count_posts_in_window_direct,
+            )
+            from api.modules.truth_social.divergence import resolve_post_count
+
+            try:
+                ts_start = datetime.fromisoformat(week_start_str.replace("Z", "+00:00"))
+                ts_end = datetime.fromisoformat(week_end_str.replace("Z", "+00:00")) if week_end_str else ts_start + timedelta(days=7)
+            except (ValueError, TypeError):
+                ts_start = now - timedelta(days=7)
+                ts_end = now
+
+            direct_res = await count_posts_in_window_direct(
+                ts_start, ts_end, handle=self.HANDLE,
+            )
+            direct_count = direct_res.get("count") if isinstance(direct_res.get("count"), int) else None
+
+            div = await resolve_post_count(
+                xtracker_count=int(running_total),
+                direct_count=direct_count,
+                window_start=ts_start,
+                window_end=ts_end,
+                handle=self.HANDLE,
+            )
+
+            if div.paused:
+                self._log(sb, module_id, "decision", "warning",
+                          f"PAUSED: post count source disputed — {div.reason}")
+                # Pause means: no signals this cycle. Downstream code is
+                # skipped via the early-return below. Module resumes next
+                # cycle when sources reconcile.
+                return []
+
+            if div.source != "xtracker":
+                self._log(sb, module_id, "decision", "info",
+                          f"Source switched: xtracker -> {div.source}. {div.reason}")
+                running_total = int(div.authoritative_count)
+            elif div.divergence_detected:
+                self._log(sb, module_id, "decision", "info",
+                          f"Divergence resolved in xtracker's favor — {div.reason}")
+        except Exception as e:
+            log.warning(f"Divergence reconciliation failed (non-blocking, keeping xtracker): {e}")
+
         elapsed_days = compute_elapsed_days(week_start_str, now)
         remaining_days = max(total_days - elapsed_days, 0.01)
         elapsed_pct_early = elapsed_days / total_days if total_days > 0 else 0
