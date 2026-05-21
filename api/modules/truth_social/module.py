@@ -206,12 +206,12 @@ class TruthSocialModule(BaseModule):
             self._log(sb, module_id, "decision", "info",
                       f"No hourly data; using aggregate total={running_total}")
 
-        # --- Divergence reconciliation (2026-05-21) ---
-        # xTracker is the default trading source. If it disagrees with
-        # TruthSocial Direct by >5 posts, query CNN Archive as a 3rd source.
-        # If CNN confirms Direct -> swap running_total to Direct's count
-        # (every downstream calc keys off this var). If sources disagree
-        # 3-ways -> pause the module for this cycle.
+        # --- Divergence reconciliation (revised 2026-05-21) ---
+        # Sir's rule: NEVER pause on divergence. If xTracker disagrees with
+        # TruthSocial Direct by >5 posts, swap to CNN Archive (most reliable).
+        # Fall back through Direct -> xTracker if CNN unavailable. The bot
+        # always trades; divergence only changes the source feeding the math.
+        # Daily summary log surfaces divergence events for Sir's audit.
         try:
             from api.modules.truth_social.truthsocial_direct import (
                 count_posts_in_window_direct,
@@ -238,21 +238,15 @@ class TruthSocialModule(BaseModule):
                 handle=self.HANDLE,
             )
 
-            if div.paused:
-                self._log(sb, module_id, "decision", "warning",
-                          f"PAUSED: post count source disputed — {div.reason}")
-                # Pause means: no signals this cycle. Downstream code is
-                # skipped via the early-return below. Module resumes next
-                # cycle when sources reconcile.
-                return []
-
             if div.source != "xtracker":
                 self._log(sb, module_id, "decision", "info",
                           f"Source switched: xtracker -> {div.source}. {div.reason}")
                 running_total = int(div.authoritative_count)
             elif div.divergence_detected:
-                self._log(sb, module_id, "decision", "info",
-                          f"Divergence resolved in xtracker's favor — {div.reason}")
+                # Divergence was detected but CNN+Direct unavailable, so we
+                # fell back to xtracker. Log it loudly so daily summary catches it.
+                self._log(sb, module_id, "decision", "warning",
+                          f"Divergence detected, fell back to xtracker — {div.reason}")
         except Exception as e:
             log.warning(f"Divergence reconciliation failed (non-blocking, keeping xtracker): {e}")
 
