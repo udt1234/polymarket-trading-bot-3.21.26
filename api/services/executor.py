@@ -9,9 +9,12 @@ from api.services.position_manager import open_position
 
 log = logging.getLogger(__name__)
 
-# Polymarket CLOB tick size is 0.001 ($0.001 = 0.1¢). Lottery-ticket entries
-# at 0.3¢/0.5¢ need to pass this floor. Was 0.01 (1¢) which silently
-# rejected every spike_trading tier 2 signal.
+# Polymarket CLOB minimum tradeable price across all markets is 0.001 (0.1¢).
+# Below that, no real order book exists — any "fill" at sub-tick prices is
+# fantasy. The bot's actual fill quality is governed by the per-market
+# min_tick_size returned by Gamma (0.01 standard, 0.001 neg-risk),
+# enforced inside _check_liquidity_with_constraints. This floor is the
+# absolute hard limit.
 MIN_PRICE_FLOOR = 0.001
 
 
@@ -208,7 +211,11 @@ class PaperExecutor:
             books = _run_async(fetch_order_books_for_brackets(signal.market_id, [signal.bracket]))
             book = books.get(signal.bracket)
             if not book:
-                return (signal.market_price, 0, None, None)
+                # 2026-05-21: previously returned signal.market_price here,
+                # which let paper "fill" at fantasy prices ($0.002) when the
+                # book lookup failed. Now: no book = no fill. Order rests.
+                log.info(f"PAPER UNFILLED {signal.bracket}: order book unavailable for market_id={signal.market_id}")
+                return (None, 0, None, None)
 
             min_tick = book.get("min_tick_size")
             min_order = book.get("min_order_size")
@@ -216,8 +223,12 @@ class PaperExecutor:
             if signal.side == "BUY":
                 best_ask = book.get("best_ask")
                 depth = book.get("ask_depth_5", 0)
+                # 2026-05-21: empty book (best_ask null/<=0/>=1) used to
+                # return signal.market_price and fill at fantasy prices.
+                # Now: empty book = no fill. The order rests until a real
+                # ask appears at or below our limit.
                 if best_ask is None or best_ask <= 0 or best_ask >= 1:
-                    return (signal.market_price, depth, min_tick, min_order)
+                    return (None, depth, min_tick, min_order)
                 # Limit only fills if book ask is at or below our limit
                 if best_ask > signal.market_price:
                     return (None, depth, min_tick, min_order)
@@ -225,14 +236,17 @@ class PaperExecutor:
             else:
                 best_bid = book.get("best_bid")
                 depth = book.get("bid_depth_5", 0)
+                # Same realism fix on SELL side.
                 if best_bid is None or best_bid <= 0 or best_bid >= 1:
-                    return (signal.market_price, depth, min_tick, min_order)
+                    return (None, depth, min_tick, min_order)
                 if best_bid < signal.market_price:
                     return (None, depth, min_tick, min_order)
                 return (best_bid, depth, min_tick, min_order)
         except Exception as e:
-            log.warning(f"Liquidity check failed for {signal.bracket}, using signal price: {e}")
-            return (signal.market_price, 0, None, None)
+            log.warning(f"Liquidity check failed for {signal.bracket}, deferring (unfilled): {e}")
+            # Same fail-closed rule: if we can't verify the book, we don't
+            # pretend to fill. Order rests until next cycle.
+            return (None, 0, None, None)
 
     def _log_rejection(self, signal: Signal, reason: str):
         try:
