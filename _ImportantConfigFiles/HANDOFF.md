@@ -1,5 +1,35 @@
 # PolyMarket Bot — Handoff
 
+## 🎯 Next Session — Configure Exit Rules (Elon + Truth Social)
+
+**Status (2026-05-21)**: Both ensemble modules currently have NO exit logic.
+Live config has `stop_loss_pct = 0`, no `take_profit_pct`, no
+`trailing_stop_pct`. Bot enters positions and HOLDS TO AUCTION RESOLUTION.
+
+**Implications**:
+- Bracket wins → position pays $1 → realized P&L = (size × $1) − cost
+- Bracket loses → position settles at $0 → realized P&L = −cost (full loss)
+- Bot does NOT exit early on adverse price moves
+- Bot does NOT lock in gains when price runs up
+
+**Sir to decide**:
+1. Add stop-loss? (e.g. exit if price drops -30% from entry)
+2. Add take-profit? (e.g. exit if price runs +50% from entry)
+3. Add trailing stop? (e.g. lock in 25% retracement of peak gain)
+4. Or keep hold-to-resolution as the thesis?
+
+**Spike Trading reference** — already has active exit logic: stop_loss,
+take_profit, trailing_stop, sellnow_grid, pacing-based classifier.
+Could port that pattern to Elon + Truth Social if Sir wants active exits.
+
+**Files to touch when implementing**:
+- `api/modules/elon_tweets/module_config.py` — add exit-rule defaults
+- `api/modules/truth_social/module_config.py` — same
+- `api/services/exit_manager.py` — already wired to module_config exit
+  fields; just need values set
+
+---
+
 ## 🔮 Backlog (parked, prioritized later)
 
 ### Gnosis-Safe Deployer Watcher — front-running new market listings (deferred 2026-05-18)
@@ -68,21 +98,8 @@ then revisit.
 ## Current State (2026-05-13)
 Bot LIVE on Trump + Elon (ensemble) + Spike Trading (multi-auction multi-strategy plugin architecture; paper-trading via global `PAPER_MODE=true`). All on Railway. **Copy Trading module Phase 1 shipped 2026-05-13** — paper/shadow only, no wallets registered yet; user adds via SQL insert into `copy_trade_wallets` to activate. Dashboard + live promotion in Phase 2/3.
 
-## ⭐ Cross-Module Patterns (proven on Spike — apply to all)
-
-Documented in code now; one-liners here for the index.
-
-1. **Pluggable Strategy Plugins** — `api/modules/spike_trading/strategies/` registry. Drop file = new strategy.
-2. **Multi-Auction × Multi-Profile Config** — `auction_types[].bracket_profiles[]` with per-profile strategy + params.
-3. **Pacing Prior** — recent + DOW + window-filtered historical, blended (`api/routers/modules.py:get_pacing`).
-4. **Polymarket-Native Bracket Discovery** — pull from Gamma, never hardcode grid.
-5. **Window-Length Filter on Historical Means** — `target_window_days` filter on past trackings.
-6. **Confidence Bands UI** — bot prob vs Polymarket price side-by-side (`web/.../pacing-analysis.tsx`).
-7. **Schema-Driven Editable Config** — `BaseModule.get_config_schema()` + `<DynamicConfigForm>`.
-8. **Status Model** — active / paper / inactive with structured `inactive_reason`. Per-module executor routing.
-9. **Closed-Auction Override** — `is_complete=True` snaps projection to actual outcome.
-10. **Verified-Parquet Ground Truth** — per-event grouping for winrate, not per-bracket aggregate.
-11. **Realtime Health Badge** (2026-05-18) — runtime "actually working" state separate from operator-intent status. `/api/modules/{id}/realtime-health`.
+## ⭐ Cross-Module Patterns
+Documented in code. See: spike_trading/strategies/ (plugin registry), modules.py:get_pacing (pacing blend), pacing-analysis.tsx (Confidence Bands), BaseModule.get_config_schema, realtime_health endpoint. 11 patterns total.
 
 ---
 
@@ -113,18 +130,12 @@ Spike plugin inventory: `Cheap_Lottery_Pacing` (5-tier `<40`), `Mid_Range_Spike`
 ### Whale Watching card (Phase 2 of `WHALE_BRACKET_CARDS_SPEC.md`)
 Zero files exist yet. Needs: `whale_snapshots` + `whale_wallet_profiles` Supabase tables, `whale_classifier.py` (5-archetype detection: Market-Maker / Tail Scooper / Spike Trader (=us) / Pace Chaser / Tail Punter), `whale_snapshot.py` orchestrator, nightly Railway cron, `/api/modules/{id}/whales` endpoint, 5 TSX components. Recommend: Spike-only first + 90-day backfill (~half a day). Spec estimate: 8-10 hr full Phase 2.
 
-### Other high priority
-- **Apply patterns 3 + 6 to Trump + Elon ensemble modules.** Their pacing prior is stale and their Confidence Bands don't show Polymarket prices. ETA: ~1 day.
-- **Bot vs market disagreement gating.** When the bot's top bracket diverges sharply (>30pp) from Polymarket's top, log a warning and reduce signal confidence. Right now we trust the model unconditionally.
-
-### Medium priority
-- **Migrate Trump + Elon to multi-auction config**. Currently single-bracket. Could enable Trump-7day-multi-bracket trading with the same architecture.
-- **Bracket arc analysis for monthly auctions** — only 6 monthly samples in cache, need more before relying on monthly priors.
-
-### Low priority
-- Cache `_first_enabled_auction()` in spike module (QA-flagged perf).
-- ThreadPoolExecutor + asyncio refactor (pre-existing structural risk).
-- Auth on `/modules/*` router (pre-existing security gap).
+### Other priority work
+- Configure exit rules (top of file) — Elon + Truth Social have none
+- Bot-vs-market disagreement gating (warn when bot top diverges >30pp from PM top)
+- Bracket arc analysis for monthly auctions (need more samples)
+- Cache `_first_enabled_auction()` in spike module (QA-flagged perf)
+- Auth on `/modules/*` router (pre-existing security gap)
 
 ---
 
