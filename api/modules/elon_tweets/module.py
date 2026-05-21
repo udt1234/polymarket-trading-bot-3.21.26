@@ -342,6 +342,16 @@ class ElonTweetsModule(BaseModule):
         # Polymarket CLOB tick. Anything below is impossible to fill.
         MIN_PRICE_FLOOR = 0.001
 
+        def _snap_to_tick(price: float, tick: float) -> float:
+            """Round price to the nearest valid multiple of tick. Live CLOB
+            rejects orders that aren't on the tick grid (0.01 standard,
+            0.001 neg_risk). Same logic Truth Social uses (PR #70).
+            Without this, Elon emits raw Gamma prices that hit the
+            executor's below_min_tick_size rejection."""
+            if tick is None or tick <= 0:
+                return price
+            return round(round(price / tick) * tick, 6)
+
         signals = []
         rejected_floor = 0
         empty_book_brackets: list[str] = []
@@ -358,6 +368,17 @@ class ElonTweetsModule(BaseModule):
             # CLOB key (root cause: normalize_bracket round-trip drift).
             if bracket_label in top_bracket_names and not order_books.get(bracket_label):
                 empty_book_brackets.append(bracket_label)
+
+            # Snap market_price onto the bracket's tick grid BEFORE Kelly
+            # sizing so downstream signal.market_price is always tick-valid.
+            # Eliminates the executor's `below_min_tick_size` rejection.
+            book_pre = order_books.get(bracket_label, {})
+            tick = book_pre.get("min_tick_size")
+            if tick:
+                market_price = _snap_to_tick(market_price, float(tick))
+                if market_price < MIN_PRICE_FLOOR:
+                    rejected_floor += 1
+                    continue
 
             sizing = kelly_sizing(
                 model_prob, market_price,
