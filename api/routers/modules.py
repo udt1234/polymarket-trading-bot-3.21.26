@@ -1212,6 +1212,55 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
     )
 
     running_total = summary.get("total", 0) or (sum(d["count"] for d in daily_totals) if daily_totals else 0)
+
+    # --- Divergence reconciliation (2026-05-21) ---
+    # Pacing endpoint was reading xTracker only. When xTracker is broken
+    # (e.g. new auction window not yet tracked, Running Total=0 in dashboard),
+    # the bot's _evaluate_async correctly swapped to CNN Archive but the
+    # dashboard's pacing endpoint kept showing the broken xTracker number.
+    # Same divergence resolver here so dashboard + bot agree on the source.
+    # NEVER pause. Source preference: CNN > Direct > xTracker.
+    divergence_source = "xtracker"
+    divergence_info: dict | None = None
+    if module.data.get("name") == "Truth Social Posts" and tracking:
+        try:
+            from api.modules.truth_social.divergence import resolve_post_count
+            from api.modules.truth_social.truthsocial_direct import (
+                count_posts_in_window_direct,
+            )
+            ws = (tracking or {}).get("startDate", "")
+            we = (tracking or {}).get("endDate", "")
+            if ws and we:
+                w_start = datetime.fromisoformat(ws.replace("Z", "+00:00"))
+                w_end = datetime.fromisoformat(we.replace("Z", "+00:00"))
+                w_end_capped = min(w_end, now)
+                direct_res = await asyncio.wait_for(
+                    count_posts_in_window_direct(w_start, w_end_capped, handle=handle),
+                    timeout=12.0,
+                )
+                direct_count = direct_res.get("count") if isinstance(direct_res.get("count"), int) else None
+                div = await resolve_post_count(
+                    xtracker_count=int(running_total),
+                    direct_count=direct_count,
+                    window_start=w_start,
+                    window_end=w_end_capped,
+                    handle=handle,
+                )
+                divergence_source = div.source
+                divergence_info = {
+                    "source": div.source,
+                    "xtracker_count": div.xtracker_count,
+                    "direct_count": div.direct_count,
+                    "cnn_count": div.cnn_count,
+                    "divergence_detected": div.divergence_detected,
+                    "reason": div.reason,
+                }
+                if div.source != "xtracker":
+                    log.info(f"PACING: source swapped xtracker -> {div.source} ({div.reason})")
+                    running_total = int(div.authoritative_count)
+        except Exception as e:
+            log.warning(f"Pacing divergence reconciliation failed (keeping xtracker): {e}")
+
     # xTracker returns days_remaining=0 for completed auctions; the legacy
     # `summary.get(...) or fallback` pattern treated 0 as missing and fell
     # through to a 7-day default, producing nonsensical projections for
@@ -1501,6 +1550,12 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         "period": f"{week_start_date_str} to {week_end_date_str}" if week_start_date_str else None,
         "title": (tracking or {}).get("title"),
         "running_total": running_total,
+        # `running_total_source` tells the dashboard whether `running_total`
+        # came from xTracker (default) or was swapped to cnn_archive / direct
+        # via the divergence resolver. The dashboard can show "via CNN Archive"
+        # next to the value so Sir knows the bot isn't using xTracker.
+        "running_total_source": divergence_source,
+        "divergence": divergence_info,
         "days_elapsed": round(elapsed_days, 1),
         "days_remaining": round(remaining_days, 1),
         "is_complete": is_complete,
