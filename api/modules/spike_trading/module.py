@@ -222,6 +222,19 @@ class SpikeTradingModule(BaseModule):
                 sigs, had_active = await self._evaluate_one_row(sb, module_db)
                 all_signals.extend(sigs)
                 any_active_auction = any_active_auction or had_active
+                # Per-row Cycle heartbeat — HealthBadge reads logs with
+                # `message ILIKE 'Cycle:%'` per module_id. Without this each
+                # Spike module shows "no cycle heartbeat in 30+ min" / 🔴
+                # Stuck even when cycling. One line per row so both Spike
+                # Trading + Spike Trading V2 emit independently.
+                try:
+                    self._log(
+                        sb, module_db.get("id"), "decision", "info",
+                        f"Cycle: {module_db.get('name','spike')} — "
+                        f"signals={len(sigs)} active_auction={had_active}",
+                    )
+                except Exception:
+                    pass
             except Exception as e:
                 log.error(f"_evaluate_one_row failed for module_id={module_db.get('id')}: {e}", exc_info=True)
 
