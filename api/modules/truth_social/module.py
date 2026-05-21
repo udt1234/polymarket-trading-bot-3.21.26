@@ -5,7 +5,9 @@ from datetime import datetime, timezone, timedelta
 from api.modules.base import BaseModule
 from api.services.risk_manager import Signal
 from api.modules.shared.polymarket import (
-    fetch_xtracker_posts, fetch_active_tracking, fetch_active_or_upcoming_tracking,
+    fetch_xtracker_posts, fetch_xtracker_stats,
+    fetch_active_tracking, fetch_active_or_upcoming_tracking,
+    fetch_all_active_trackings,
     extract_slug_from_tracking,
     parse_hourly_counts, parse_daily_totals, compute_running_total,
     compute_elapsed_days, fetch_market_prices, fetch_historical_weekly_totals,
@@ -115,6 +117,19 @@ class TruthSocialModule(BaseModule):
     # evaluate() inherited from BaseModule — delegates to _evaluate_async().
 
     async def _evaluate_async(self) -> list[Signal]:
+        """Multi-auction orchestrator (2026-05-21).
+
+        Polymarket can run multiple Trump auctions concurrently (the 7-day
+        weekly is the common one, but Polymarket may add other windows over
+        time). Bot evaluates every live tracking independently per cycle.
+        Each auction is its own trading unit attributed by tracking_id +
+        slug. Budget split equally across N live auctions.
+
+        Falls back to fetch_active_or_upcoming_tracking() (legacy single-
+        tracking path) when zero are currently live AND pre_auction_buying
+        is enabled — preserves the existing snipe-early-listed behavior
+        for the weekly Trump auction.
+        """
         sb = get_supabase()
         module_row = sb.table("modules").select("*").eq("name", "Truth Social Posts").single().execute()
         if not module_row.data:
@@ -123,19 +138,53 @@ class TruthSocialModule(BaseModule):
 
         module_config = module_row.data
         module_id = module_config["id"]
-
-        # Load module config once and reuse — used both for tracking selection
-        # (pre_auction_buying_enabled) and downstream signal generation.
         mod_cfg = get_module_config(module_id)
         allow_upcoming = bool(mod_cfg.get("pre_auction_buying_enabled", False))
-        # Auto-discover the active market slug from xTracker. If pre_auction_buying
-        # is enabled, fall back to the nearest upcoming tracking when no auction
-        # is currently live (lets the bot snipe early-listed brackets at low prices).
-        tracking = await fetch_active_or_upcoming_tracking(self.HANDLE, allow_upcoming=allow_upcoming)
-        if not tracking:
+
+        active = await fetch_all_active_trackings(self.HANDLE, self.get_platform())
+        if not active and allow_upcoming:
+            # No live auctions but pre_auction_buying is on — fall back to
+            # the legacy snipe-early-listed path with a single upcoming tracking.
+            upcoming = await fetch_active_or_upcoming_tracking(
+                self.HANDLE, allow_upcoming=True,
+            )
+            if upcoming:
+                active = [upcoming]
+        if not active:
             self._log(sb, module_id, "decision", "warning",
-                      "No active or upcoming xTracker tracking found")
+                      "No active or upcoming xTracker trackings found")
             return []
+
+        n_active = len(active)
+        self._log(sb, module_id, "decision", "info",
+                  f"Multi-auction cycle: {n_active} live tracking(s)")
+
+        all_signals: list[Signal] = []
+        for tracking in active:
+            try:
+                sigs = await self._evaluate_one_tracking(
+                    sb, module_config, module_id, mod_cfg, tracking, n_active,
+                )
+                all_signals.extend(sigs)
+            except Exception as e:
+                tid = tracking.get("id") or tracking.get("trackingId") or "?"
+                log.exception(f"Truth Social tracking {tid} evaluation failed: {e}")
+                self._log(sb, module_id, "decision", "warning",
+                          f"Tracking {tid} failed: {str(e)[:200]}")
+        return all_signals
+
+    async def _evaluate_one_tracking(
+        self, sb, module_config: dict, module_id: str, mod_cfg: dict,
+        tracking: dict, n_active: int = 1,
+    ) -> list[Signal]:
+        """Evaluate a single Truth Social auction. Equal-budget split across
+        N live auctions: per_tracking_budget = module.budget / n_active."""
+        # Equal-budget split.
+        try:
+            module_budget = float(module_config.get("budget") or 100.0)
+        except (TypeError, ValueError):
+            module_budget = 100.0
+        per_tracking_budget = module_budget / max(n_active, 1)
 
         slug = extract_slug_from_tracking(tracking)
         if not slug:
@@ -147,8 +196,21 @@ class TruthSocialModule(BaseModule):
             sb.table("modules").update({"market_slug": slug}).eq("id", module_id).execute()
             self._log(sb, module_id, "system", "info", f"Updated market slug to {slug}")
 
-        # Fetch xTracker stats for this tracking
-        raw_data = await fetch_xtracker_posts(self.HANDLE)
+        # Per-tracking xTracker stats. Old code used fetch_xtracker_posts
+        # which returns the aggregate handle feed; that made every auction
+        # see the same running_total. Now we fetch the tracking-scoped stats
+        # so each auction window uses its own post counts. Fall back to the
+        # aggregate feed if per-tracking call fails.
+        tracking_id = tracking.get("id") or tracking.get("trackingId")
+        raw_data: dict = {}
+        if tracking_id:
+            try:
+                raw_data = await fetch_xtracker_stats(str(tracking_id))
+            except Exception as _e:
+                log.warning(f"fetch_xtracker_stats({tracking_id}) failed: {_e}")
+                raw_data = {}
+        if not raw_data:
+            raw_data = await fetch_xtracker_posts(self.HANDLE)
         hourly_counts = parse_hourly_counts(raw_data)
 
         # Fetch market prices from Gamma
@@ -604,7 +666,8 @@ class TruthSocialModule(BaseModule):
             if sizing["action"] == "BUY" and sizing["kelly_pct"] > 0:
                 book = order_books.get(bracket_label, {})
                 if book:
-                    sizing["kelly_pct"] = depth_adjusted_size(sizing["kelly_pct"], book, bankroll=module_config.get("budget", 100))
+                    # Per-tracking budget: split equally across N live auctions.
+                    sizing["kelly_pct"] = depth_adjusted_size(sizing["kelly_pct"], book, bankroll=per_tracking_budget)
                 signal = Signal(
                     module_id=module_id,
                     market_id=slug,
@@ -621,6 +684,12 @@ class TruthSocialModule(BaseModule):
                     bid_depth_5=book.get("bid_depth_5", 0.0),
                     ask_depth_5=book.get("ask_depth_5", 0.0),
                     metadata={
+                        # Multi-auction attribution.
+                        "tracking_id": tracking_id,
+                        "tracking_title": tracking.get("title"),
+                        "tracking_window_days": round(total_days, 2),
+                        "per_tracking_budget": per_tracking_budget,
+                        "n_active_auctions": n_active,
                         "min_edge_threshold": mod_cfg.get("min_edge_threshold"),
                         "auction_aggregate_price_ceiling": mod_cfg.get("auction_aggregate_price_ceiling"),
                         "in_low_window": in_low_window,
@@ -668,7 +737,7 @@ class TruthSocialModule(BaseModule):
                       f"Pre-emit floor filter dropped {rejected_floor} brackets (price < {MIN_PRICE_FLOOR} after tick-snap)")
 
         self._log(sb, module_id, "decision", "info",
-                  f"Cycle: slug={slug}, total={running_total}, elapsed={elapsed_days:.1f}/{total_days:.1f}d, "
+                  f"Cycle: tracking={tracking_id} slug={slug}, total={running_total}, elapsed={elapsed_days:.1f}/{total_days:.1f}d, budget=${per_tracking_budget:.0f}, "
                   f"regime={regime_label}, news={news.get('headline_count', 0)} headlines, "
                   f"conflict={news.get('conflict_score', 0)}, lunar_vel={lunar_creator.get('velocity', 0)}, "
                   f"sched={[e.get('event_type') for e in schedule_events[:3]]}, "
