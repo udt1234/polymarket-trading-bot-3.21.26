@@ -121,6 +121,42 @@ async def fetch_active_tracking(
     return active[0][0]
 
 
+async def fetch_all_active_trackings(
+    handle: str = "realDonaldTrump",
+    platform: str = "truthsocial",
+) -> list[dict]:
+    """Return ALL currently-active trackings for `handle`.
+
+    Used by multi-auction-aware modules (Elon Tweets, Truth Social Posts)
+    that evaluate every live auction independently per cycle. Each auction
+    is a fully independent trading unit — own pacing, own positions, own
+    signals, attributed by its tracking_id.
+
+    Sorted by startDate (oldest active first) so logs are stable and the
+    "primary" auction (for backwards compat with single-auction code paths)
+    has predictable identity.
+    """
+    trackings = await _fetch_trackings_raw(handle, platform)
+    if not trackings:
+        return []
+    now = datetime.now(timezone.utc)
+    active = []
+    for t in trackings:
+        start = t.get("startDate", "")
+        end = t.get("endDate", "")
+        if not (start and end):
+            continue
+        try:
+            s = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            e = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if s <= now <= e:
+            active.append((t, s, e))
+    active.sort(key=lambda x: x[1])
+    return [t for (t, s, e) in active]
+
+
 async def fetch_active_or_upcoming_tracking(
     handle: str = "realDonaldTrump", allow_upcoming: bool = False,
     platform: str = "truthsocial",

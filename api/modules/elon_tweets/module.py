@@ -4,10 +4,11 @@ from datetime import datetime, timezone, timedelta
 from api.modules.base import BaseModule
 from api.services.risk_manager import Signal
 from api.modules.shared.polymarket import (
-    fetch_xtracker_posts, fetch_active_tracking, fetch_market_brackets,
+    fetch_xtracker_posts, fetch_active_tracking, fetch_all_active_trackings,
+    fetch_market_brackets,
     parse_hourly_counts, compute_running_total,
     compute_elapsed_days, fetch_market_prices, fetch_historical_weekly_totals,
-    extract_slug_from_tracking,
+    extract_slug_from_tracking, fetch_xtracker_stats,
 )
 from api.modules.shared.news import fetch_google_news
 from api.modules.shared.pacing import regular_pace, bayesian_pace, dow_hourly_bayesian_pace
@@ -62,6 +63,20 @@ class ElonTweetsModule(BaseModule):
     # evaluate() inherited from BaseModule — delegates to _evaluate_async().
 
     async def _evaluate_async(self) -> list[Signal]:
+        """Multi-auction orchestrator (2026-05-21).
+
+        Polymarket runs multiple Elon auctions concurrently (2-day, 7-day,
+        monthly all live at once). Previously this method picked ONE via
+        fetch_active_tracking() and ignored the rest — Sir's screenshots
+        showed the bot trading the monthly while the dashboard was on the
+        7-day, with zero fills ever.
+
+        Now: fetch ALL live trackings, evaluate each independently. Each
+        auction is a fully separate trading unit (own pacing window, own
+        running_total, own signals attributed by tracking_id). Budget is
+        split equally across N live auctions so a 3-auction handle gives
+        each auction 1/3 the per-position cap.
+        """
         sb = get_supabase()
         module_row = sb.table("modules").select("*").eq("name", "Elon Tweets").single().execute()
         if not module_row.data:
@@ -71,20 +86,63 @@ class ElonTweetsModule(BaseModule):
         module_config = module_row.data
         module_id = module_config["id"]
 
-        tracking = await fetch_active_tracking(self.HANDLE, self.PLATFORM)
-        if not tracking:
-            self._log(sb, module_id, "decision", "warning", "No active xTracker tracking found")
+        active = await fetch_all_active_trackings(self.HANDLE, self.PLATFORM)
+        if not active:
+            self._log(sb, module_id, "decision", "warning", "No active xTracker trackings found")
             return []
+
+        n_active = len(active)
+        self._log(sb, module_id, "decision", "info",
+                  f"Multi-auction cycle: {n_active} live tracking(s)")
+
+        all_signals: list[Signal] = []
+        for tracking in active:
+            try:
+                sigs = await self._evaluate_one_tracking(
+                    sb, module_config, module_id, tracking, n_active,
+                )
+                all_signals.extend(sigs)
+            except Exception as e:
+                tid = tracking.get("id") or tracking.get("trackingId") or "?"
+                log.exception(f"Elon tracking {tid} evaluation failed: {e}")
+                self._log(sb, module_id, "decision", "warning",
+                          f"Tracking {tid} failed: {str(e)[:200]}")
+        return all_signals
+
+    async def _evaluate_one_tracking(
+        self, sb, module_config: dict, module_id: str,
+        tracking: dict, n_active: int = 1,
+    ) -> list[Signal]:
+        """Evaluate a single Elon auction. All previous _evaluate_async logic
+        moved here, parameterized by `tracking`. Budget split: per-tracking
+        budget = module_config.budget / n_active (equal across live auctions)."""
+        # Equal-budget split across N live auctions.
+        try:
+            module_budget = float(module_config.get("budget") or 100.0)
+        except (TypeError, ValueError):
+            module_budget = 100.0
+        per_tracking_budget = module_budget / max(n_active, 1)
 
         slug = extract_slug_from_tracking(tracking)
         if not slug:
             self._log(sb, module_id, "decision", "warning", "Could not extract market slug")
             return []
 
-        if slug != module_config.get("market_slug"):
-            sb.table("modules").update({"market_slug": slug}).eq("id", module_id).execute()
-
-        raw_data = await fetch_xtracker_posts(self.HANDLE, self.PLATFORM)
+        # Per-tracking xTracker stats — old code called fetch_xtracker_posts
+        # which returns the aggregate handle feed; that made every auction
+        # see the same running_total. Now we fetch the tracking-scoped stats
+        # so each auction window uses its own post counts. Falls back to the
+        # aggregate feed if the per-tracking call fails.
+        tracking_id = tracking.get("id") or tracking.get("trackingId")
+        raw_data: dict = {}
+        if tracking_id:
+            try:
+                raw_data = await fetch_xtracker_stats(str(tracking_id))
+            except Exception as _e:
+                log.warning(f"fetch_xtracker_stats({tracking_id}) failed: {_e}")
+                raw_data = {}
+        if not raw_data:
+            raw_data = await fetch_xtracker_posts(self.HANDLE, self.PLATFORM)
         hourly_counts = parse_hourly_counts(raw_data)
 
         market_prices = await fetch_market_prices(slug)
@@ -312,7 +370,8 @@ class ElonTweetsModule(BaseModule):
             if sizing["action"] == "BUY" and sizing["kelly_pct"] > 0:
                 book = order_books.get(bracket_label, {})
                 if book:
-                    sizing["kelly_pct"] = depth_adjusted_size(sizing["kelly_pct"], book, bankroll=module_config.get("budget", 100))
+                    # Per-tracking budget: split equally across N live auctions.
+                    sizing["kelly_pct"] = depth_adjusted_size(sizing["kelly_pct"], book, bankroll=per_tracking_budget)
                 signal = Signal(
                     module_id=module_id, market_id=slug, bracket=bracket_label,
                     side="BUY", edge=sizing["edge"], model_prob=model_prob,
@@ -324,6 +383,13 @@ class ElonTweetsModule(BaseModule):
                     ask_depth_5=book.get("ask_depth_5", 0.0),
                     token_id=bracket_token_ids.get(bracket_label),
                     metadata={
+                        # Multi-auction attribution — keeps positions/signals
+                        # filterable by auction window in the dashboard.
+                        "tracking_id": tracking_id,
+                        "tracking_title": tracking.get("title"),
+                        "tracking_window_days": round(total_days, 2),
+                        "per_tracking_budget": per_tracking_budget,
+                        "n_active_auctions": n_active,
                         "min_edge_threshold": mod_cfg.get("min_edge_threshold"),
                         "auction_aggregate_price_ceiling": mod_cfg.get("auction_aggregate_price_ceiling"),
                         "regime": regime_label,
@@ -368,7 +434,7 @@ class ElonTweetsModule(BaseModule):
                       f"Pre-emit floor filter dropped {rejected_floor} brackets (price < {MIN_PRICE_FLOOR})")
 
         self._log(sb, module_id, "decision", "info",
-                  f"Cycle: slug={slug}, total={running_total}, elapsed={elapsed_days:.1f}/{total_days:.1f}d, "
+                  f"Cycle: tracking={tracking_id} slug={slug}, total={running_total}, elapsed={elapsed_days:.1f}/{total_days:.1f}d, budget=${per_tracking_budget:.0f}, "
                   f"regime={regime_label}, regime_mod={regime_mod:.2f}, hawkes_mod={hawkes_mod:.2f}, signals={len(signals)}")
 
         return signals
