@@ -128,6 +128,49 @@ def get_spike_series_for_handle(
         .execute()
     )
     rows = res.data or []
+
+    # If the auction window reaches into the parquet archive (>90 days old),
+    # merge in archived rows. Modules call this on backtest replay or
+    # post-resolution analysis where the auction can be ancient.
+    # QA bug-hunter M2 (2026-05-22) — force iso strings (pandas.Timestamp
+    # has .replace() that interprets "Z"/"+00:00" as datetime fields, not
+    # string ops, silently corrupting hour buckets).
+    seam_hour: int | None = None
+    try:
+        from api.modules.shared.parquet_archive import is_in_archive_range, read_table_range
+        a_start = auction_start if isinstance(auction_start, datetime) else datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+        if is_in_archive_range("post_count_snapshots", a_start):
+            a_end = auction_end if isinstance(auction_end, datetime) else datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
+            df = read_table_range(
+                "post_count_snapshots",
+                since=a_start, until=a_end,
+                ts_col="captured_at",
+            )
+            if df is not None and not df.empty:
+                archived = df[["captured_at", "count"]].to_dict("records")
+                for a in archived:
+                    # Always coerce to ISO string regardless of source type
+                    ts_val = a["captured_at"]
+                    if hasattr(ts_val, "isoformat"):
+                        a["captured_at"] = ts_val.isoformat()
+                    else:
+                        a["captured_at"] = str(ts_val)
+                # Record the seam hour so the Δ at the archive/live join
+                # can be excluded. post_count is an absolute counter; a
+                # baseline jump (e.g. 2025 50k → 2026 80k) creates a fake
+                # mega-delta that corrupts Hawkes spike detection.
+                # QA strategy-reviewer finding 4 (2026-05-22).
+                if archived:
+                    try:
+                        last_archive_ts = archived[-1]["captured_at"]
+                        last_archive_dt = datetime.fromisoformat(last_archive_ts.replace("Z", "+00:00"))
+                        seam_hour = int(last_archive_dt.timestamp() // 3600)
+                    except Exception:
+                        seam_hour = None
+                rows = archived + rows
+    except Exception as e:
+        log.warning(f"whale_snapshot: parquet merge skipped: {e}")
+
     if len(rows) < 3:
         return None
     # Bucket into hour cells, take last count per hour
@@ -151,10 +194,15 @@ def get_spike_series_for_handle(
     sorted_hours = sorted(by_hour.keys())
     series: list[tuple[int, float]] = []
     for i in range(1, len(sorted_hours)):
-        prev = by_hour[sorted_hours[i - 1]]
-        cur = by_hour[sorted_hours[i]]
+        prev_hour = sorted_hours[i - 1]
+        cur_hour = sorted_hours[i]
+        # Skip the Δ that crosses the archive/live seam — see comment above
+        if seam_hour is not None and prev_hour <= seam_hour < cur_hour:
+            continue
+        prev = by_hour[prev_hour]
+        cur = by_hour[cur_hour]
         delta = float(cur - prev)
-        series.append((sorted_hours[i] * 3600, delta))
+        series.append((cur_hour * 3600, delta))
     return series
 
 

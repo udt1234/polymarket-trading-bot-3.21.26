@@ -180,7 +180,44 @@ def _fetch_analogs_from_snapshots(
         rows = res.data or []
     except Exception as e:
         log.warning(f"price_timing: snapshot query failed: {e}")
-        return []
+        rows = []
+
+    # Merge in parquet archive (rows older than live 180d retention window)
+    # ONLY when live rows are insufficient. Pre-padding the pool with
+    # ancient near-zero-weight rows would let MIN_ANALOGS clear on noise.
+    # QA strategy-reviewer finding 1 (2026-05-22).
+    if len(rows) < MIN_ANALOGS * 4:
+        try:
+            from api.modules.shared.parquet_archive import read_table_range
+            archive_since = datetime(2025, 1, 1, tzinfo=timezone.utc)
+            archive_until = now - timedelta(days=180)
+            if archive_until > archive_since:
+                df = read_table_range(
+                    "price_snapshots",
+                    since=archive_since,
+                    until=archive_until,
+                    ts_col="snapshot_hour",
+                    filters={"module_id": module_id, "bracket": bracket},
+                )
+                if df is not None and not df.empty:
+                    df = df[df["elapsed_days"].notna() & df["tracking_id"].notna()]
+                    rows = list(df.to_dict("records")) + rows
+        except Exception as e:
+            log.warning(f"price_timing: parquet merge skipped: {e}")
+
+    # Dedup on (tracking_id, snapshot_hour) — archive/live windows can
+    # overlap at the 180d boundary, double-weighting the seam analogs.
+    # QA bug-hunter M1 + strategy-reviewer finding 3 (2026-05-22).
+    if rows:
+        seen = set()
+        deduped = []
+        for r in rows:
+            key = (r.get("tracking_id"), str(r.get("snapshot_hour", "")))
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(r)
+        rows = deduped
 
     if not rows:
         return []

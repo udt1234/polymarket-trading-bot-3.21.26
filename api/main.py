@@ -16,7 +16,19 @@ from api.routers import auth, dashboard, modules, portfolio, trades, analytics, 
 from api.routers.backtest import router as backtest_router
 from api.services.engine import engine
 from api.services.snapshots import start_snapshot_scheduler, stop_snapshot_scheduler
+from api.services.retention import start_retention_scheduler, stop_retention_scheduler
+from api.services.polymarket_proxy import install_httpx_proxy_patch, is_httpx_patched, proxy_enabled
 from api.ws.feeds import router as ws_router
+
+# Install Polymarket -> Cloudflare Worker URL rewriter on httpx BEFORE any
+# module imports kick off network calls. Idempotent + no-op when proxy is
+# disabled. Must run before `engine.start()` so the first cycle's HTTP
+# clients already see the patched httpx.send.
+install_httpx_proxy_patch()
+if proxy_enabled():
+    logging.info(f"Polymarket proxy ENABLED (httpx patched={is_httpx_patched()})")
+else:
+    logging.info("Polymarket proxy DISABLED — calls go direct to polymarket.com")
 
 
 @asynccontextmanager
@@ -25,12 +37,14 @@ async def lifespan(app: FastAPI):
         settings = get_settings()
         engine.start(interval=settings.default_interval)
         start_snapshot_scheduler()
+        start_retention_scheduler()
     except Exception as e:
         logging.error(f"Startup error (non-fatal): {e}")
     yield
     try:
         engine.stop()
         stop_snapshot_scheduler()
+        stop_retention_scheduler()
     except Exception:
         pass
 
