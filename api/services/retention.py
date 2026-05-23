@@ -20,24 +20,24 @@ from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from api.dependencies import get_supabase
+from api.modules.shared.parquet_archive import (
+    ARCHIVE_ROOT,
+    LIVE_WINDOW_DAYS,
+    LOGS_OTHER_DAYS,
+    LOGS_SYSTEM_DAYS,
+)
 
 log = logging.getLogger(__name__)
 
 _scheduler: BackgroundScheduler | None = None
 
-ARCHIVE_ROOT = Path(__file__).resolve().parent.parent.parent / "_DataMetricPulls" / "historical" / "supabase_archive"
-
-# (table, ts_column, retention_days)
+# (table, ts_column) — retention days come from parquet_archive.LIVE_WINDOW_DAYS
 RETENTION = [
-    ("price_snapshots", "snapshot_hour", 180),
-    ("post_count_snapshots", "captured_at", 90),
-    ("order_book_snapshots", "snapshot_at", 30),
-    ("pending_signals", "created_at", 7),
+    ("price_snapshots", "snapshot_hour"),
+    ("post_count_snapshots", "captured_at"),
+    ("order_book_snapshots", "snapshot_at"),
+    ("pending_signals", "created_at"),
 ]
-
-# logs has split retention by log_type
-LOGS_SYSTEM_DAYS = 30
-LOGS_OTHER_DAYS = 14
 
 # Tables we archive to parquet weekly
 ARCHIVE_TABLES = {
@@ -54,10 +54,17 @@ def _run_daily_cleanup() -> None:
     deleted = {}
     now = datetime.now(timezone.utc)
 
-    for table, ts_col, days in RETENTION:
+    for table, ts_col in RETENTION:
+        days = LIVE_WINDOW_DAYS[table]
         cutoff = (now - timedelta(days=days)).isoformat()
         try:
-            res = sb.table(table).delete().lt(ts_col, cutoff).execute()
+            q = sb.table(table).delete().lt(ts_col, cutoff)
+            # pending_signals: never delete a row that's still actively
+            # waiting in the queue, even if it's older than the window.
+            # See QA finding 4 (2026-05-22) — comment-vs-code contract bug.
+            if table == "pending_signals":
+                q = q.neq("status", "waiting")
+            res = q.execute()
             deleted[table] = len(res.data or [])
         except Exception as e:
             log.warning(f"retention: {table} delete failed: {e}")

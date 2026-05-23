@@ -28,12 +28,21 @@ log = logging.getLogger(__name__)
 
 ARCHIVE_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "_DataMetricPulls" / "historical" / "supabase_archive"
 
+# Canonical retention windows. Both api/services/retention.py and any
+# analysis code that needs to know "is this data still live in Supabase"
+# must import from here. The SQL migration 021_retention_cleanup.sql
+# must be kept in sync manually (SQL migrations are immutable).
 LIVE_WINDOW_DAYS = {
     "price_snapshots": 180,
     "post_count_snapshots": 90,
     "order_book_snapshots": 30,
     "logs": 14,
+    "pending_signals": 7,
 }
+
+# Special-cased: logs has split retention by log_type
+LOGS_SYSTEM_DAYS = 30
+LOGS_OTHER_DAYS = LIVE_WINDOW_DAYS["logs"]
 
 
 def is_in_archive_range(table: str, query_since: datetime) -> bool:

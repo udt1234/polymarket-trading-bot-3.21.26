@@ -39,9 +39,14 @@ DELETE FROM logs
 WHERE log_type != 'system'
   AND created_at < (NOW() - INTERVAL '14 days');
 
--- 5. pending_signals — 7 days (only resolved/expired rows; live ones stay)
+-- 5. pending_signals — 7 days (only resolved/expired rows; live ones stay).
+-- status != 'waiting' protects unresolved live signals from being deleted
+-- mid-defer. The runtime DELETE in api/services/retention.py mirrors this.
+-- QA finding 4 (2026-05-22): without this filter, a future config bump
+-- raising the max defer window would silently kill live signals.
 DELETE FROM pending_signals
-WHERE created_at < (NOW() - INTERVAL '7 days');
+WHERE created_at < (NOW() - INTERVAL '7 days')
+  AND status != 'waiting';
 
 COMMIT;
 
