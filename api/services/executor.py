@@ -162,7 +162,16 @@ class PaperExecutor:
                 from api.services.position_manager import close_position
                 close_position(existing["id"], fill_price)
         else:
-            open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, fill_price, token_id=signal.token_id)
+            open_position(
+                signal.module_id,
+                signal.market_id,
+                signal.bracket,
+                signal.side,
+                size,
+                fill_price,
+                token_id=signal.token_id,
+                metadata=signal.metadata,
+            )
 
         try:
             sb.table("signals").insert({
@@ -288,6 +297,15 @@ class LiveExecutor:
             # Confirmed against the installed SDK 2026-05-17.
             from py_clob_client.client import ClobClient
             from py_clob_client.clob_types import ApiCreds
+            from api.services.polymarket_proxy import proxy_enabled
+            # NOTE: pass the DIRECT polymarket.com host here, NOT the proxy
+            # URL. The httpx monkey-patch (installed in api/main.py at boot
+            # via install_httpx_proxy_patch) rewrites the URL + injects
+            # x-proxy-key on every outbound request when POLYMARKET_PROXY_URL
+            # is set. Passing the proxy URL here would bypass the patch's
+            # upstream-host detection and the request would fail.
+            if proxy_enabled():
+                log.info("LiveExecutor: CLOB routed through Cloudflare Worker proxy via httpx patch")
             self._client = ClobClient(
                 host="https://clob.polymarket.com",
                 key=private_key,
@@ -422,7 +440,16 @@ class LiveExecutor:
                 from api.services.position_manager import close_position
                 close_position(existing_position["id"], signal.market_price)
             else:
-                open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, signal.market_price, token_id=signal.token_id)
+                open_position(
+                    signal.module_id,
+                    signal.market_id,
+                    signal.bracket,
+                    signal.side,
+                    size,
+                    signal.market_price,
+                    token_id=signal.token_id,
+                    metadata=signal.metadata,
+                )
 
             log.info(f"LIVE [{profile_name}] {signal.side} {signal.bracket} size={size:.2f} @ {signal.market_price:.4f}")
             return {
@@ -436,7 +463,13 @@ class LiveExecutor:
             }
 
         except Exception as e:
-            sb.table("orders").update({"status": "rejected"}).eq("id", order_id).execute()
+            sb.table("orders").update({
+                "status": "rejected",
+                "metadata": {
+                    "profile": profile_name,
+                    "rejection_reason": str(e)[:1000],
+                },
+            }).eq("id", order_id).execute()
             # If we claimed an open position to exit but the order failed,
             # release it back to 'open' so the next exit cycle retries.
             if signal.side == "SELL" and existing_position:

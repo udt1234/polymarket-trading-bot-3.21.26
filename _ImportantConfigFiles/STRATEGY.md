@@ -63,6 +63,14 @@ Hawkes: 15% in SURGE/HIGH regimes, 8% in NORMAL/LOW
 10. Correlated exposure (30%)  11. Duplicate prevention  12. Cross-module correlation
 13. Settlement decay  14. Spread check  15. Liquidity check
 
+## Kelly Sizing Floor
+- **Per-signal Kelly BUY floor: 0.001 (0.1%)** — `api/modules/shared/signals.py`
+- **Per-signal Kelly AVOID floor: -0.005 (-0.5%)** (asymmetric on purpose — sell-side wants slightly more conviction)
+- **Position cap: 0.15 (15%)** — clamps `sized_kelly` upper bound
+- **Why 0.1% and not 1%**: ensemble splits probability across many simultaneous brackets (Elon monthly = 15-37 live brackets, Trump weekly = 8-25). Good edge signals routinely land at 0.2-0.5% kelly after fractional-Kelly (0.25x) + confidence + time-decay multipliers. The old 1% floor was silently dropping every cheap-bracket BUY.
+- **Dust trade protection** lives downstream: risk check #2 (2% edge gate) + #4 position cap + #9 single-market cap + min_order_size guard in executor.
+- **History**: lowered 0.01 → 0.001 on 2026-05-23 from Codex audit. Verified 2% edge gate still active.
+
 ## Order Execution Rules (NON-NEGOTIABLE)
 - **ALWAYS limit orders** — NEVER market orders. Every order MUST specify a `price`.
 - Market orders have unbounded slippage on Polymarket's thin order books.

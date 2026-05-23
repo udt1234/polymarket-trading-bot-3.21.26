@@ -29,6 +29,7 @@ class BigHoldMonthly(Strategy):
             {"price": 0.050, "pct": 0.20, "label": "mid"},
             {"price": 0.100, "pct": 0.20, "label": "catchall"},
         ],
+        "total_commitment_usd": 25.0,
         "buy_cancel_after_hours": 168,         # only buy in first 7 days of month
         "enter_after_hours_elapsed": 0,        # buy from day 1
         "sell_targets": [
@@ -55,14 +56,16 @@ class BigHoldMonthly(Strategy):
 
     def build_buy_ladder(self, state, params):
         ladder = params.get("buy_ladder", self.DEFAULT_PARAMS["buy_ladder"])
+        total_commitment = float(params.get("total_commitment_usd", self.DEFAULT_PARAMS["total_commitment_usd"]))
         out = []
         for i, t in enumerate(ladder, start=1):
             price = float(t.get("price", 0))
             pct = float(t.get("pct", 0))
+            notional = float(t.get("notional_usd") or (total_commitment * pct))
             label = t.get("label", f"tier{i}")
-            if price <= 0 or pct <= 0:
+            if price <= 0 or notional <= 0:
                 continue
-            out.append({"price": price, "pct": pct, "label": label, "tier": i})
+            out.append({"price": price, "pct": pct, "notional_usd": notional, "label": label, "tier": i})
         return out
 
     def classify(self, state, position, params):

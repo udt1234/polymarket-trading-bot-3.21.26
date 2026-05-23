@@ -1,8 +1,40 @@
 # PolyMarket Bot — Handoff
 
-## 🎯 Next Session — Configure Exit Rules (Elon + Truth Social)
+## 🚨 NEXT SESSION — Codex Audit Fixes Pending Merge (2026-05-23)
+
+Codex CLI ran a parallel audit on `codex/audit-fixes` branch at `C:\Users\darwi\.codex\worktrees\b57c\PolyMarket_Bot`. **Working tree only — never committed.** Live REST cleanup didn't hold because the code fixes were never deployed.
+
+**Reality check (vAI confirmed 2026-05-23):**
+- 5 duplicate-waiting pending-signal groups still in DB (worst = 4 dupes)
+- 4 zero-share active Spike tracker rows still in DB
+- Master HEAD is `228ea14` (retention PR); no Codex commits anywhere
+
+**Fixes that need to land** (12 modified files + 2 new migrations):
+- `api/services/engine.py` — pending-signal dedupe + wait_until cap at auction close - 2h + unfilled-on-unlock handling
+- `api/services/position_manager.py` — Spike position sync on real BUY/SELL fills (was creating zero-share rows pre-fill)
+- `api/services/executor.py` — passes signal.metadata to position open; writes rejection_reason to orders.metadata
+- `api/modules/spike_trading/module.py` — removed `_open_position()` pre-fill tracker creation; added `_get_open_or_pending_count()` based on canonical positions + active orders; `_get_open_position()` auto-liquidates zero-share rows
+- `api/modules/spike_trading/strategies/{mid_range_spike.py, big_hold_monthly.py}` — added `total_commitment_usd`; convert `pct` → `notional_usd`
+- `api/modules/{elon_tweets, truth_social}/module.py` — added `tracking_start`/`tracking_end` to signal metadata
+- `api/modules/shared/polymarket.py` — removed duplicate `fetch_all_active_trackings`; added bracket-resolved skip in `fetch_market_prices`; added proxy-usage NOTE comment
+- `api/modules/shared/signals.py` — **⚠️ STRATEGY CHANGE**: Kelly BUY gate lowered 0.01 → 0.001 (claim: high-bracket-count auctions split probability finely; portfolio + per-market caps still bound risk). NOT mentioned in Codex export.
+- `supabase/migrations/022_pending_signals_dedupe.sql` — cancel duplicate waiting + unique partial index `idx_pending_one_waiting_signal`
+- `supabase/migrations/023_spike_zero_share_cleanup.sql` — liquidate zero-share active Spike rows
+
+**Why this matters**: bot can't enter new auctions cleanly until these land. Spike rejects every emit because zero-share rows look open; Elon/Truth keep generating duplicate pending signals that pile up.
+
+**Migration 022 special-case**: Supabase REST cannot run DDL. Must use Supabase SQL editor (vAI did this for retention VACUUM via Chrome MCP), OR Supabase CLI when wired up, OR put SQL into a one-time bootstrap function.
+
+**Outstanding from Codex export (also vAI's responsibility):**
+- Credential mismatch: local `SUPABASE_URL=xdonwowgqvmtrduikaon` but `DATABASE_URL`/`DIRECT_URL` point to stale `naaiqwghilbrruuvdoea` project
+- Rotate Postgres password printed to Codex terminal (only if Sir shares transcript)
+
+---
+
+## 🎯 Configure Exit Rules (Elon + Truth Social) — older but still open
 
 **Status (2026-05-21)**: Both ensemble modules currently have NO exit logic.
+
 Live config has `stop_loss_pct = 0`, no `take_profit_pct`, no
 `trailing_stop_pct`. Bot enters positions and HOLDS TO AUCTION RESOLUTION.
 

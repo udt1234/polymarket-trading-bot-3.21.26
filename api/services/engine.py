@@ -1,6 +1,6 @@
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from api.services.risk_manager import RiskManager
 from api.services.executor import PaperExecutor, LiveExecutor, MultiExecutor
@@ -422,6 +422,9 @@ class TradingEngine:
                             self._log_rejection(signal, result.get("reason", "executor_rejected"))
                             self._track_rejection(module.name, signal, result.get("reason", "executor_rejected"))
                             continue
+                        if result.get("status") == "unfilled":
+                            log.info(f"Limit resting unfilled: {signal.side} {signal.bracket} @ {signal.market_price:.4f}")
+                            continue
                         self._log_execution(signal, result)
                         # Only Slack on actual fills. unfilled = limit resting on
                         # the book (normal for spike's deep ladder) — skipping
@@ -495,7 +498,8 @@ class TradingEngine:
             )
             if not defer:
                 return False
-            self._insert_pending_signal(signal, defer)
+            if not self._insert_pending_signal(signal, defer):
+                return False
             log.info(f"Deferred {signal.side} {signal.bracket}: expected {defer['expected_drop_pct']*100:.1f}% drop in {defer['wait_hours']}h, target={defer['target_price']}")
             return True
         except Exception as e:
@@ -510,17 +514,60 @@ class TradingEngine:
         except Exception:
             return {}
 
-    def _insert_pending_signal(self, signal, defer: dict):
+    def _parse_dt(self, value):
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    def _auction_end_from_metadata(self, metadata: dict, now: datetime):
+        md = metadata or {}
+        end = self._parse_dt(md.get("tracking_end") or md.get("auction_end") or md.get("window_end"))
+        if end:
+            return end
+        try:
+            elapsed_days = float(md.get("elapsed_days", 0) or 0)
+            total_days = float(md.get("total_days", 0) or 0)
+        except (TypeError, ValueError):
+            return None
+        remaining_hours = (total_days - elapsed_days) * 24.0
+        if remaining_hours <= 0:
+            return None
+        return now + timedelta(hours=remaining_hours)
+
+    def _insert_pending_signal(self, signal, defer: dict) -> bool:
         try:
             sb = get_supabase()
-            sb.table("pending_signals").insert({
+            now = datetime.now(timezone.utc)
+            wait_until = self._parse_dt(defer.get("wait_until")) or now
+            auction_end = self._auction_end_from_metadata(signal.metadata or {}, now)
+            if auction_end:
+                latest_wait = auction_end - timedelta(hours=2)
+                if latest_wait <= now:
+                    return False
+                if wait_until > latest_wait:
+                    wait_until = latest_wait
+            else:
+                # QA fix #3 (2026-05-23): if metadata lacks tracking_end AND
+                # total_days, fall back to capping wait_until at 24h to prevent
+                # an uncapped defer past auction resolution. Better to abandon
+                # than fire a live order on a resolved market.
+                max_fallback = now + timedelta(hours=24)
+                if wait_until > max_fallback:
+                    wait_until = max_fallback
+
+            row = {
                 "module_id": signal.module_id,
                 "market_id": signal.market_id,
                 "bracket": signal.bracket,
                 "side": signal.side,
                 "original_price": signal.market_price,
                 "target_price": defer["target_price"],
-                "wait_until": defer["wait_until"],
+                "wait_until": wait_until.isoformat(),
                 "abandon_if_price_above": defer["abandon_price"],
                 "model_prob": signal.model_prob,
                 "original_kelly_pct": signal.kelly_pct,
@@ -528,9 +575,42 @@ class TradingEngine:
                 "analog_count": defer["analog_count"],
                 "signal_metadata": signal.metadata or {},
                 "status": "waiting",
-            }).execute()
+            }
+            existing = (
+                sb.table("pending_signals")
+                .select("id")
+                .match({
+                    "module_id": signal.module_id,
+                    "market_id": signal.market_id,
+                    "bracket": signal.bracket,
+                    "side": signal.side,
+                })
+                .eq("status", "waiting")
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                sb.table("pending_signals").update(row).eq("id", existing.data[0]["id"]).execute()
+                return True
+            # QA fix #1 (2026-05-23): wrap INSERT in unique-violation guard.
+            # Two concurrent cycles racing the SELECT can both reach here;
+            # the unique partial index (migration 022) rejects the second.
+            # Without this guard the exception bubbles to the outer except
+            # which returns False, causing _maybe_defer_signal to drop to
+            # immediate execution at pre-dip price. Treat unique-violation
+            # as "successfully deferred elsewhere" -> return True.
+            try:
+                sb.table("pending_signals").insert(row).execute()
+            except Exception as insert_err:
+                err_msg = str(insert_err).lower()
+                if "idx_pending_one_waiting_signal" in err_msg or "duplicate" in err_msg or "unique" in err_msg:
+                    log.info(f"pending_signal: parallel cycle won the race for {signal.bracket}, treating as deferred")
+                    return True
+                raise
+            return True
         except Exception as e:
             log.error(f"Failed to insert pending signal: {e}")
+            return False
 
     def _process_pending_signals(self):
         """Check all waiting pending signals; execute, abandon, or keep waiting."""
@@ -557,6 +637,14 @@ class TradingEngine:
                     wait_until = datetime.fromisoformat(wait_until_str.replace("Z", "+00:00"))
                 except Exception:
                     wait_until = now
+                auction_end = self._auction_end_from_metadata(p.get("signal_metadata") or {}, now)
+                if auction_end and now >= auction_end - timedelta(minutes=30):
+                    sb.table("pending_signals").update({
+                        "status": "abandoned",
+                        "resolved_at": now.isoformat(),
+                    }).eq("id", p["id"]).execute()
+                    log.info(f"Pending signal abandoned: {bracket} too close to auction close")
+                    continue
 
                 if slug not in prices_cache:
                     try:
@@ -601,6 +689,9 @@ class TradingEngine:
                         result = self._executor_for_signal(sig).execute(sig)
                         if result.get("status") == "rejected":
                             new_status = "rejected_on_unlock"
+                        elif result.get("status") == "unfilled":
+                            new_status = "unfilled_on_unlock"
+                            log.info(f"Pending signal unlocked but rested unfilled: {bracket} @ {current_price:.4f}")
                         else:
                             self._log_execution(sig, result)
                             log.info(f"Pending signal executed: {bracket} @ {current_price:.4f} (reason: {'target_hit' if price_hit_target else 'expired'})")

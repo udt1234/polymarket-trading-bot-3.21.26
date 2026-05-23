@@ -11,6 +11,10 @@ log = logging.getLogger(__name__)
 XTRACKER_BASE = "https://xtracker.polymarket.com/api"
 GAMMA_BASE = "https://gamma-api.polymarket.com"
 CLOB_BASE = "https://clob.polymarket.com"
+# NOTE: callers must use pmx_get / pmx_post from api.services.polymarket_proxy
+# so requests are rewritten to the Cloudflare Worker AND the x-proxy-key
+# header is attached. Raw `client.get(GAMMA_BASE)` calls will 403 in prod
+# when POLYMARKET_PROXY_URL is set (Worker rejects unauth'd requests).
 
 RATE_LIMITS = {"xtracker": 0.3, "gamma": 0.5, "clob": 1.0}
 
@@ -152,6 +156,9 @@ async def fetch_all_active_trackings(
         except Exception:
             continue
         if s <= now <= e:
+            elapsed = (now - s).total_seconds() / 86400
+            t["_elapsed_days"] = round(elapsed, 2)
+            t["_remaining_days"] = round((e - now).total_seconds() / 86400, 2)
             active.append((t, s, e))
     active.sort(key=lambda x: x[1])
     return [t for (t, s, e) in active]
@@ -337,25 +344,6 @@ async def fetch_historical_daily_curve(
     return rows
 
 
-async def fetch_all_active_trackings(handle: str = "realDonaldTrump", platform: str = "truthsocial") -> list[dict]:
-    trackings = await _fetch_trackings_raw(handle, platform)
-    now = datetime.now(timezone.utc)
-    active = []
-    for t in trackings:
-        start = t.get("startDate", "")
-        end = t.get("endDate", "")
-        if start and end:
-            s = datetime.fromisoformat(start.replace("Z", "+00:00"))
-            e = datetime.fromisoformat(end.replace("Z", "+00:00"))
-            if s <= now <= e:
-                elapsed = (now - s).total_seconds() / 86400
-                t["_elapsed_days"] = round(elapsed, 2)
-                t["_remaining_days"] = round((e - now).total_seconds() / 86400, 2)
-                active.append(t)
-    active.sort(key=lambda x: x.get("startDate", ""))
-    return active
-
-
 async def fetch_tracking_by_id(handle: str, tracking_id: str, platform: str = "truthsocial") -> dict | None:
     trackings = await _fetch_trackings_raw(handle, platform)
     for t in trackings:
@@ -472,6 +460,16 @@ async def fetch_market_prices(slug: str) -> dict[str, float]:
         markets = events[0].get("markets", [])
         prices = {}
         for m in markets:
+            # Skip brackets Polymarket has already resolved (running total
+            # exceeded the bracket range -> bracket resolves NO and stops
+            # accepting orders). Without this filter, dead brackets dilute
+            # model probability across 30-60 markets instead of the ~15
+            # live ones, dragging Kelly% under the BUY gate on every
+            # viable bracket. Diagnosed 2026-05-22 on Elon monthly.
+            if m.get("closed") is True:
+                continue
+            if m.get("acceptingOrders") is False:
+                continue
             raw_bracket = m.get("groupItemTitle", m.get("question", ""))
             bracket = normalize_bracket(raw_bracket)
 
@@ -784,6 +782,13 @@ async def fetch_market_brackets(slug: str) -> list[str]:
         markets = events[0].get("markets", [])
         brackets = []
         for m in markets:
+            # Skip resolved-NO brackets (see fetch_market_prices for full
+            # rationale). Keeping them in the bracket universe diluted
+            # model probability and starved Kelly sizing on Elon monthly.
+            if m.get("closed") is True:
+                continue
+            if m.get("acceptingOrders") is False:
+                continue
             raw = m.get("groupItemTitle", m.get("question", ""))
             if raw:
                 brackets.append(raw.strip())

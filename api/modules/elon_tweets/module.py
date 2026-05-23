@@ -408,6 +408,8 @@ class ElonTweetsModule(BaseModule):
                         # filterable by auction window in the dashboard.
                         "tracking_id": tracking_id,
                         "tracking_title": tracking.get("title"),
+                        "tracking_start": week_start_str,
+                        "tracking_end": week_end_str,
                         "tracking_window_days": round(total_days, 2),
                         "per_tracking_budget": per_tracking_budget,
                         "n_active_auctions": n_active,

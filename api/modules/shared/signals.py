@@ -64,7 +64,13 @@ def kelly_sizing(
 
     sized_kelly = min(sized_kelly, 0.15)  # position cap
 
-    if sized_kelly > 0.01:
+    # 2026-05-22: BUY gate lowered from 0.01 to 0.001. Auctions with many
+    # live brackets (Elon monthly = ~15-37 live, weekly = ~25) split
+    # probability so finely that even high-edge bets land at 0.2-0.5%
+    # kelly. The old 1% gate silently dropped every high-edge cheap-bracket
+    # signal as PASS. Portfolio + single-market exposure caps still
+    # bound total risk, so the per-signal floor can be loose.
+    if sized_kelly > 0.001:
         action = "BUY"
     elif sized_kelly < -0.005:
         action = "AVOID"

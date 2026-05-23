@@ -417,10 +417,8 @@ class SpikeTradingModule(BaseModule):
         if not position:
             max_open = int(cfg.get("max_open_positions", 3))
             try:
-                open_count = sb.table("spike_positions").select("id", count="exact").eq(
-                    "module_id", module_id,
-                ).in_("state", ["WAITING", "MONITORING"]).execute()
-                if (open_count.count or 0) >= max_open:
+                open_count = self._get_open_or_pending_count(sb, module_id)
+                if open_count >= max_open:
                     self._log(sb, module_id, "decision", "info",
                               f"[{label}] at max_open_positions={max_open}")
                     return []
@@ -438,13 +436,6 @@ class SpikeTradingModule(BaseModule):
                           f"[{label}] pending BUY orders already in flight")
                 return []
 
-            # Only emit the ladder if we have a tracker row. Otherwise fills
-            # would be orphaned with nothing to classify SELL-NOW / HOLD off.
-            if not self._open_position(sb, module_id, market, bracket, current_price):
-                self._log(sb, module_id, "decision", "warning",
-                          f"[{label}] {market_id}: could not create spike_positions row — "
-                          f"refusing to emit ladder (would orphan fills)")
-                return []
             return self._build_buy_ladder_for_profile(
                 module_id, market, profile, params, strategy, state, cfg,
             )
@@ -836,6 +827,24 @@ class SpikeTradingModule(BaseModule):
         except Exception:
             return False
 
+    def _get_open_or_pending_count(self, sb, module_id: str) -> int:
+        count = 0
+        try:
+            positions = sb.table("positions").select("id", count="exact").eq(
+                "module_id", module_id,
+            ).eq("side", "BUY").eq("status", "open").execute()
+            count += int(positions.count or 0)
+        except Exception as e:
+            log.warning(f"open position count failed: {e}")
+        try:
+            orders = sb.table("orders").select("id", count="exact").eq(
+                "module_id", module_id,
+            ).eq("side", "BUY").in_("status", ["created", "submitted", "live"]).execute()
+            count += int(orders.count or 0)
+        except Exception as e:
+            log.warning(f"pending order count failed: {e}")
+        return count
+
     def _get_open_position(self, sb, module_id: str, market_id: str, bracket: str) -> Optional[dict]:
         try:
             res = sb.table("spike_positions").select("*").match({
@@ -843,45 +852,23 @@ class SpikeTradingModule(BaseModule):
                 "market_id": market_id,
                 "bracket": bracket,
             }).in_("state", ["WAITING", "MONITORING"]).execute()
-            return res.data[0] if res.data else None
+            for row in res.data or []:
+                try:
+                    shares = float(row.get("entry_size_shares") or 0)
+                except (TypeError, ValueError):
+                    shares = 0
+                if shares > 0:
+                    return row
+                sb.table("spike_positions").update({
+                    "state": "LIQUIDATED",
+                    "closed_at": datetime.now(timezone.utc).isoformat(),
+                    "last_decision": "AUTO_LIQUIDATE_NO_SHARES",
+                    "last_decision_at": datetime.now(timezone.utc).isoformat(),
+                }).eq("id", row["id"]).execute()
+            return None
         except Exception as e:
             log.warning(f"_get_open_position failed: {e}")
             return None
-
-    def _open_position(self, sb, module_id: str, market: dict, bracket: str, current_price: float) -> bool:
-        """Insert the spike_positions tracker row. Returns True when a row
-        exists after this call (either freshly inserted OR pre-existing from
-        a parallel cycle that won the race). Returns False when neither —
-        meaning the caller MUST NOT emit ladder signals (otherwise fills
-        would be orphaned with no tracker row to classify them).
-        """
-        # Re-check under the partial unique index — between _get_open_position
-        # and here, another cycle could have raced us. If a row already exists
-        # in WAITING/MONITORING, no-op rather than letting the DB raise.
-        existing = self._get_open_position(sb, module_id, market["market_id"], bracket)
-        if existing:
-            return True
-        try:
-            sb.table("spike_positions").insert({
-                "module_id": module_id,
-                "market_id": market["market_id"],
-                "bracket": bracket,
-                "state": "WAITING",
-                "entry_price": current_price,
-                "entry_size_shares": 0,         # filled when buy fills land
-                "entry_size_usd": 0,
-                "current_tweets": 0,
-                "hours_to_close": 0,
-            }).execute()
-            return True
-        except Exception as e:
-            # Most common cause: partial unique index conflict from a parallel
-            # cycle. Distinguish: if the row now exists (parallel cycle won),
-            # return True; otherwise this was a real failure (DB down, missing
-            # table, etc.) and the caller must NOT emit ladder signals.
-            log.warning(f"_open_position insert failed: {e}")
-            recovered = self._get_open_position(sb, module_id, market["market_id"], bracket)
-            return recovered is not None
 
     def _snapshot(self, sb, position_id: str, state: PositionState, decision: str):
         try:

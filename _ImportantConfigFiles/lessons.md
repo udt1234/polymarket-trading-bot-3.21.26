@@ -12,6 +12,30 @@ Living mistake log. After every bug fix or correction, append a rule here.
 
 ---
 
+### 2026-05-23 — Codex Audit Found Spike Self-Block + Pending Duplicate Cascade
+**What happened**: User ran ChatGPT Codex CLI parallel audit on a side-worktree (`codex/audit-fixes`). Codex applied 12-file diff + 2 migrations + REST cleanups, then exported the session. When vAI verified live state the next day, REST cleanups had reverted — 5 duplicate-waiting pending-signal groups and 4 zero-share Spike rows back in DB.
+
+**Root causes Codex identified** (all real bugs vAI confirmed by reading the diffs):
+1. **Spike `_open_position()` created tracker rows BEFORE any fill landed** — with `entry_size_shares=0`, `entry_size_usd=0`. Then `_get_open_position()` treated those zero-share rows as "already open" and refused to emit ladders. Bot silently stopped trading new Spike auctions.
+2. **Pending-signal duplicate cascade** — `_insert_pending_signal` had no dedupe; every cycle re-inserted the same module/market/bracket/side row. Table grew, deferred signals never resolved cleanly.
+3. **Pending signals could defer past auction close** — no cap on `wait_until` relative to auction end.
+4. **Paper executor returned `unfilled` for resting limits; engine logged it as `executed`** — fantasy fills in the success log.
+5. **Live order rejections dropped the exception reason** — only status changed to "rejected", no metadata.
+6. **`Mid_Range_Spike` + `Big_Hold_Monthly` emitted `pct` while Spike builder expected `notional_usd`** — silent contract mismatch, ladder tiers were dropped.
+7. **`fetch_all_active_trackings` defined twice in shared/polymarket.py** — second definition shadowed first.
+8. **Kelly BUY gate at 0.01 (1%) silently dropped high-edge signals on auctions with 15-37 live brackets** — probability splits so finely that even good bets land at 0.2-0.5% kelly.
+
+**Why the live cleanup reverted**: Codex applied REST UPDATEs but never deployed the code fixes. Master never received Codex's diff. Railway kept running old code that re-created the same broken rows next cycle.
+
+**Rule**:
+1. **REST cleanups are temporary unless the code that caused the bad rows is also deployed.** If you DELETE/UPDATE bad data without shipping the code fix, the bot re-creates the same garbage within minutes. Always pair data cleanup with code deploy, or skip the cleanup until code is live.
+2. **Code review tool exports BEFORE trusting their claims.** Codex export said "duplicate groups remaining: 0" — vAI verified live and found 5. Tools can be wrong about durability of changes. Always re-query live state when picking up another agent's work.
+3. **Don't create tracker rows before fills.** If a module needs an "open position" record, create it at fill time (in `position_manager.open_position`), never speculatively from the strategy code. Speculative rows + naive "is open" checks = self-block.
+4. **Pending-signal table needs a unique partial index** on `(module_id, market_id, bracket, side) WHERE status='waiting'`. Without it, every insert path is a potential duplicate vector. Index = belt; app-side dedupe = suspenders. Both required.
+5. **Strategy-contract changes (like Kelly gate 0.01→0.001) must be flagged loudly** in commits AND any session export. The Codex export did NOT mention this — vAI caught it only by reading the diff manually. New rule: any change to risk thresholds, position caps, or sizing constants must be in the export's executive summary AND require explicit Sir approval before merge.
+
+---
+
 ### 2026-05-02 — Trump Module Stopped Trading 4 Days (Missing pending_signals Table)
 **What happened**: Bot's Trump module ran 5-min cycles, logs showed "signals=4" per cycle, but no trades executed for 4 days. No risk-rejection logs, no execution logs — all silent.
 **Root cause**: Migration 006 (`pending_signals` table) was never applied to prod Supabase. The Wait-for-Dip feature (`wait_for_dip_enabled=true` in module config) calls `_insert_pending_signal()` which has its OWN inner try/except. That inner block swallowed the "relation pending_signals does not exist" error silently. The OUTER `_maybe_defer_signal` then returned `True` (deferred) for every signal — and the engine skipped them from risk_manager.execute(). The function was supposed to fail-closed (return False so signals continue) but instead failed-open (return True = deferred = dropped on the floor).

@@ -113,6 +113,14 @@ async def fetch_market_for_tracking(tracking: dict, target_bracket: str) -> Opti
         raw = m.get("groupItemTitle", m.get("question", "")) or ""
         if raw.strip().lower() != target_clean:
             continue
+        # Skip bracket if Polymarket has resolved it (running total already
+        # outside the bracket range). Without this, Spike would post limits
+        # against a market that's not accepting orders -> wasted retries +
+        # noisy executor rejections. Same fix as fetch_market_prices
+        # (Elon monthly debug, 2026-05-22).
+        if m.get("closed") is True or m.get("acceptingOrders") is False:
+            log.info(f"spike skip: bracket {target_bracket} on {slug} is resolved/closed")
+            return None
         # CLOB constraints — needed by the strategy ladder builder so tier
         # prices below min_tick get snapped UP to a valid tick (live API
         # rejects sub-tick limits).

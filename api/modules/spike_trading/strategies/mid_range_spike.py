@@ -27,6 +27,7 @@ class MidRangeSpike(Strategy):
             {"price": 0.10, "pct": 0.40, "label": "core"},
             {"price": 0.15, "pct": 0.20, "label": "late"},
         ],
+        "total_commitment_usd": 25.0,
         "buy_cancel_after_hours": 30,        # bigger window than lottery
         "enter_after_hours_elapsed": 6,      # WAIT for the initial peak to crash
         "sell_targets": [                    # absolute prices, not multipliers
@@ -55,14 +56,16 @@ class MidRangeSpike(Strategy):
 
     def build_buy_ladder(self, state, params):
         ladder = params.get("buy_ladder", self.DEFAULT_PARAMS["buy_ladder"])
+        total_commitment = float(params.get("total_commitment_usd", self.DEFAULT_PARAMS["total_commitment_usd"]))
         out = []
         for i, t in enumerate(ladder, start=1):
             price = float(t.get("price", 0))
             pct = float(t.get("pct", 0))
+            notional = float(t.get("notional_usd") or (total_commitment * pct))
             label = t.get("label", f"tier{i}")
-            if price <= 0 or pct <= 0:
+            if price <= 0 or notional <= 0:
                 continue
-            out.append({"price": price, "pct": pct, "label": label, "tier": i})
+            out.append({"price": price, "pct": pct, "notional_usd": notional, "label": label, "tier": i})
         return out
 
     def classify(self, state, position, params):

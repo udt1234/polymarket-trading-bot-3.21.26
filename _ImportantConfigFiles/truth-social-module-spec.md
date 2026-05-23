@@ -233,5 +233,5 @@ The module should expose these values for the bot to consume:
 4. **Hourly data from xTracker** comes as dates with time strings like "12:00 PM". Parse to 24h integer for math.
 5. **CLOB midpoints** are preferred over Gamma prices for edge calculation. Gamma is the fallback.
 6. **Calibration logging**: After each auction resolves, log Brier score and log loss for model evaluation. Use this to adjust ensemble weights over time.
-7. **Wallet**: `0x2eEF3A18bC771827aF0649a81aA54148A8E8eAca` for trade history pulls.
+7. **Wallet**: read `POLYMARKET_WALLET_ADDRESS` from env for trade history pulls (bot wallet, set in `.env` / Railway). Current value: `0xD0f99f553bC376E8b86246295d679dC86334d400`. The old `0x2eEF3A...8eAca` wallet was retired 2026-05-22 and is now `POLY_MANUAL_*` for vAI's manual trades only.
 8. **Rate limiting**: 300ms between xTracker calls, 500ms between Gamma calls, 1s between CLOB history calls.
