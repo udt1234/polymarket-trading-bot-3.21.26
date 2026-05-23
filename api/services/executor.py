@@ -399,39 +399,33 @@ class LiveExecutor:
             except Exception:
                 pass
 
+            # CRITICAL (2026-05-23 functional audit fix): CLOB POST returns an
+            # order *submission* acknowledgment, NOT a fill confirmation. GTC
+            # limits routinely rest on the book unfilled. Previously we wrote
+            # status='filled' here unconditionally + opened a `positions` row
+            # — that created phantom inventory while real shares sat unmatched
+            # on the CLOB. Portfolio exposure check then thought we held size
+            # we didn't, and SELLs marked positions closed that hadn't sold.
+            #
+            # New behavior: write `submitted` + store clob_order_id. A future
+            # fill-poller (TODO) will reconcile against CLOB order-status API
+            # and flip submitted -> filled (and open the position) once the
+            # match actually lands. Until then, the DB is honest about what
+            # actually filled vs what's resting.
             sb.table("orders").update({
-                "status": "filled",
-                "filled_at": datetime.now(timezone.utc).isoformat(),
+                "status": "submitted",
                 "metadata": {"profile": profile_name, "clob_order_id": clob_order_id} if clob_order_id else {"profile": profile_name},
             }).eq("id", order_id).execute()
 
-            sb.table("trades").insert({
-                "order_id": order_id,
-                "module_id": signal.module_id,
-                "market_id": signal.market_id,
-                "bracket": signal.bracket,
-                "side": signal.side,
-                "size": size,
-                "price": signal.market_price,
-                "executor": "live",
-                "executed_at": datetime.now(timezone.utc).isoformat(),
-                "metadata": {"profile": profile_name},
-            }).execute()
-
-            if signal.side == "SELL" and existing_position:
-                from api.services.position_manager import close_position
-                close_position(existing_position["id"], signal.market_price)
-            else:
-                open_position(signal.module_id, signal.market_id, signal.bracket, signal.side, size, signal.market_price, token_id=signal.token_id)
-
-            log.info(f"LIVE [{profile_name}] {signal.side} {signal.bracket} size={size:.2f} @ {signal.market_price:.4f}")
+            log.info(f"LIVE [{profile_name}] {signal.side} {signal.bracket} SUBMITTED size={size:.2f} @ {signal.market_price:.4f} clob_id={clob_order_id} (resting until fill-poller confirms)")
             return {
                 "id": order_id,
-                "status": "filled",
+                "status": "submitted",
                 "profile": profile_name,
                 "size": size,
                 "price": signal.market_price,
                 "executor": "live",
+                "clob_order_id": clob_order_id,
                 "clob_response": str(order),
             }
 

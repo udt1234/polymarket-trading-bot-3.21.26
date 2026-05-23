@@ -12,6 +12,26 @@ Living mistake log. After every bug fix or correction, append a rule here.
 
 ---
 
+### 2026-05-23 — Functional Audit Found 5 Live-Trade Blockers
+**What happened**: 6-agent parallel functional audit found bot had been silently NOT trading on Railway for 24h. 100% of signals rejected with "risk state not synced — blocking until PnL data available". Plus 4 other blockers that would have caused real money loss the moment any module flipped to live.
+
+**Root causes**:
+1. `_sync_risk_state` flagged `_risk_synced=True` only on non-empty daily_pnl + successful query. On fresh deploys, Supabase hiccups, or any error path, it stayed False forever → silent reject on EVERY signal.
+2. `LiveExecutor.execute()` wrote `status='filled'` + opened a position on CLOB POST acknowledgment. But CLOB POST = submission, NOT fill. Phantom inventory while real shares unmatched on book.
+3. `MultiExecutor` fans Signal to N profiles in parallel. Each LiveExecutor called `open_position()` independently → N position rows for 1 signal.
+4. Pending signals lost `token_id` + book fields on unlock. Rehydration only passed metadata dict.
+5. No env-level live-trade backstop. Single Supabase row flip = live trading, no env confirmation.
+
+**Rules**:
+1. **Risk-state sync MUST be safe on empty/failed input.** Add `mark_synced_empty()` path that flips synced=True with zero PnL so loss caps evaluate against zero losses instead of blocking forever.
+2. **Pre-warm critical state at engine boot, BEFORE first cycle fires.** Don't rely on the first cycle to also bootstrap state.
+3. **CLOB POST != fill.** Write `status='submitted'` + store `clob_order_id`. Position opens on confirmed match via a future fill-poller.
+4. **Persist EVERY field a downstream consumer needs on the pending row, then rehydrate on unlock.** Token_id, best_bid/ask, depth — all of it.
+5. **Live trading must require BOTH module-level AND env-level opt-in.** `ALLOW_LIVE_TRADING=true` env backstop. Default False.
+6. **Silent-no-trade is the worst failure mode.** CI passed. Logs looked healthy. Bot looked alive. Add "trade count per hour" Slack alert that fires if zero for >2h.
+
+---
+
 ### 2026-05-02 — Trump Module Stopped Trading 4 Days (Missing pending_signals Table)
 **What happened**: Bot's Trump module ran 5-min cycles, logs showed "signals=4" per cycle, but no trades executed for 4 days. No risk-rejection logs, no execution logs — all silent.
 **Root cause**: Migration 006 (`pending_signals` table) was never applied to prod Supabase. The Wait-for-Dip feature (`wait_for_dip_enabled=true` in module config) calls `_insert_pending_signal()` which has its OWN inner try/except. That inner block swallowed the "relation pending_signals does not exist" error silently. The OUTER `_maybe_defer_signal` then returned `True` (deferred) for every signal — and the engine skipped them from risk_manager.execute(). The function was supposed to fail-closed (return False so signals continue) but instead failed-open (return True = deferred = dropped on the floor).

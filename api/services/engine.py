@@ -156,6 +156,16 @@ class TradingEngine:
                                max_instances=1, coalesce=True, misfire_grace_time=60,
                                id="cycle_watchdog")
         self.scheduler.start()
+        # Pre-warm risk-state sync BEFORE the first cycle fires. Without
+        # this, signals emitted during the first cycle see _risk_synced=False
+        # at the daily/weekly/drawdown gates and are silently rejected. Bot
+        # was silently NOT trading on Railway for 24h before this fix
+        # (functional audit finding 2026-05-23).
+        try:
+            self._sync_risk_state()
+            log.info(f"Engine boot: risk-state pre-warmed, synced={self.risk_manager._risk_synced}")
+        except Exception as e:
+            log.error(f"Engine boot: pre-warm risk sync failed (will retry in first cycle): {e}")
         # Seed last-run timestamp so the watchdog has a baseline (otherwise
         # it would fire immediately on the first 5-min check).
         self._cycle_last_run_ts = time.time()
@@ -181,6 +191,18 @@ class TradingEngine:
             row = sb.table("modules").select("status").eq("id", signal.module_id).single().execute()
             status = ((row.data or {}).get("status") or "").lower()
             if status == "active":
+                # Belt-and-suspenders (2026-05-23): live trades require BOTH
+                # module.status='active' AND allow_live_trading=True env flag.
+                # Without the env flag, route to paper even if a Supabase
+                # row was flipped accidentally. Default env value is False.
+                settings = get_settings()
+                if not getattr(settings, "allow_live_trading", False):
+                    log.warning(
+                        f"Module {signal.module_id} status=active but ALLOW_LIVE_TRADING=false "
+                        f"-> routing {signal.side} {signal.bracket} to PAPER. Set ALLOW_LIVE_TRADING=true "
+                        f"in env to enable live trading."
+                    )
+                    return self.paper_executor
                 return self.executor
             # Anything other than active (paper, inactive, unknown) -> paper.
             return self.paper_executor
@@ -526,7 +548,18 @@ class TradingEngine:
                 "original_kelly_pct": signal.kelly_pct,
                 "expected_drop_pct": defer["expected_drop_pct"],
                 "analog_count": defer["analog_count"],
-                "signal_metadata": signal.metadata or {},
+                # Persist token_id + book fields inside signal_metadata so
+                # _process_pending_signals can rehydrate them when the
+                # signal unlocks. Without token_id LiveExecutor refuses
+                # the unlock with "no token_id" (functional audit 2026-05-23).
+                "signal_metadata": {
+                    **(signal.metadata or {}),
+                    "_token_id": signal.token_id,
+                    "_best_bid": signal.best_bid,
+                    "_best_ask": signal.best_ask,
+                    "_bid_depth_5": signal.bid_depth_5,
+                    "_ask_depth_5": signal.ask_depth_5,
+                },
                 "status": "waiting",
             }).execute()
         except Exception as e:
@@ -583,6 +616,11 @@ class TradingEngine:
                 if not price_hit_target and not wait_expired:
                     continue
 
+                # Rehydrate token_id + book fields from signal_metadata
+                # (persisted at defer time). Without these the unlocked
+                # signal fails LiveExecutor's token_id guard and pre-trade
+                # liquidity checks. Functional audit 2026-05-23.
+                md = p.get("signal_metadata") or {}
                 sig = Signal(
                     module_id=p["module_id"],
                     market_id=slug,
@@ -592,7 +630,12 @@ class TradingEngine:
                     model_prob=float(p.get("model_prob") or 0),
                     market_price=current_price,
                     kelly_pct=float(p.get("original_kelly_pct") or 0),
-                    metadata=p.get("signal_metadata") or {},
+                    token_id=md.get("_token_id"),
+                    best_bid=md.get("_best_bid"),
+                    best_ask=md.get("_best_ask"),
+                    bid_depth_5=md.get("_bid_depth_5"),
+                    ask_depth_5=md.get("_ask_depth_5"),
+                    metadata=md,
                 )
                 approved, reason = self.risk_manager.check(sig)
                 new_status = "executed" if approved else "rejected_on_unlock"
@@ -1075,19 +1118,45 @@ class TradingEngine:
                 log.error(f"Walk-forward error for {m['id']}: {e}")
 
     def _sync_risk_state(self):
+        """Pull recent daily_pnl rows and flip risk_manager._risk_synced=True.
+
+        Critical: this MUST flip _risk_synced even when daily_pnl is empty
+        or the DB read fails on first call. Otherwise _check_daily_loss /
+        _weekly_loss / _drawdown all return False with 'risk state not
+        synced' and the bot silently rejects every signal (functional
+        audit finding 2026-05-23 — bot had been silently NOT trading for
+        24h on Railway).
+
+        Fix:
+        - Empty pnl_rows OR DB error -> mark_synced_empty (sync=True, 0 PnL)
+        - Successful query -> compute and update_pnl (sync=True, real PnL)
+        - Weekly P&L now uses end-minus-start of the 7d window instead of
+          dollar-weighted daily_return sum (fixes 'wrong aggregation' bug).
+        """
         try:
             sb = get_supabase()
             pnl_rows = sb.table("daily_pnl").select("portfolio_value,daily_return,total_pnl").order("date", desc=True).limit(7).execute()
-            if pnl_rows.data:
-                latest = pnl_rows.data[0]
-                daily = latest.get("daily_return", 0) * latest.get("portfolio_value", 1000)
-                weekly = sum(r.get("daily_return", 0) * r.get("portfolio_value", 1000) for r in pnl_rows.data)
-                values = [r["portfolio_value"] for r in pnl_rows.data]
-                peak = max(values) if values else 1000
-                current = values[0] if values else 1000
-                self.risk_manager.update_pnl(daily, weekly, peak, current)
+            if not pnl_rows.data:
+                log.info("Risk sync: daily_pnl is empty — marking synced with zero PnL (fresh deploy or pre-trade state)")
+                self.risk_manager.mark_synced_empty()
+                return
+            latest = pnl_rows.data[0]
+            values = [r["portfolio_value"] for r in pnl_rows.data]
+            current = values[0] if values else 0.0
+            peak = max(values) if values else 0.0
+            daily = latest.get("daily_return", 0) * latest.get("portfolio_value", 0)
+            # Weekly P&L = end - start of 7d window (chronologically). values[0]
+            # is newest (desc order), values[-1] is oldest. Correct math.
+            weekly = (current - values[-1]) if len(values) > 1 else daily
+            self.risk_manager.update_pnl(daily, weekly, peak, current)
         except Exception as e:
-            log.error(f"Risk state sync failed — loss limits may be stale: {e}")
+            # Fail-loud + fail-safe: log AND still mark synced (zero PnL) so
+            # a transient Supabase hiccup doesn't permanently block trading.
+            log.error(f"Risk state sync FAILED — falling back to zero-PnL synced state to avoid silent-no-trade: {e}")
+            try:
+                self.risk_manager.mark_synced_empty()
+            except Exception:
+                pass
 
     def _log_execution(self, signal, result):
         try:
