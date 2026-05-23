@@ -42,6 +42,9 @@ build/
 # Backtest data
 data/
 
+# DataMetricPulls — parquet archives (local cache, not for git)
+_DataMetricPulls/historical/supabase_archive/
+
 # MISC (unrelated files)
 MISC/
 

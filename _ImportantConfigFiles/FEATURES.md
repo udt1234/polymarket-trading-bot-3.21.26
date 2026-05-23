@@ -8,6 +8,7 @@
 - **Circuit Breaker**: Auto-halt after N consecutive losses, cooldown
 - **Auto-Kill Switch**: Pause module after N consecutive losses (default 5, togglable)
 - **Price Floor**: Reject paper trades with market_price < 0.001 (0.1¢ tick floor)
+- **Retention + Parquet Archive** (2026-05-22): Daily cleanup cron deletes rows older than live windows (180d / 90d / 30d / 14d / 7d). Weekly archive cron dumps last 7 days to `_DataMetricPulls/historical/supabase_archive/<table>/<YYYY-MM>.parquet`. Analysis code uses `parquet_archive.read_table_range()` for >live-window reads. Triggered by free-tier Disk IO outage.
 - **Tick-snap at emit** (2026-05-18): truth_social rounds market_price to bracket's min_tick_size before signal build, eliminates `below_min_tick_size` rejection
 - **Thin-book BUY bypass** (2026-05-18): risk_manager._check_spread lets cheap-lottery BUYs (<10¢) through when Gamma returns null bid (lottery thesis = buy thin, hold to resolution)
 - **Liquidity Check**: Paper fills at actual best ask/bid, capped at available depth

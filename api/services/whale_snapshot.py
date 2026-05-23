@@ -128,6 +128,29 @@ def get_spike_series_for_handle(
         .execute()
     )
     rows = res.data or []
+
+    # If the auction window reaches into the parquet archive (>90 days old),
+    # merge in archived rows. Modules call this on backtest replay or
+    # post-resolution analysis where the auction can be ancient.
+    try:
+        from api.modules.shared.parquet_archive import is_in_archive_range, read_table_range
+        a_start = auction_start if isinstance(auction_start, datetime) else datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+        if is_in_archive_range("post_count_snapshots", a_start):
+            a_end = auction_end if isinstance(auction_end, datetime) else datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
+            df = read_table_range(
+                "post_count_snapshots",
+                since=a_start, until=a_end,
+                ts_col="captured_at",
+            )
+            if df is not None and not df.empty:
+                archived = df[["captured_at", "count"]].to_dict("records")
+                for a in archived:
+                    if hasattr(a["captured_at"], "isoformat"):
+                        a["captured_at"] = a["captured_at"].isoformat()
+                rows = archived + rows
+    except Exception as e:
+        log.debug(f"whale_snapshot: parquet merge skipped: {e}")
+
     if len(rows) < 3:
         return None
     # Bucket into hour cells, take last count per hour

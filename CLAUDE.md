@@ -61,6 +61,29 @@ Ranked by `pct_arc_5to30` = % of auctions where bracket BOTH crashed ≤5¢ AND 
 - Scripts: `scripts/fetch_historical_auctions.py`
 - Never commit large data files — add to .gitignore
 
+## Retention + Parquet Archive (2026-05-22)
+Supabase free tier choked on Disk IO 2026-05-22 (GoTrue auth hung, dashboard login broke). Permanent fix: retention policy + parquet archive.
+
+**Live retention windows (rows older than this are deleted from Supabase):**
+- `price_snapshots`: 180 days (used live by `price_timing.py` + `exit_manager.py`)
+- `post_count_snapshots`: 90 days (used live by `whale_snapshot.py` for projections)
+- `order_book_snapshots`: 30 days (dashboard only, no trading-logic reads)
+- `logs` system: 30 days (`engine.py:952` reads "New Auction" markers)
+- `logs` other: 14 days (last 20-50 reads only)
+- `pending_signals`: 7 days
+
+**Archive location**: `_DataMetricPulls/historical/supabase_archive/<table>/<YYYY-MM>.parquet`
+
+**Schedulers running in bot process**:
+- Daily cleanup: 03:30 UTC — DELETEs old rows
+- Weekly archive: Sunday 03:00 UTC — dumps last 7d to parquet
+
+**Reading older-than-live data**: use `api.modules.shared.parquet_archive.read_table_range(table, since, until, ts_col, filters)`. Returns pandas DataFrame or None.
+
+**Already-wired modules**: `price_timing.py` (price_snapshots merge) + `whale_snapshot.py` (post_count_snapshots merge). When adding new analysis code that reads >live window, follow the same pattern.
+
+**One-time backup script**: `scripts/archive_supabase_to_parquet.py` — full dump of all 4 tables to parquet. Run before any retention changes.
+
 ## Parquet Data Access (Full 3.5-year Polymarket history)
 - **Source**: SII-WANGZJ HuggingFace dataset (`SII-WANGZJ/Polymarket_data`) — 1M markets, 766M trade events, Nov 2022 → present
 - **Access**: streamed via DuckDB over HTTPS (no local copy required) — see `_DataMetricPulls/duckdb_remote.py`
@@ -147,8 +170,26 @@ See `_ImportantConfigFiles/MODULE_ARCHITECTURE.md` for the full guide. Quick rul
 - **Use Claude in Chrome and Claude Preview MCP tools proactively whenever the task is browser-actionable.** This includes Railway deploys, redeploys, dashboard checks, deploy log inspection, and any other web-based action that would otherwise require user clicks. Do not ask the user to "open the dashboard" or "click redeploy" — drive the browser via MCP and report results.
 - Only escalate to the user when an action genuinely requires their physical input (e.g. 2FA codes, password entry on a locked-out account, financial confirmation).
 
-## After Every Bug Fix
-Update `_ImportantConfigFiles/lessons.md` with what went wrong and the rule to prevent it.
+## After Every Bug Fix — TWO PLACES (mandatory)
+1. **`_ImportantConfigFiles/lessons.md`** — human-readable changelog of what went wrong (full narrative)
+2. **`~/.claude/projects/C--Users-darwi-OneDrive-Desktop-Claude-Code-Personal-PolyMarket-Bot/memory/lesson_<slug>.md`** — auto-loaded memory file with the RULE (concise, actionable). Then add a one-line pointer to `memory/MEMORY.md` under the "Hard-won lessons" section.
+
+Why both: lessons.md is the human log (full context, never trimmed). Memory files auto-load into every new session so vAI obeys the rule without being told. If you only write to lessons.md, vAI will repeat the mistake — those files are NOT auto-loaded.
+
+Format for the memory file (frontmatter required):
+```
+---
+name: lesson-<kebab-case-slug>
+description: One-line summary of the rule
+metadata:
+  type: feedback
+---
+[Rule statement]
+
+**Why:** [Date + what happened + impact]
+
+**How to apply:** [Numbered actions to prevent recurrence]
+```
 
 ## Daily Backfill Status Check
 **On the first user prompt of the day**, query Supabase `backfill_progress` table and report any handle where `is_complete = false`. As of 2026-05-03, Trump (`realDonaldTrump`) is COMPLETE (32,880 posts, walked back to Feb 2022). No action needed unless a new backfill is started or a handle's `is_complete` flips back to false.
