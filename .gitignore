@@ -50,3 +50,8 @@ MISC/
 
 # Playwright cache
 .playwright-mcp/
+
+# Canonical data layer (regenerable via scripts/canonical/)
+_DataMetricPulls/canonical/
+_DataMetricPulls/trump_posts_raw.parquet
+_DataMetricPulls/elon_posts_raw.parquet
