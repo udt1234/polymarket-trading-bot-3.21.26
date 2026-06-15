@@ -1,5 +1,17 @@
 # PolyMarket Bot — Teardown / Start-Fresh Notes
-Generated: 2026-06-15 · Status: PRE-DELETION (nothing destroyed yet)
+Generated: 2026-06-15 · Status: SUPABASE WIPED ✅ (all 34 tables truncated, schema+project kept)
+
+## DONE (2026-06-15)
+- ✅ Exported 11 trading/config tables → `supabase_export_20260615.zip` (delivered to user; QA pending).
+- ✅ TRUNCATEd all 34 tables in `PolyMarket Bot` (xdonwowgqvmtrduikaon). Schema + project + keys preserved for reuse.
+- ✅ Confirmed all paper (trades.executor: 0 live / 283 paper; positions all closed).
+- ⏳ TODO (user): save Railway env vars (esp. POLYMARKET_PRIVATE_KEY) → then delete the Railway service + crons.
+
+## ⚠️ The Railway bot is STILL RUNNING
+The Railway process was logging as of today. Now that Supabase is wiped, **it will start
+re-writing rows** (logs, module_health, settings, possibly snapshots) on its next cycle.
+The DB will NOT stay clean until you **stop / delete the Railway service.** Do that next.
+
 
 > ⚠️ This file is for your reference. It does NOT contain real secret values —
 > those are not present in this container (only `.env.example` is). The real
