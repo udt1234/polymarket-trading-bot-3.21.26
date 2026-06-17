@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     polymarket_passphrase: str = ""
     polymarket_private_key: str = ""
 
+    # Polygon RPC for on-chain redemption of resolved positions (redeemPositions).
+    polygon_rpc_url: str = "https://polygon-rpc.com"
+
     supabase_url: str = ""
     supabase_anon_key: str = ""
     supabase_service_key: str = ""

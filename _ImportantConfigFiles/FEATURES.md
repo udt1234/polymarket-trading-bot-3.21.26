@@ -12,6 +12,7 @@
 - **Tick-snap at emit** (2026-05-18): truth_social rounds market_price to bracket's min_tick_size before signal build, eliminates `below_min_tick_size` rejection
 - **Thin-book BUY bypass** (2026-05-18): risk_manager._check_spread lets cheap-lottery BUYs (<10¢) through when Gamma returns null bid (lottery thesis = buy thin, hold to resolution)
 - **Liquidity Check**: Paper fills at actual best ask/bid, capped at available depth
+- **Position Redemption** (2026-06-17): Claim USDC from resolved positions on-chain via `redeemPositions` (CTF for regular, NegRiskAdapter for neg-risk). `api/services/redeem.py` + `GET /api/portfolio/redeemable` + `POST /api/portfolio/redeem` (dry-run default) + `scripts/redeem_positions.py`. Aborts if signing EOA ≠ position proxy wallet.
 
 ## Observability
 - **HealthBadge** (2026-05-18): runtime "is this module actually working" badge on every module card + detail page. States: 🟢 Trading (fills <24h) / 🟡 Cycling (cycling but 0 fills, shows reason) / 🔴 Stuck (errors or no heartbeat). Computed server-side via `/api/modules/{id}/realtime-health` — 3 small Supabase reads per module
