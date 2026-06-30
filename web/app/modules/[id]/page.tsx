@@ -32,9 +32,7 @@ import { LastAuctionsPnl } from "./components/last-auctions-pnl"
 import { PendingSignalsCard } from "./components/pending-signals-card"
 import { PositionBreakdownChart } from "./components/position-breakdown-chart"
 import { KellyTrackerChart } from "./components/kelly-tracker-chart"
-import { PriceOverTimeChart } from "./components/price-over-time-chart"
-import { VolumePriceChart } from "./components/volume-price-chart"
-import { OrderBookDepthChart } from "./components/order-book-depth-chart"
+import { BracketMetricsTable } from "./components/bracket-metrics-table"
 import { LatencyHistogramChart } from "./components/latency-histogram-chart"
 import { PostCountDivergenceChart } from "./components/post-count-divergence-chart"
 import { CollapsibleCard } from "./components/collapsible-card"
@@ -1128,81 +1126,14 @@ export default function ModuleDetailPage() {
         />
       </CollapsibleCard>
 
-      {/* Summary Cards */}
+      {/* Bankroll & Bracket Cap budget controls (positions/auction metrics tiles removed) */}
       {(() => {
-        const marketValue = openPositions.reduce((s, p) => s + p.size * (pacing?.market_prices?.[p.bracket] ?? p.avg_price), 0)
-        const unrealizedPnl = marketValue - totalInvested
-        // Total shares across all open positions + weighted avg cost per share.
-        // size = shares; avg_price = $/share. So total $ / total shares = avg cost.
-        const totalShares = openPositions.reduce((s, p) => s + (p.size || 0), 0)
-        const avgCostPerShare = totalShares > 0 ? totalInvested / totalShares : 0
-        const realizedPnl = closedPositions.reduce((s, p) => s + (p.realized_pnl || 0), 0)
-        const fmtDollars = (n: number) => {
-          const abs = Math.abs(n)
-          if (abs < 1000) return `$${abs.toFixed(2)}`
-          return `$${Math.round(abs).toLocaleString()}`
-        }
-        const fmtDollarsSigned = (n: number) => {
-          const abs = Math.abs(n)
-          const sign = n >= 0 ? "+" : "-"
-          if (abs < 1000) return `${sign}$${abs.toFixed(2)}`
-          return `${sign}$${Math.round(abs).toLocaleString()}`
-        }
-        const totalTrades = openPositions.length + closedPositions.length
         const accountBankroll = riskSettings?.bankroll || 1000
-        const budgetPct = ((module.budget / accountBankroll) * 100).toFixed(0)
-
-        const recentSignals = mySignals.slice(0, 10)
-        const bestEdgeSignal = recentSignals.reduce((best: any, s: any) => (!best || (s.edge || 0) > (best.edge || 0)) ? s : best, null)
-        const bestEdge = bestEdgeSignal?.edge ? `+${(bestEdgeSignal.edge * 100).toFixed(1)}%` : "—"
-        const bestEdgeBracket = bestEdgeSignal?.bracket || ""
-
-        const approvedCount = recentSignals.filter((s: any) => s.approved).length
-        const spreadRejected = recentSignals.filter((s: any) => !s.approved && (s.rejection_reason || "").includes("spread")).length
-        const spreadHealth = recentSignals.length === 0 ? "—" : spreadRejected === 0 ? "Good" : spreadRejected < recentSignals.length ? "Mixed" : "Dry"
-        const spreadColor = spreadHealth === "Good" ? "text-success" : spreadHealth === "Mixed" ? "text-amber-400" : spreadHealth === "Dry" ? "text-destructive" : "text-muted-foreground"
 
         return (
           <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Cost Basis</p>
-              <p className="mt-1 text-2xl font-bold">{fmtDollars(totalInvested)}</p>
-              {totalShares > 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {totalShares.toFixed(1)} shares across {openPositions.length} entr{openPositions.length !== 1 ? "ies" : "y"}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">{openPositions.length} open position{openPositions.length !== 1 ? "s" : ""}</p>
-              )}
-            </div>
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Current Value</p>
-              <p className="mt-1 text-2xl font-bold">{fmtDollars(marketValue)}</p>
-              <p className={cn("text-xs", unrealizedPnl >= 0 ? "text-success" : "text-destructive")}>
-                {fmtDollarsSigned(unrealizedPnl)} unrealized
-              </p>
-            </div>
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Unrealized P&L</p>
-              <p className={cn("mt-1 text-2xl font-bold", unrealizedPnl >= 0 ? "text-success" : "text-destructive")}>
-                {fmtDollarsSigned(unrealizedPnl)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {totalInvested > 0 ? `${((unrealizedPnl / totalInvested) * 100).toFixed(1)}% return` : "No positions"}
-              </p>
-            </div>
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Realized P&L</p>
-              <p className={cn("mt-1 text-2xl font-bold", realizedPnl >= 0 ? "text-success" : "text-destructive")}>
-                {fmtDollarsSigned(realizedPnl)}
-              </p>
-              <p className="text-xs text-muted-foreground">{closedPositions.length} closed trade{closedPositions.length !== 1 ? "s" : ""}</p>
-            </div>
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Win Rate</p>
-              <p className="mt-1 text-2xl font-bold">{fmt(winRate)}%</p>
-              <p className="text-xs text-muted-foreground">{wins}W / {closedPositions.length - wins}L · {totalTrades} total</p>
-            </div>
+            {/* Positions/auction metrics tiles removed per request — only the
+                Bankroll & Bracket Cap budget controls below are kept. */}
             {(() => {
               const curBankrollPct = bankrollPct ?? Math.round((module.budget / accountBankroll) * 100)
               const curBudget = Math.round(accountBankroll * curBankrollPct / 100)
@@ -1250,46 +1181,6 @@ export default function ModuleDetailPage() {
                     <p className="text-xs text-muted-foreground">${curBracketDollars} of ${curBudget} bankroll</p>
                   </div>
                 </>
-              )
-            })()}
-            <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Spread Health</p>
-              <p className={cn("mt-1 text-2xl font-bold", spreadColor)}>{spreadHealth}</p>
-              <p className="text-xs text-muted-foreground">
-                {recentSignals.length > 0 ? `${approvedCount}/${recentSignals.length} passed` : "No data"}
-              </p>
-            </div>
-            {(() => {
-              const accel = pacing?.pace_acceleration as { current_rate?: number; prior_rate?: number; momentum?: string } | undefined
-              const momentum = accel?.momentum || "—"
-              const cur = accel?.current_rate
-              const prior = accel?.prior_rate
-              const momColor =
-                momentum === "accelerating" ? "text-success" :
-                momentum === "decelerating" ? "text-destructive" :
-                momentum === "steady" ? "text-muted-foreground" :
-                "text-muted-foreground"
-              const label =
-                momentum === "accelerating" ? "Accel ↑" :
-                momentum === "decelerating" ? "Decel ↓" :
-                momentum === "steady" ? "Steady" :
-                "—"
-              // Format posts/hr as "1 post x N.N hrs" (hours per post). E.g. 0.75 -> "1 post x 1.3 hrs"
-              const fmtRate = (r?: number) => {
-                if (r == null || r <= 0) return "—"
-                const hrsPerPost = 1 / r
-                return `1 post x ${hrsPerPost.toFixed(1)} hrs`
-              }
-              return (
-                <div className="flex-1 min-w-[150px] max-w-[200px] rounded-lg border border-border bg-card p-4 text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Pacing</p>
-                  <p className={cn("mt-1 text-2xl font-bold", momColor)}>{label}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {cur != null && prior != null
-                      ? `${fmtRate(cur)} now vs ${fmtRate(prior)} prior`
-                      : "No data"}
-                  </p>
-                </div>
               )
             })()}
           </div>
@@ -1641,8 +1532,6 @@ export default function ModuleDetailPage() {
 
       {/* New Module Analytics Charts */}
       {(() => {
-        const allSignals = mySignals.map((s: any) => s.bracket).filter(Boolean)
-        const uniqueBrackets = Array.from(new Set(allSignals)) as string[]
         return (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1653,22 +1542,16 @@ export default function ModuleDetailPage() {
                 <KellyTrackerChart moduleId={module.id} />
               </CollapsibleCard>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <CollapsibleCard id="volume-price" title="Volume vs Price">
-                <VolumePriceChart moduleId={module.id} />
-              </CollapsibleCard>
-              <CollapsibleCard id="order-book-depth" title="Order Book Depth">
-                <OrderBookDepthChart moduleId={module.id} />
-              </CollapsibleCard>
-            </div>
+            {/* Unified market table — price action + volume + order book per
+                bracket in one box (replaces the separate Volume vs Price,
+                Order Book Depth, and Price Over Time cards). Full-width on
+                desktop; swipes horizontally on mobile. */}
+            <CollapsibleCard id="bracket-metrics" title="Market Metrics">
+              <BracketMetricsTable moduleId={module.id} />
+            </CollapsibleCard>
             <CollapsibleCard id="latency-histogram" title="Signal-to-Fill Latency">
               <LatencyHistogramChart moduleId={module.id} />
             </CollapsibleCard>
-            {uniqueBrackets.length > 0 && (
-              <CollapsibleCard id="price-over-time" title="Price Over Time">
-                <PriceOverTimeChart moduleId={module.id} brackets={uniqueBrackets} trackingId={activeTrackingId} />
-              </CollapsibleCard>
-            )}
             {(module as any)?.supports_post_count_divergence && (
               <CollapsibleCard id="post-count-divergence" title="xTracker vs Truth Social Direct">
                 <PostCountDivergenceChart moduleId={module.id} trackingId={activeTrackingId || (pacing as any)?.tracking_id} />

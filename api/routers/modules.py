@@ -935,7 +935,7 @@ def _compute_pacing_models(running_total, elapsed_days, remaining_days, total_da
     return model_outputs, weights, conf_bands, ensemble_avg, hourly_avgs, dow_weights_map, bracket_probs
 
 
-def _build_daily_table(daily_totals, week_start_str, week_end_str, now, var, hist_mean, dow_weights_map, cfg):
+def _build_daily_table(daily_totals, week_start_str, week_end_str, now, var, hist_mean, dow_weights_map, cfg, live_running_total=None):
     daily_lookup = {d["date"]: d["count"] for d in daily_totals}
 
     if week_start_str and week_end_str:
@@ -967,6 +967,15 @@ def _build_daily_table(daily_totals, week_start_str, week_end_str, now, var, his
             actual = None
             deviation = None
             status = "future"
+        elif is_today and live_running_total is not None:
+            # Today's posts are usually not yet in the completed-day totals.
+            # Derive the in-progress count from the live running total
+            # (current auction/week posts so far) minus prior days' cumulative.
+            today_count = max(int(live_running_total) - cumulative, 0)
+            actual = today_count
+            cumulative += today_count
+            deviation = actual - dow_avg if dow_avg > 0 else 0
+            status = "ahead" if deviation > 2 else ("behind" if deviation < -2 else "on_pace")
         else:
             actual = 0
             deviation = -dow_avg
@@ -1460,7 +1469,7 @@ async def get_pacing(module_id: str, tracking_id: str | None = Query(default=Non
         if price_data:
             entry_timing = optimal_entry_timing(price_data, top_bracket)
 
-    daily_table = _build_daily_table(daily_totals, week_start_date_str, week_end_date_str, now, var, hist_mean, dow_weights_map, cfg)
+    daily_table = _build_daily_table(daily_totals, week_start_date_str, week_end_date_str, now, var, hist_mean, dow_weights_map, cfg, live_running_total=running_total)
     dow_heatmap = _build_dow_heatmap(var)
     hourly_heatmap = _build_hourly_heatmap(hourly_counts)
     dow_hour_heatmap = _build_dow_hour_heatmap(handle)
