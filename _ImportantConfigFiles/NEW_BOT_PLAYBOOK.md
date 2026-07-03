@@ -25,7 +25,9 @@ Master build-notes Google Doc (single working reference, includes recommended AN
 ### Architecture (two axes of isolation, two speed lanes)
 - Vertical layers each its own process/failure domain: ingestion, brain, strategy modules, risk gate, execution, observability. Horizontal modules sealed, zero cross-imports, shared math in api/modules/shared/.
 - Supabase = the message bus + persistence, but stays OFF the hot path. Hot path is in-memory in ONE process; DB only on the slow path.
-- HOT PATH sub-second (tweet -> reprice -> cancel/re-quote). SLOW PATH every 5 min (discovery, pacing recalibration, exits, copytrader poll, full risk sync).
+- HOT PATH sub-second: a tweet arrives via STREAM (pushed, not polled) and the bot fires PRE-SIGNED orders instantly - NO fair-value recompute and NO signing on the hot path. It only (1) batch-cancels the now-stale resting quotes and (2) submits the already-signed bid ladder. SLOW PATH every 5 min (discovery, pacing recalibration, exits, copytrader poll, full risk sync).
+- CONTINUOUS BACKGROUND PREP (between tweets, off the hot path): pre-compute the target bid ladder for the next plausible counts and PRE-SIGN it, refreshed every few seconds so step (2) is instant. That is why the hot path has nothing to build. V2 caveat: sign as late as the ms-timestamp staleness window allows and refresh the signed pool.
+- STREAMING vs POLLING: stream every feed that offers one (tweets via TwitterAPI.io, order book + our own fills via CLOB WebSocket, on-chain settlement via a Polygon WS RPC subscription). Only two feeds have NO stream and must be polled tightly: the whale-wallet trade feed (data-api REST, poll ~2s) for Copytrader, and Gamma market discovery (REST, slow-path poll).
 - Split risk gate: hot path = fast in-memory check (breaker off? within cached cap? price sane?); slow path = full 15-check recompute that caches its verdict. Always fail-closed.
 
 ### Strategy scope (this build)

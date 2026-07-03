@@ -12,6 +12,11 @@ Living mistake log. After every bug fix or correction, append a rule here.
 
 ---
 
+### 2026-07-01 — Maker-only: never default a mispricing strategy to taking
+**What happened**: While specing the S4 finish-line and S5 sweeper strategies, vAI recommended a "taker exception" to capture mispriced brackets. Sir corrected: the bot is maker-only, so why take? The right way to capture the exact same mispricing is to REST a post-only bid and let the seller cross to you.
+**Root cause**: vAI framed "buy the mispriced bracket" and complete-set arb as taking (lifting an ask), when a resting maker bid captures it for zero fee (maker pays no exchange fee under CLOB V2) via FIFO queue priority. Taker fees also eat thin arbs, so taking is doubly wrong here.
+**Rule**: On the maker-only bot, default EVERY mispricing / arb / sweep strategy to a resting post-only bid (maker, zero fee). Reserve "take" only for a genuine simultaneous complete-set arb, and even then verify the taker fee does not erase the margin. When describing "buy", state maker (rest a bid) vs taker (lift an ask) explicitly. Auto-loaded rule at memory `lesson_maker_not_taker.md`; constraint at `new_bot_maker_only.md`.
+
 ### 2026-06-29 — Look-ahead bias audit of every backtest
 **What happened**: Reviewed our backtest suite against the 5 classic look-ahead leak patterns (an 80%-backtest that loses live = future data leaking into a decision). Read ~13 core scripts line by line.
 **Findings**:
