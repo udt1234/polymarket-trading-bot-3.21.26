@@ -616,6 +616,22 @@ class RiskManager:
         self._risk_synced = True
         self._current_value = current
 
+    def mark_synced_empty(self):
+        """Mark risk state as synced with NO historical PnL data — used when
+        daily_pnl table is empty (fresh deploy, paper mode, or first-ever run).
+        Loss-cap checks then evaluate against zero PnL (no losses yet =
+        cap not hit) instead of fail-closed blocking every trade forever.
+
+        Without this, a clean Supabase install has _risk_synced=False
+        permanently, _check_daily_loss / _weekly_loss / _drawdown all
+        return False with "risk state not synced", and the bot silently
+        rejects every signal."""
+        self._daily_pnl = 0.0
+        self._weekly_pnl = 0.0
+        self._peak_value = 0.0
+        self._current_value = 0.0
+        self._risk_synced = True
+
     def _log_rejection(self, signal: Signal, reason: str):
         try:
             sb = get_supabase()

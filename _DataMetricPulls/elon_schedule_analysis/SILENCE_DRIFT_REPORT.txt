@@ -1,0 +1,20 @@
+auctions with parseable window: 157
+bracket-hours analyzed (Nov2025+, in-window): 142,730
+
+=== mean hourly YES-price change by bracket position x posting state ===
+position    state       n   mean_dpx(cents/hr)   median
+   below   SILENT  79,401               -0.03c    0.00c
+   below   POSTED  54,723               -0.03c    0.00c
+  inside   SILENT   3,650               -0.00c    0.00c
+  inside   POSTED   2,527               -0.06c    0.00c
+   above   SILENT   1,207               -0.04c    0.00c
+   above   POSTED   1,222               -0.00c    0.00c
+
+=== the user's exact play: mid-priced YES (0.45-0.85) bracket, by state ===
+  SILENT: n=1,029  mean dpx=-0.28c/hr  P(drop)=45%
+  POSTED: n=656  mean dpx=+0.15c/hr  P(drop)=41%
+
+=== drift vs SILENCE LENGTH (below-bracket YES, should decay as he stays dead) ===
+  (below-bracket YES during SILENT hours = the drift you harvest by buying NO)
+  SILENT below-bracket: mean dpx=-0.03c/hr  (negative = YES decays, NO rises -> your margin)
+  POSTED below-bracket: mean dpx=-0.03c/hr  (positive = burst snaps it back -> your risk)

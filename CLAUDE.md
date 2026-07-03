@@ -57,8 +57,9 @@ Ranked by `pct_arc_5to30` = % of auctions where bracket BOTH crashed ≤5¢ AND 
 - Copy to local `.env` — never commit
 
 ## Data Storage
-- Historical data pulls: `_DataMetricPulls/historical/{handle}/`
-- Scripts: `scripts/fetch_historical_auctions.py`
+- **ALL backtest data lives under `_DataMetricPulls/canonical/`** — see "Canonical Data Layer" section below
+- Source-of-truth raw post parquets: `_DataMetricPulls/{trump,elon}_posts_raw.parquet`
+- Frozen raw trade archive: `_DataMetricPulls/canonical/_raw_imports/whale_analysis/`
 - Never commit large data files — add to .gitignore
 
 ## Retention + Parquet Archive (2026-05-22)
@@ -84,16 +85,57 @@ Supabase free tier choked on Disk IO 2026-05-22 (GoTrue auth hung, dashboard log
 
 **One-time backup script**: `scripts/archive_supabase_to_parquet.py` — full dump of all 4 tables to parquet. Run before any retention changes.
 
-## Parquet Data Access (Full 3.5-year Polymarket history)
-- **Source**: SII-WANGZJ HuggingFace dataset (`SII-WANGZJ/Polymarket_data`) — 1M markets, 766M trade events, Nov 2022 → present
-- **Access**: streamed via DuckDB over HTTPS (no local copy required) — see `_DataMetricPulls/duckdb_remote.py`
-- **Helper**: `from duckdb_remote import connect; con = connect()` exposes `markets`, `quant`, `trades` views
-- **Auth**: free HF token in `~/.credentials/shared.env` as `HF_TOKEN=hf_...` (raises rate limits)
-- **Cache**: persistent DuckDB file at `_DataMetricPulls/duckdb_cache/polymarket_remote.duckdb` — materialized tables live here, instant for repeat queries
-- **Materialized table**: `per_market_trade_summary` — start/peak/end/low YES price per market (one-time 5-15min remote scan)
-- **Analysis script**: `_DataMetricPulls/full_history_analysis.py` — strict-recurring classification + ranking
-- **Use this whenever** you need broader historical context than the bot's own `price_snapshots` table (which only goes back ~3 months)
-- **Parallel queries OK**: DuckDB inside one process is multi-threaded; multiple Python processes can also query concurrently (bottleneck = bandwidth)
+## Canonical Data Layer (2026-05-28) — Single Source of Truth for ALL Backtests
+
+**`_DataMetricPulls/canonical/` is the ONLY data source backtests may read from.**
+Built 2026-05-28 by consolidating 113 messy parquet/csv/json sources into 3 clean partitioned tables. The old `elon_max_return/`, `elon_regime/`, `fed_decision/`, `hf_polymarket/`, `historical/`, etc. were deleted (2.8 GB freed).
+
+### Three canonical tables (all parquet, partitioned by handle/YYYY-MM):
+
+| Table | Path | One row per | Coverage |
+|---|---|---|---|
+| **posts** | `canonical/posts/{handle}/{YYYY-MM}.parquet` | each tweet/truth | Trump: Feb 2022 → Apr 2026 (32,837). Elon: Oct 2025 → May 2026 (9,105) |
+| **auctions** | `canonical/auctions/{handle}/{YYYY-MM}.parquet` | each resolved auction | 304 total (220 Elon + 84 Trump), back to mid-2024 |
+| **prices** | `canonical/prices/{handle}/{YYYY-MM}.parquet` | each (auction, bucket, hour) | hourly OHLC + trade-derived orderbook proxies |
+
+### Key columns
+- **All timestamps are dual-stored: `ts_utc` (canonical) + `ts_et` (America/New_York, DST-correct via `zoneinfo`)**
+- `posts.counts_for_auction` (bool) — applies xTracker rules (Trump: no pure replies; Elon: no pure replies + no community reposts)
+- `auctions.duration_type` — `2-day`, `7-day`, `monthly`, `point`, `unknown` — parsed from filename, not hours_in
+- `auctions.winning_bucket` + `resolution_status` (`resolved_yes` | `inferred_close_ge_95` | `unresolved` | `ambiguous_N`) + `confidence` (high/medium/low)
+- `prices.derived_spread`, `derived_fill_minutes`, `derived_depth_buy_low`, `derived_depth_sell_high` — trade-derived orderbook proxies (no L2 history exists pre-Mar 2026)
+
+### Frozen raw archive
+- `canonical/_raw_imports/whale_analysis/` — 969 untouched trades_*.parquet files (the source for auctions + prices). Never edit.
+- `canonical/_audit/source_inventory.csv` — historical inventory of the 113 pre-canonical sources for reference.
+
+### Reading canonical data
+```python
+import pandas as pd
+from pathlib import Path
+CANON = Path("_DataMetricPulls/canonical")
+# Load all Trump auctions in 2025:
+trump_2025 = pd.concat([pd.read_parquet(p) for p in (CANON/"auctions/realDonaldTrump").glob("2025-*.parquet")])
+# All Elon hourly prices for May 2026:
+elon_may = pd.read_parquet(CANON/"prices/elonmusk/2026-05.parquet")
+```
+
+### Builder scripts (idempotent, re-run any time)
+- `scripts/canonical/01_audit_sources.py` — re-scan for source inventory (read-only)
+- `scripts/canonical/02_build_posts.py` — rebuild posts from raw parquets
+- `scripts/canonical/03_build_auctions.py` — rebuild auctions from whale_analysis
+- `scripts/canonical/04_build_prices.py` — rebuild hourly OHLC + proxies
+- `scripts/canonical/05_nuclear_delete.py` — clean up non-canonical sources (dry-run by default)
+
+### Canonical QA Sheet
+- [PolyMarket Canonical Data — Source Inventory](https://docs.google.com/spreadsheets/d/1bXBnXz4a1Nn44ZLORNo2cNqZx6pnqER3rcoTUZMC1Q8/edit) — sample tabs for posts/auctions/prices both handles, plus the legacy source inventory
+
+### Rules for new backtests
+1. **Read canonical/ only.** If you need data not in canonical/, add to a builder script, don't write a one-off parquet.
+2. **Always use `ts_et` when applying xTracker auction windows** (Friday 12 PM ET → Friday 12 PM ET). Never anchor on UTC hours.
+3. **Filter `counts_for_auction = True` on posts** before counting toward an auction.
+4. **Filter `confidence in ('high','medium')` on auctions** to skip unresolved/ambiguous.
+5. **Treat the underlying `trump_posts_raw.parquet` / `elon_posts_raw.parquet` as inputs, not data.** They feed the canonical builder.
 
 ## Non-Negotiable Rules
 - **ALWAYS limit orders** — NEVER market orders. Every order specifies a `price`.

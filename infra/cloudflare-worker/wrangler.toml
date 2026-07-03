@@ -1,0 +1,4 @@
+name = "truthsocial-proxy"
+main = "truthsocial-proxy.js"
+compatibility_date = "2026-05-01"
+account_id = "38f6399241d1c14cfa9f6dea915348ce"

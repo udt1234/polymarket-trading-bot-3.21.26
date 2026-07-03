@@ -1,0 +1,80 @@
+{
+  "slug": "elon-musk-of-tweets-june-22-june-24",
+  "window_start_utc": "2026-06-22T16:00:00+00:00",
+  "window_end_utc": "2026-06-24T16:00:00+00:00",
+  "now_utc": "2026-06-23T21:25:03.384418+00:00",
+  "elapsed_h": 29.4,
+  "remaining_h": 18.6,
+  "observed": 84,
+  "current_rate_per_h": 2.855,
+  "usual_rate_per_h": 1.731,
+  "n_priors": 114,
+  "type_mix_pulled": {
+    "repost": 42,
+    "reply": 31,
+    "quote": 38,
+    "original": 4
+  },
+  "models": [
+    {
+      "model": "Linear",
+      "category": "naive: pace continues",
+      "forecast": 137,
+      "how": "84 tweets in 29.4h = 2.86/h, x 48h total = 137"
+    },
+    {
+      "model": "Kalman",
+      "category": "self-correcting average",
+      "forecast": 130,
+      "how": "usual rate 1.731/h (var 0.556); gain K=0.67; blended 2.485/h x 18.6h + 84 = 130"
+    },
+    {
+      "model": "M4MMPP",
+      "category": "quiet/manic 50-50",
+      "forecast": 127,
+      "how": "blend .5x current 2.855 + .5x usual 1.731 = 2.293/h x 18.6h + 84 = 127"
+    },
+    {
+      "model": "CurBayes",
+      "category": "Bayesian blend (was deployed)",
+      "forecast": 137,
+      "how": "extrapolate 84/(elapsed frac 0.61)=137, precision-weighted vs prior mean count 197 -> 137"
+    },
+    {
+      "model": "M0",
+      "category": "Bayesian Gamma-Poisson",
+      "forecast": 116,
+      "how": "pooled rate (sum prior 22430+84)/(sum prior hrs 13154+29)=1.708/h; 84+rate x 18.6h = 116"
+    },
+    {
+      "model": "M1Seas",
+      "category": "time-of-day (sleep-aware)",
+      "forecast": 111,
+      "how": "sum of expected tweets per remaining ET clock-hour over 19h = 27; + 84 so far = 111"
+    },
+    {
+      "model": "Decay",
+      "category": "Gamma-Poisson, recency-weighted",
+      "forecast": 109,
+      "how": "recency-weighted prior rate (older weeks x0.85/wk) applied to 18.6h remaining + 84 = 109"
+    },
+    {
+      "model": "M5NB",
+      "category": "fat-tailed average",
+      "forecast": 179,
+      "how": "prior mean count 197 x pace-adjust = 179"
+    },
+    {
+      "model": "M2Hawk",
+      "category": "self-exciting (MLE)",
+      "forecast": 100,
+      "how": "fit mu=0.029,alpha=1.699,beta=1.699; simulate 19h -> +16; total 100"
+    },
+    {
+      "model": "M3Hawk",
+      "category": "marked self-exciting",
+      "forecast": 129,
+      "how": "Hawkes weighting reposts higher; +45; total 129"
+    }
+  ]
+}

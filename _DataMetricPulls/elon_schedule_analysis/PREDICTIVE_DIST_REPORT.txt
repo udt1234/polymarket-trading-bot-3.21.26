@@ -1,0 +1,29 @@
+2-day noon-ET windows (Nov2025+, final>=8): 111
+final count: mean=86 median=76 min=26 max=218 std=38
+
+mean pace curve pf[h] = fraction of final done by hour h (noon-ET anchored, h=window hour):
+  h= 6  ETclock~18:00 day1  pf_mean=0.14  pf_p10=0.04 pf_p90=0.24
+  h=12  ETclock~00:00 day2  pf_mean=0.24  pf_p10=0.09 pf_p90=0.40
+  h=18  ETclock~06:00 day2  pf_mean=0.39  pf_p10=0.21 pf_p90=0.55
+  h=24  ETclock~12:00 day2  pf_mean=0.51  pf_p10=0.33 pf_p90=0.69
+  h=30  ETclock~18:00 day2  pf_mean=0.64  pf_p10=0.43 pf_p90=0.82
+  h=36  ETclock~00:00 day3  pf_mean=0.73  pf_p10=0.53 pf_p90=0.89
+  h=42  ETclock~06:00 day3  pf_mean=0.88  pf_p10=0.73 pf_p90=1.00
+  h=48  ETclock~12:00 day3  pf_mean=1.00  pf_p10=1.00 pf_p90=1.00
+
+================================================================
+LEAVE-ONE-OUT VALIDATION (model vs naive c/f baseline)
+================================================================
+ frac    n | MAE_model MAE_naive | cover80_model cover80_naive | medRatioErr
+  25%  109 |      38.9      34.5 |           78%           n/a |    36.0%
+  50%  111 |      19.5      19.3 |           78%           n/a |    21.5%
+  75%  111 |      13.7      13.2 |           78%           n/a |    15.3%
+  90%  111 |       7.4       7.6 |           90%           n/a |     7.7%
+
+================================================================
+DEMO: bracket probabilities mid-window (real 65-89-style 2-day set)
+================================================================
+example window start 2025-11-27 ET, TRUE final=76
+  at h=12 (c=22): 65-89=27%  115-139=17%  40-64=16%
+  at h=24 (c=41): 65-89=44%  90-114=23%  40-64=20%
+  at h=36 (c=62): 65-89=60%  90-114=25%  115-139=7%

@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     environment: str = "development"
     default_interval: int = 300
 
+    # Belt-and-suspenders live-trade safety. Even with module.status='active'
+    # in Supabase, live trades require allow_live_trading=true at the env
+    # level. Without this, a single Supabase row flip in production would
+    # immediately route real money. Default: FALSE = paper-only regardless
+    # of module status (functional audit finding 2026-05-23).
+    allow_live_trading: bool = False
+
     # Risk defaults
     bankroll: float = 1000.0
     max_portfolio_exposure: float = 0.5

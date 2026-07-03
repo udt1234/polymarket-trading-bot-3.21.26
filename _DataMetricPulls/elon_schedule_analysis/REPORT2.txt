@@ -1,0 +1,100 @@
+======================================================================
+DAILY FEATURE TABLE (RICH window 2025-11-01+)
+======================================================================
+active days (>=3 posts): 224   mean posts/day=46.5 median=42
+
+======================================================================
+Q1 - START vs END / TIMEZONE SHIFT
+======================================================================
+corr(start_hi, end_hi)   = +0.065
+corr(start_hi, span)     = -0.660
+corr(end_hi, span)       = +0.706
+base rate late_end=25%   P(late_end | late_start)=20%
+whole-window-shifted days (both move >=2.5h same dir): late 1.3%  early 4.5%  (rest = end-anchored)
+
+monthly median first/last ET hour:
+          start_et    end_et       span   n
+ym                                         
+2025-11   9.811250  3.089306  16.835417  30
+2025-12   9.625833  3.361667  17.850000  31
+2026-01   8.838333  2.853056  18.168889  31
+2026-02   9.365972  3.114306  18.240972  28
+2026-03   8.835833  3.521667  19.149722  31
+2026-04  10.901111  3.372639  16.339306  30
+2026-05   7.083333  5.650000  18.283333  31
+2026-06   6.325000  6.975000  19.916667  12
+
+======================================================================
+Q2 - BURST CLUSTERS PER DAY
+======================================================================
+break> 60min: mean=5.75 median=6  P(>=4 clusters)=95%  dist1..8=[1, 2, 8, 36, 52, 59, 39, 17]
+break> 90min: mean=4.43 median=4  P(>=4 clusters)=79%  dist1..8=[1, 7, 40, 81, 49, 34, 12, 0]
+break>120min: mean=3.59 median=4  P(>=4 clusters)=54%  dist1..8=[1, 30, 71, 84, 33, 5, 0, 0]
+
+session-start ET-hour blocks (share %): 
+0-6      18.4
+6-9      11.3
+9-12     15.9
+12-15    14.3
+15-18    13.4
+18-21    13.8
+21-24    12.8
+
+======================================================================
+Q3 - CONDITIONAL CADENCE + CORRELATION MATRIX
+======================================================================
+notable daily correlations:
+  corr(start_hi,end_hi  ) = +0.065
+  corr(start_hi,n       ) = -0.337
+  corr(start_hi,span    ) = -0.660
+  corr(n       ,nsess   ) = +0.090
+  corr(morn    ,n       ) = +0.702
+  corr(morn    ,aft     ) = +0.249
+  corr(morn    ,eve     ) = +0.062
+  corr(aft     ,eve     ) = +0.139
+  corr(n       ,span    ) = +0.377
+  corr(med_gap ,n       ) = -0.284
+  corr(end_hi  ,n       ) = +0.184
+  corr(reposts ,origs   ) = +0.755
+  corr(morn    ,late    ) = +0.131
+
+P(heavy day) base=49%   P(heavy day | heavy morning)=93%
+corr(morning posts, rest-of-day posts) = +0.247
+
+days ending 2-4am ET: 85 (38%)  mean posts=46.4 vs others 46.6
+  their mean sessions=4.47 span=17.6h
+
+======================================================================
+Q4 - REPLIES vs MAIN-WALL (full-fidelity window only)
+======================================================================
+window 2026-05-02 -> 2026-06-12  active days n=42
+corr(replies, mainwall)        = +0.912  (user hypothesis: NEGATIVE)
+corr(replies, origs+reposts)   = +0.591
+corr(reply_share, mainwall)    = +0.450
+corr(replies, total activity)  = +0.912
+mean mainwall on HIGH-reply days=63.9 vs LOW-reply days=32.1
+
+======================================================================
+Q6 - REPOST TOPIC MIX + PER-PARTNER LEAN
+======================================================================
+overall repost topic share (a repost can hit multiple topics):
+  politics      10.2%
+  space         12.1%
+  tesla_ev       6.4%
+  ai_tech       21.7%
+  crypto         0.3%
+  platform_x     3.7%
+  media_news     3.3%
+
+per top-10 partner topic lean (share of THAT partner's reposts; * = >=1.5x base):
+  partner             politi   space  tesla_  ai_tec  crypto  platfo  media_
+  @XFreeze                9      15       6     44*       0       2       2
+  @cb_doge                9      15       3     40*       0       2      7*
+  @teslaownersSV          3     20*       6     40*       0       3      7*
+  @MarioNawfal           11      10       7     35*      1*       5       2
+  @SpaceX                 1    100*       2       3       0       0       0
+  @SawyerMerritt          3     41*     40*       6       0       3     33*
+  @dvorahfr               1       2       0     93*       0       1       0
+  @Starlink               0    100*       0       0       0       0       0
+  @Rothmus                1       0       0       0       0       0       0
+  @tetsuoai               1       6       0     73*      1*       0       3
