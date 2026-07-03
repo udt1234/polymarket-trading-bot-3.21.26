@@ -20,7 +20,10 @@ SRC = {'pmxt': [DM/'l2_history'/'pmxt', DM/'pmxt_pulled'], 'recorder': [DM/'reco
 
 def _files(source):
     dirs = SRC['pmxt'] + SRC['recorder'] if source == 'both' else SRC[source]
-    return [f for d in dirs for f in glob.glob(str(d/'*.parquet'))]
+    import os
+    # recorder {series}.parquet entries are DIRECTORIES of per-day files (since 2026-07-03)
+    hits = [f for d in dirs for f in glob.glob(str(d/'*.parquet')) + glob.glob(str(d/'*.parquet'/'*.parquet'))]
+    return [f for f in hits if os.path.isfile(f)]
 
 def read_l2(tokens=None, since_ms=None, until_ms=None, event_types=None, series=None, source='pmxt', cols='*'):
     """Filtered read across the L2 repository. ALWAYS pass tokens and/or a time range; the files
