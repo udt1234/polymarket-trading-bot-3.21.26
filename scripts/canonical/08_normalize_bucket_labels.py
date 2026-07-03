@@ -1,6 +1,6 @@
 """
 Normalize bucket label characters (en-dash to hyphen, trim whitespace) so
-winning_bucket from Gamma can match raw whale_analysis bucket strings.
+winning_bucket from Gamma can match raw api_trades_v2 bucket strings.
 
 Then re-tag any auction whose winning_bucket STILL doesn't appear in the
 prices table as confidence='low' (data structure mismatch — Polymarket

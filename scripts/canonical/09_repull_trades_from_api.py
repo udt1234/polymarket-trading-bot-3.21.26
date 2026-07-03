@@ -1,6 +1,6 @@
 """
 Re-pull complete trade history for every auction × bracket from Polymarket
-data-api. Replaces whale_analysis-derived raw with API ground truth.
+data-api. Replaces api_trades_v2-derived raw with API ground truth.
 
 For each auction in canonical/auctions:
   For each bracket in bracket_condition_ids:
@@ -10,7 +10,7 @@ For each auction in canonical/auctions:
 Output:
   canonical/_raw_imports/api_trades/{auction_slug}.parquet
     All trades across all brackets for one auction, schema-compatible with
-    the old whale_analysis files so 03+04 builders work unchanged.
+    the old api_trades_v2 files so 03+04 builders work unchanged.
 
 Rate limit: 0.5s between calls (matches existing polymarket.py setting).
 Estimated runtime: 30-60 min for 300 auctions x avg 10 brackets.
@@ -96,7 +96,7 @@ def process_auction(handle: str, auction_row: pd.Series, force: bool = False) ->
             time.sleep(RATE_LIMIT_SEC)
             continue
         # tag every trade with the canonical bucket label (in case Gamma's
-        # groupItemTitle vs whale_analysis _bucket differ)
+        # groupItemTitle vs api_trades_v2 _bucket differ)
         for t in trades:
             t["_bucket"] = bucket_label
         all_rows.extend(trades)
@@ -107,7 +107,7 @@ def process_auction(handle: str, auction_row: pd.Series, force: bool = False) ->
         return {"slug": slug, "status": "empty", "n_trades": 0, "msg": msg}
 
     df = pd.DataFrame(all_rows)
-    # add derived columns matching whale_analysis schema
+    # add derived columns matching api_trades_v2 schema
     df["ts"] = pd.to_datetime(df["timestamp"], unit="s", utc=True, errors="coerce")
     if "notional" not in df.columns:
         df["notional"] = df["size"].astype(float) * df["price"].astype(float)

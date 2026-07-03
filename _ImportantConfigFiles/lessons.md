@@ -12,6 +12,16 @@ Living mistake log. After every bug fix or correction, append a rule here.
 
 ---
 
+### 2026-06-29 — Look-ahead bias audit of every backtest
+**What happened**: Reviewed our backtest suite against the 5 classic look-ahead leak patterns (an 80%-backtest that loses live = future data leaking into a decision). Read ~13 core scripts line by line.
+**Findings**:
+- CLEAN (walk-forward correct): trade_sim, finish_line_test, bracket_hit_backtest, calibration_test, market_pacing_test, seesaw_v3 (causal EMA), arb_test. The team consistently used `priors = [p for p in sel if p['e'] < s]` and built seasonal/hour profiles from posts before auction start. Our actionable conclusions (market beats models, finish-line/arb edges) are NOT leak artifacts.
+- REAL LEAK (global_fit): accrual_model.py builds its share curve, and particle_filter.py its diurnal multiplier, on the WHOLE dataset including the future, then scores auctions inside that window. Inflates those two models' in-sample accuracy. Small magnitude (normalized shape) and harmless to the thesis (it only made models we already know lose to the market look slightly less bad), but it is the article's exact `scaler.fit(all_data)` bug.
+- MILD: predictive_distribution + backtest_noovd_calibrated use leave-one-out (drops the test point but still uses future points). reversion_study conditions its "fadeable" subset on `burst_after(t)` (forward-looking), so that stat is not tradeable as-defined; single tiny window.
+- No `center=True` anywhere.
+**Root cause**: a parameter (curve/multiplier) fit once on all data and reused to score every auction is in-sample / look-ahead, even when the per-auction priors are correctly walk-forward.
+**Rule**: Every backtest obeys the WALL: decide using only data with timestamp <= T; the outcome (winning_bucket / final count / resolution price) is for SCORING ONLY. Refit any curve/calibration/threshold walk-forward, never once on the full dataset. LOO is not walk-forward for live-accuracy claims. A backtest that looks too clean is suspect, not genius. Checklist co-located at `_DataMetricPulls/pacing_backtest/BACKTEST_RULES.md`; auto-loaded rule at memory `lesson_lookahead_bias.md`.
+
 ### 2026-05-23 — Functional Audit Found 5 Live-Trade Blockers
 **What happened**: 6-agent parallel functional audit found bot had been silently NOT trading on Railway for 24h. 100% of signals rejected with "risk state not synced — blocking until PnL data available". Plus 4 other blockers that would have caused real money loss the moment any module flipped to live.
 
@@ -85,3 +95,17 @@ Living mistake log. After every bug fix or correction, append a rule here.
 2. After EVERY merge, check Railway's deploy history — confirm the new commit shows ACTIVE (not just "Online"). The service can be Online while running stale code.
 3. Any PR touching `api/main.py` route definitions or `railway.toml` healthcheck config requires explicit verification that the healthcheck path returns 200 unauthenticated.
 4. If a healthcheck path needs sensitive data, split it: lightweight `/healthz` for the load balancer, full `/status` behind auth for humans.
+
+---
+
+### 2026-06-24 — Alerter sells are LIMIT-ONLY (zero market orders, ever)
+**What happened**: While designing the auction-end sell-sweep feature (`/sellnow`) and the position-flip sell-trigger buttons (Sell 25% / 50% / 100%), Sir reaffirmed that every sell-execution path in the Telegram alerter MUST use limit orders. ZERO market orders, full stop. This applies to the sweep, the per-bracket toggle, and any future auto-sell logic.
+
+**Root cause**: It's tempting to reach for a "fast-exit market order" when the user wants speed, especially in the last hour of an auction. That instinct is wrong here: Polymarket order books for end-of-auction brackets are often thin, and a market order eats unbounded slippage. The bot project's non-negotiables already say "ALWAYS limit orders — NEVER market orders" — applying that to the alerter codepath was a clarification, not a new rule.
+
+**Rules going forward**:
+1. **Every `create_and_post_order` call in cloud_alerts/ must specify a `price` and use `OrderType.GTC` or `OrderType.FOK`.** Never `OrderType.MARKET`. Code reviews must reject any market-order codepath added to the alerter.
+2. **Fast-fill strategy = LIMIT at top-of-book bid.** For each position to sell, read the order book, take the highest existing bid price, place a LIMIT sell AT that price. Crosses the spread → instant fill at that exact price → no slippage past it.
+3. **Position size > top-of-book size → staircase.** Split into 2-3 limit orders at successively lower bid levels (e.g., 50% at best_bid, 30% at bid-1¢, 20% at bid-2¢). Still all limit, just at the next tiers down the book.
+4. **Safety floor.** Refuse to place a sell if the computed limit price would be below $0.005, and notify Sir.
+5. **Memory file:** `lesson_alerter_limit_orders_only.md` (auto-loaded; pointer in `MEMORY.md` under "Hard-won lessons").

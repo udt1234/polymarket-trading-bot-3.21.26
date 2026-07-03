@@ -1,12 +1,12 @@
 """
 Phase 2 — Build canonical/auctions/{handle}/{YYYY-MM}.parquet
 
-One row per auction. Derived from canonical/_raw_imports/whale_analysis/.
+One row per auction. Derived from canonical/_raw_imports/api_trades_v2/.
 
 Output schema:
   handle               str  realDonaldTrump | elonmusk
   auction_slug         str  e.g. elon-musk-of-tweets-may-9-16
-  source_file          str  whale_analysis filename
+  source_file          str  api_trades_v2 filename
   duration_type        str  2-day | 7-day | monthly | point | unknown
   window_days          float
   start_utc            tz
@@ -254,7 +254,7 @@ def write_partitions(df: pd.DataFrame):
 
 
 def main() -> int:
-    print("[auctions] scanning whale_analysis raw imports...")
+    print("[auctions] scanning api_trades_v2 raw imports...")
     df = build_auctions()
     print(f"[auctions] total auctions: {len(df):,}")
     print(f"  by handle: {df['handle'].value_counts().to_dict()}")

@@ -10,7 +10,7 @@ Output: rewrites canonical/auctions/{handle}/{YYYY-MM}.parquet partitions.
 
 Adds new columns:
   gamma_resolution_source  - 'gamma_events_slug' | 'pre_existing' | 'unresolved_in_gamma'
-  gamma_winning_bucket     - raw groupItemTitle from Gamma (may differ from whale_analysis bucket label)
+  gamma_winning_bucket     - raw groupItemTitle from Gamma (may differ from raw trade bucket label)
 
 Idempotent. Rate-limited (1 req/sec). Caches Gamma responses to avoid re-hits.
 """

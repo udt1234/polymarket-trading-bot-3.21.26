@@ -5,7 +5,7 @@ Adds/replaces:
   Canonical_Posts_Trump        - 100 random Trump canonical posts
   Canonical_Posts_Elon         - 100 random Elon canonical posts
   Canonical_Auctions           - all 304 auctions (both handles)
-  Canonical_Prices_Sample      - 500 hourly OHLC rows from one big auction
+  Canonical_Prices      - 500 hourly OHLC rows from one big auction
   Canonical_Schema             - schema doc for backtest reference
 """
 from __future__ import annotations
@@ -173,14 +173,14 @@ def main() -> int:
     sid = ensure_tab(sheets, sheet_id_map, "Canonical_Auctions")
     push(sheets, sid, "Canonical_Auctions", rows, wide=[1, 14, 21])
 
-    print("[canonical] Canonical_Prices_Sample (one big auction)...")
+    print("[canonical] Canonical_Prices (one big auction)...")
     df = load_prices("elonmusk")
     # pick the auction with the most rows
     top_slug = df.groupby("auction_slug").size().idxmax()
     sub = df[df["auction_slug"] == top_slug].sort_values(["bucket", "hour_utc"]).head(500)
     rows = df_to_rows(sub)
-    sid = ensure_tab(sheets, sheet_id_map, "Canonical_Prices_Sample")
-    push(sheets, sid, "Canonical_Prices_Sample", rows, wide=[1])
+    sid = ensure_tab(sheets, sheet_id_map, "Canonical_Prices")
+    push(sheets, sid, "Canonical_Prices", rows, wide=[1])
 
     print("[canonical] Canonical_Schema...")
     sid = ensure_tab(sheets, sheet_id_map, "Canonical_Schema")

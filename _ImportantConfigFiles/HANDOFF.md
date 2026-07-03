@@ -1,5 +1,107 @@
 # PolyMarket Bot — Handoff
 
+## 🧭 NEXT STEPS / PARKED (2026-07-02) — cross-market expansion (do AFTER Elon is shipped)
+
+The reconstruction engine (brackets -> implied fair value) is validated and market-agnostic, and Elon is efficient, so the real upside is OTHER markets. Parked, focus is Elon right now:
+- **Market SCANNER (build this):** run the reversion-corr screen (`scratchpad/reconstruct_other_markets.py` prototype) weekly across EVERY bracketed Polymarket market -> an auto-ranked watchlist of the least-efficient crowds. Catches baseball / weather / new bracketed markets the moment they list. Highest-leverage infra we can build.
+- **Player-prop lead (validate):** the scan flagged soccer PLAYER-PROP markets as mean-reverting (revert_corr +0.22 to +0.28 vs efficient Elon +0.037). MUST validate on real L2 depth (pmxt has these markets) before trusting, the reversion may be thin-book bid-ask bounce that doesn't survive spread. If real, this is a fadeable market.
+- **Baseball / weather:** not currently listed as bracket markets (seasonal). The scanner picks them up automatically when live. Same engine, each market recovers its OWN formula (the Elon formula `0.38*count+0.46*naive+25` is Elon-specific).
+- **Reconstruction engine** lives in `_DataMetricPulls/pacing_backtest/pace_reconstruction.py` (Elon) and is the transferable asset. See memory `edge_map_elon_efficient`.
+- **How to point it at any market:** give the market name / URL / tag / condition ID + a date range; resolve to condition IDs via Gamma; pull L2 from pmxt into `l2_history/`.
+
+## 🤖 BOT MECHANICS: how it works start to finish + where the edge is (saved 2026-06-29)
+
+Companion artifact: the **'Strategy Walkthrough' tab** in the Elon pacing sheet (gid 1854179039) walks one mock 2-day auction scenario-by-scenario for both strategies below.
+
+**The two candidate strategies**
+- **S1 Pace-Scalp (active microstructure):** continuously compare each bracket's live PRICE to its model FAIR value; buy too-cheap, sell too-rich, flip on the seesaws. Monetizes the market's repricing MISTAKES (needs the market to converge). Needs automation + speed + liquidity. Many small wins, small frequent losses, dies in thin books.
+- **S2 Basket-Hold (range bet):** pick the 2 brackets around the projection, accumulate at dips BELOW fair via limit orders, HOLD to resolution. Monetizes the TRUTH (does NOT need the market to converge). Rare but large losses if the count escapes the band. Human-friendly, robust at today's liquidity.
+
+**The core loop (S1, step by step)**
+1. Live X feed + L2 book recorder see a new Elon tweet.
+2. Counter updates the in-window count (noon-ET window; originals + quotes + reposts + self-replies).
+3. Model re-projects final count + uncertainty band (AccrualCurve embeds sleep; regime detector adjusts the level).
+4. Convert projection to a fair probability per bracket.
+5. Compare fair vs live price. Bracket cheaper than fair by more than spread+fees, fire a LIMIT buy at/inside best. Richer than fair, sell/skip.
+6. On overshoot, sell into the spike and rebuy lower (seesaw). Stop out if the move is momentum, not reversion.
+7. Size each bet by fractional Kelly scaled to confidence (narrow band = bigger, wide band = ~0).
+
+**Where the edge actually is (proven 4x):** the POINT forecast is saturated. The market out-forecasts every pacing model (Kalman / Accrual / Particle Filter all land at ~market accuracy at the bracket level). So the edge is NOT a better forecast, it is MICROSTRUCTURE: (a) speed / repricing-lag right after a tweet, (b) overshoot mean-reversion (the seesaw), (c) boundary coin-flips late, (d) structural full-set arb when bracket prices sum under $1. All of these need the L2 tick data the recorder is now capturing. Backtest scheduled ~2026-07-09.
+
+**Dark-zone / regime handling (real vs myth):**
+- SLEEP (3-9am ET): already handled. The AccrualCurve advances ~0 in those hours, so the projection does not drift. No manual rule needed.
+- BIRTHDAY (Jun 28): NO suppression. Clean X-API: 2024 = 184% of baseline, 2025 = 90%. Do NOT add a birthday multiplier, it would hurt accuracy. ("He's quiet on his birthday" is not supported by data.)
+- EVENTS (217 tested): mostly weak. Only validated event signal is the SpaceX launch-repost (~50% of launches, +1 about 87 min after liftoff).
+- STRONGEST un-wired signal = EARLY-BURST predicts a heavy day (45 vs 21 avg). This is the regime filter worth wiring next (a LIVE detector, not a calendar of beliefs).
+- RULE: only apply an event/regime multiplier the DATA confirms across 2-3 clean instances. The `_Config` modifiers (GOLF / RALLY / etc.) are unvalidated guesses, validate before trusting.
+
+**Posting-rate context (so baselines do not confuse):** his counting-rate GREW over time. June 2024 ~9/day, June 2025 ~23/day, 2026 ~27-30/day (matches the dashboard's 30.7). The Jan 2026 peak hit 68/day. Always state which era a baseline came from.
+
+**vAI's recommended build order:** ship S2 first (sturdy, works at today's liquidity), size off model + band, accumulate only on dips below the band's fair sum. Layer S1 on top only after the recorder L2 backtest proves the speed/seesaw edge survives spread + fees.
+
+---
+
+## 🏎️ NEXT-STEP — World-class Elon-tweet trading bot architecture (saved 2026-06-25)
+
+**Goal:** sub-300ms tweet-to-fill on Elon tweet auctions. Compete with the pro Polymarket bots.
+
+**Current state (2026-06-25):** Tier 1A is shipped — pre-signed orders at arm time, faster polling (2s), CF Worker proxy for geo-bypass. End-to-end ~1.5s. The roadmap below is for when Sir wants to push to world-class.
+
+### Tier 1A — shipped (~1.5s tweet → order)
+- ✅ X API polling 2s (was 8s) — was Sir's "I pay per poll" insight
+- ✅ Pre-sign order at arm time (stores SignedOrder dict in Supabase)
+- ✅ Token_id pre-cached at arm time (no Gamma lookup on fire)
+- ✅ CF Worker proxy at `polymarket-proxy.darwin-38f.workers.dev`
+- ✅ On fire: ONLY POST the pre-signed order (skip sign step, skip book read)
+
+### Tier 2 — pro-grade target (~400-600ms tweet → order, ~1 day work)
+- **X Streaming API** (`POST /2/tweets/search/stream`) with filtered rule `from:elonmusk` — sub-300ms push delivery, replaces polling entirely. Requires X API Pro plan.
+- **Pre-sign 5 staggered orders** at arm time: prices at best_ask, +1c, +3c, +5c, +10c. At fire time, pick the right one based on tweet metadata/current ask. Eliminates the "stale pre-sign" risk.
+- **WebSocket CLOB book subscription** — `wss://ws-subscriptions-clob.polymarket.com` keeps best_ask in memory continuously. Pre-decide which pre-signed order to submit before fire.
+- **Local LLM tweet classifier** — small model (Qwen/Llama 3B) running on the box, classifies tweet sentiment in <50ms. Picks the right pre-signed order without a Gamma round-trip.
+
+### Tier 3 — world-class (~150-300ms tweet → order, ~1 week + infra cost)
+- **Bare-metal in Equinix NY4 / NJ datacenter** ($100-200/mo) — single-digit ms RTT to Polymarket's CLOB infra (also in NJ). Railway US East is ~50ms away; co-located drops it to ~5ms.
+- **Non-US wallet** — bypass the geo-block at the wallet level (CFTC scope is jurisdiction-based, not IP-based). Singapore/Cayman/Estonia LLC owns the wallet, EOA signs from non-US. Removes proxy hop entirely. Legal review required.
+- **X mobile-API tap** — some pro bots watch X's `home_timeline.json` mobile endpoint via authenticated session cookies. Sees tweets ~100ms BEFORE public streaming API delivery because CDN edge replication.
+- **Multi-wallet parallel submission** — 3-5 sub-wallets pre-funded with bracket budget. On tweet: submit pre-signed orders in parallel from each → wins racing other reactive bots. Atomic dedup via on-chain conditional execution.
+- **Order-book imbalance front-runner** — watch the book for OTHER bots' reactive orders forming. Their orders leak intent ~20ms before fill. Front-run by submitting milliseconds earlier.
+- **Pre-signed cancel orders** — if the tweet shifts thesis the wrong way, instantly cancel the pre-signed buy (also pre-signed at arm time).
+
+### Tier 4 — moonshot (sub-100ms, ~1 month + significant infra)
+- **Custom mempool monitor on Polygon** — see other bots' transactions before block inclusion. Pre-empt their orders.
+- **Private order routing** with Polymarket — talk to Polymarket Pro / institutional desk for priority API access.
+- **Multi-region failover** — bare-metal in NY, Singapore, EU; pick fastest path per request.
+
+### Hard constraints
+- **Polymarket CFTC block on US IPs**: must use CF Worker proxy OR non-US server. No way around for US-based wallet operation.
+- **Polymarket CLOB matching engine throttling**: even with sub-100ms detection, the matching engine processes orders FIFO with some latency. Floor is likely ~50-100ms even with co-location.
+- **X API tier limits**: Streaming requires Pro plan (~$5k/mo) or Enterprise. Polling is Basic-tier OK but caps detection floor at ~250-500ms.
+
+### vAI's recommended priority order
+1. **Tier 1A** (shipped) — get it working, validate the loop end-to-end
+2. **Tier 2 WebSocket book** — biggest single latency win (~500ms saved)
+3. **Tier 2 Streaming X** — only if Sir wants to scale beyond reactive (and is OK with Pro plan cost)
+4. **Tier 3 co-located server** — only if Sir is competing with other top bots and wants to win race conditions
+
+---
+
+## 🛑 PRIOR STATE (2026-06-16) — BOT TORN DOWN FOR FRESH REBUILD
+
+The bot is **NOT live**. Everything below this banner describes the PRIOR running system and is kept for rebuild reference only — do not assume any of it is currently deployed.
+
+**Removed**
+- Railway project `Polymarket-Bot` (`e9d87bab-d38a-42e3-b57a-f197c4b081cb`): all 4 services deleted (Bot-API, Bot-Dashboard, cron-spike-alert, cron-anchor-alert). Empty project shell kept. In-process schedulers gone.
+- Supabase `xdonwowgqvmtrduikaon`: all public tables TRUNCATEd (0 rows, verified). Schema + 23 migrations + keys intact.
+
+**Kept (do NOT delete)**
+- All credentials in `~/.credentials/shared.env` (`POLYMARKET_*` + `SUPABASE_*` blocks; wallet key verified). `LUNARCRUSH_API_KEY` + `WEBHOOK_SECRET` appended during teardown.
+- Supabase project (reused — deleting = new keys), GitHub repo `udt1234/polymarket-trading-bot-3.21.26`.
+
+**To rebuild**: deploy a fresh Railway service, reconnect the GitHub repo, re-paste env vars from shared.env, point at the same Supabase URL. Optionally downgrade Supabase to free tier to pause billing during the gap.
+
+---
+
 ## 🎯 Next Session — Configure Exit Rules (Elon + Truth Social)
 
 **Status (2026-05-21)**: Both ensemble modules currently have NO exit logic.

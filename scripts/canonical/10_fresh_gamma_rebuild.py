@@ -1,5 +1,5 @@
 """
-Fresh canonical rebuild from Gamma + data-api only. ZERO whale_analysis.
+Fresh canonical rebuild from Gamma + data-api only. ZERO api_trades_v2.
 
 Pipeline:
   1. Paginate Gamma /events?tag_id=972 (Tweet Markets) for ALL closed+open

@@ -47,8 +47,11 @@ ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT / ".env")
 TRUMP_RAW = ROOT / "_DataMetricPulls" / "trump_posts_raw.parquet"
 ELON_XTRACKER = ROOT / "_DataMetricPulls" / "elon_posts_raw.parquet"
+ELON_OSINT_ARCHIVE = Path(r"C:/Users/darwi/OneDrive/Desktop/Claude Code/OSINT/elon-tweets-archive/elonmusk-ALL-2025-12-10.json")
+ELON_SCWEET_DIR = Path(r"C:/Users/darwi/OneDrive/Desktop/Claude Code/OSINT/scweet/scweet_results")
 OUT_DIR = ROOT / "_DataMetricPulls" / "canonical" / "posts"
 ET = ZoneInfo("America/New_York")
+ELON_OSINT_CUTOFF = pd.Timestamp("2020-12-10", tz="UTC")  # last 5 years only
 
 
 def strip_html(s) -> str:
@@ -111,6 +114,26 @@ def fetch_supabase_elon() -> pd.DataFrame:
     return df
 
 
+def fetch_osint_archive() -> pd.DataFrame:
+    """Load OSINT scrape archive (real Twitter snowflake IDs + content)."""
+    import json as _json
+    if not ELON_OSINT_ARCHIVE.exists():
+        return pd.DataFrame()
+    data = _json.loads(ELON_OSINT_ARCHIVE.read_text(encoding="utf-8"))
+    if not data:
+        return pd.DataFrame()
+    # parse Twitter date format: "Wed Dec 10 22:06:36 +0000 2025"
+    df = pd.DataFrame(data)
+    df["ts_utc"] = pd.to_datetime(df["created_at"], format="%a %b %d %H:%M:%S %z %Y", errors="coerce")
+    df = df.dropna(subset=["ts_utc"])
+    df["ts_utc"] = df["ts_utc"].dt.tz_convert("UTC")
+    # Apply 5-year cutoff
+    before = len(df)
+    df = df[df["ts_utc"] >= ELON_OSINT_CUTOFF]
+    print(f"  OSINT archive: {before:,} rows total, {len(df):,} after 5-year cutoff ({ELON_OSINT_CUTOFF.date()}+)")
+    return df
+
+
 def build_elon() -> pd.DataFrame:
     # Step 1: Supabase rows (primary truth where available)
     print("  fetching Supabase elon_tweets...")
@@ -168,17 +191,74 @@ def build_elon() -> pd.DataFrame:
         "_supabase_url": "",  # not from supabase
     })
 
-    # Step 3: merge - prefer Supabase for overlapping post_ids
-    # Both Supabase and xTracker use the Twitter snowflake as post_id (xTracker
-    # via platformId), so we can dedupe on post_id directly. Supabase wins ties.
-    if len(sb_out):
-        sb_ids = set(sb_out["post_id"])
-        xt_out = xt_out[~xt_out["post_id"].isin(sb_ids)]
-        merged = pd.concat([sb_out, xt_out], ignore_index=True)
-        # final safety: kill any remaining duplicates within merged
-        merged = merged.drop_duplicates(subset=["post_id"], keep="first")
+    # Step 2b: OSINT archive (15-year history scrape, trimmed to 5yr)
+    print("  reading OSINT archive...")
+    osint_df = fetch_osint_archive()
+    if len(osint_df):
+        osint_out = pd.DataFrame({
+            "handle": "elonmusk",
+            "post_id": osint_df["id"].astype(str),  # real Twitter snowflake
+            "ts_utc": osint_df["ts_utc"],
+            "ts_et": osint_df["ts_utc"].dt.tz_convert(ET),
+            "content_text": osint_df["text"].astype(str),
+            "content_html": osint_df["text"].astype(str),
+            "is_reply": False,  # OSINT scrape filtered out replies/RTs at collection time
+            "is_repost": False,
+            "is_quote": False,
+            "is_community_repost": False,
+            "source": "osint_scrape_2025-12-10",
+            "_supabase_url": osint_df["url"].astype(str),  # real twitter.com URL
+        })
     else:
-        merged = xt_out.drop_duplicates(subset=["post_id"], keep="first")
+        osint_out = pd.DataFrame()
+    print(f"  OSINT rows ready: {len(osint_out):,}")
+
+    # Step 3: merge - priority order Supabase > OSINT > xTracker (by recency of source)
+    # All three use real Twitter snowflakes as post_id, so post_id dedup works.
+    frames = []
+    if len(sb_out): frames.append(sb_out)
+    if len(osint_out): frames.append(osint_out)
+    if len(xt_out): frames.append(xt_out)
+    if not frames:
+        return pd.DataFrame()
+    merged = pd.concat(frames, ignore_index=True)
+    # keep='first' = priority winner. Order above ensures Supabase wins, then OSINT, then xTracker.
+    merged = merged.drop_duplicates(subset=["post_id"], keep="first")
+
+    # Step 4: enrich type tags from Scweet CSVs (explicit Original/Retweet/Quote labels
+    # vs vAI's regex heuristics). For any post_id present in a Scweet scrape, override
+    # is_repost/is_quote based on Scweet's `type` column.
+    scweet_csvs = sorted(ELON_SCWEET_DIR.glob("elonmusk_*.csv")) if ELON_SCWEET_DIR.exists() else []
+    if scweet_csvs:
+        scweet_rows = []
+        for csv_path in scweet_csvs:
+            try:
+                sw = pd.read_csv(csv_path)
+                scweet_rows.append(sw[["tweet_id", "type"]])
+            except Exception:
+                continue
+        if scweet_rows:
+            sw_all = pd.concat(scweet_rows, ignore_index=True).drop_duplicates(subset=["tweet_id"])
+            sw_all["tweet_id"] = sw_all["tweet_id"].astype(str)
+            type_map = dict(zip(sw_all["tweet_id"], sw_all["type"]))
+            print(f"  Scweet type-enrichment available for {len(type_map):,} unique tweet_ids")
+            n_overrides = 0
+            for idx, row in merged.iterrows():
+                t = type_map.get(str(row["post_id"]))
+                if not t:
+                    continue
+                # Reset all three to derive from Scweet's explicit label
+                new_repost = "retweet" in t.lower() or "repost" in t.lower()
+                new_quote = "quote" in t.lower()
+                new_reply = "reply" in t.lower()
+                if (new_repost != row["is_repost"]) or (new_quote != row["is_quote"]) or (new_reply != row["is_reply"]):
+                    n_overrides += 1
+                    merged.at[idx, "is_repost"] = new_repost
+                    merged.at[idx, "is_quote"] = new_quote
+                    merged.at[idx, "is_reply"] = new_reply
+            print(f"  Scweet overrides applied: {n_overrides:,}")
+    else:
+        print(f"  Scweet directory not found, skipping type enrichment")
 
     print(f"  merged rows: {len(merged):,} (Supabase {len(sb_out):,} + xTracker after dedup {len(xt_out):,})")
 

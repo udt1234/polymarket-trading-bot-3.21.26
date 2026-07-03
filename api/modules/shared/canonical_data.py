@@ -7,7 +7,7 @@ parquet reads. The loader:
 
   1. Loads partitioned parquet with sensible default filters
   2. Optionally runs QA: samples N rows + cross-checks against ground truth
-     (Gamma API for auctions, raw whale_analysis for prices, post URLs for
+     (Gamma API for auctions, raw api_trades_v2 for prices, post URLs for
      posts) BEFORE returning data
   3. Hard-blocks on QA failure (raises CanonicalDataQAFailure)
   4. Logs every load to Google Sheet QA_Log tab
@@ -48,7 +48,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[3]
 CANON = ROOT / "_DataMetricPulls" / "canonical"
-RAW_WHALE = CANON / "_raw_imports" / "whale_analysis"
+RAW_TRADES = CANON / "_raw_imports" / "api_trades_v2"
 GAMMA_CACHE = CANON / "_gamma_cache"
 
 GAMMA_BASE = "https://gamma-api.polymarket.com"
@@ -165,7 +165,7 @@ def _qa_auctions(df: pd.DataFrame, n: int) -> tuple[int, int, int, list[dict]]:
 
 
 def _qa_prices(df: pd.DataFrame, n: int) -> tuple[int, int, int, list[dict]]:
-    """For each sampled (auction, bucket, hour) row, verify close price against raw whale_analysis."""
+    """For each sampled (auction, bucket, hour) row, verify close price against raw api_trades_v2."""
     if len(df) == 0 or n == 0:
         return (0, 0, 0, [])
     sample = df.sample(min(n, len(df)), random_state=random.randint(1, 99999))
@@ -179,7 +179,7 @@ def _qa_prices(df: pd.DataFrame, n: int) -> tuple[int, int, int, list[dict]]:
         hour = row.get("hour_utc")
         canon_close = row.get("close")
         if slug not in raw_cache:
-            raw_path = RAW_WHALE / f"trades_{slug}.parquet"
+            raw_path = RAW_TRADES / f"{slug}.parquet"
             if not raw_path.exists():
                 skipped += 1
                 continue

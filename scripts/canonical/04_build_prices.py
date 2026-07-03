@@ -1,7 +1,7 @@
 """
 Phase 2 — Build canonical/prices/{handle}/{YYYY-MM}.parquet
 
-Hourly OHLC per (market, bucket, hour) aggregated from whale_analysis trades.
+Hourly OHLC per (market, bucket, hour) aggregated from api_trades_v2 trades.
 Includes trade-derived orderbook proxies (no L2 history exists pre-Mar 2026).
 
 Output schema (one row per market+bucket+hour):

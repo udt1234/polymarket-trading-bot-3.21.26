@@ -1,5 +1,5 @@
 """
-Push a 'QA_Sample_Audit' tab to the canonical sheet.
+Push a 'QA_Audit' tab to the canonical sheet.
 
 For each canonical table (auctions, prices, posts), samples N rows and
 shows side-by-side:
@@ -25,7 +25,7 @@ from googleapiclient.discovery import build
 
 ROOT = Path(__file__).resolve().parents[2]
 CANON = ROOT / "_DataMetricPulls" / "canonical"
-RAW_WHALE = CANON / "_raw_imports" / "whale_analysis"
+RAW_TRADES = CANON / "_raw_imports" / "api_trades_v2"
 GAMMA_CACHE = CANON / "_gamma_cache"
 
 SPREADSHEET_ID = "1bXBnXz4a1Nn44ZLORNo2cNqZx6pnqER3rcoTUZMC1Q8"
@@ -112,7 +112,7 @@ def audit_prices():
     parts = sorted((CANON / "prices").rglob("*.parquet"))
     df = pd.concat([pd.read_parquet(p) for p in parts], ignore_index=True)
     sample = df.sample(min(SAMPLE_PRICES, len(df)), random_state=42)
-    rows = [["TABLE: PRICES — sample 20 random hourly OHLC rows, verify close against raw whale_analysis trades"]]
+    rows = [["TABLE: PRICES — sample 20 random hourly OHLC rows, verify close against raw api_trades_v2 trades"]]
     rows.append([])
     rows.append([
         "handle", "auction_slug", "bucket", "hour_utc",
@@ -126,7 +126,7 @@ def audit_prices():
         hour = ts if ts.tzinfo else ts.tz_localize("UTC")
         canon_close = float(r["close"])
         if slug not in raw_cache:
-            raw_path = RAW_WHALE / f"trades_{slug}.parquet"
+            raw_path = RAW_TRADES / f"{slug}.parquet"
             if not raw_path.exists():
                 rows.append([r["handle"], slug, bucket, str(hour), f"{canon_close:.4f}",
                              "", "", "SKIP (no raw)", 0])
@@ -208,7 +208,7 @@ def main() -> int:
 
     meta = sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
     tabs = {s["properties"]["title"]: s["properties"]["sheetId"] for s in meta["sheets"]}
-    title = "QA_Sample_Audit"
+    title = "QA_Audit"
     if title in tabs:
         sid = tabs[title]
     else:

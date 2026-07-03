@@ -1,0 +1,155 @@
+======================================================================
+DATA INVENTORY
+======================================================================
+Total captured posts: 22,005  |  span 2024-05-24 -> 2026-06-12
+  osint_scrape_2025-12-10      n=12,180  2024-05-24 -> 2025-12-10  reposts=0 replies=0 quotes=0
+  supabase_elon_tweets         n= 2,016  2026-05-02 -> 2026-06-12  reposts=662 replies=889 quotes=1299
+  xtracker_elon_posts          n= 7,809  2025-10-31 -> 2026-05-23  reposts=4861 replies=18 quotes=8
+
+======================================================================
+Q1 — DAILY CLOCK + TIMEZONE
+======================================================================
+Quiet window (lowest-5h block, UTC): 09:00-14:00 UTC  holds only 14.3% of daily posts
+   deep-sleep center in ET: 07.0h local
+   deep-sleep center in CT: 06.0h local
+   deep-sleep center in MT: 05.0h local
+   deep-sleep center in PT: 04.0h local
+
+Hour-of-day distribution (UTC) -- ALL vs ORIGINALS-ONLY (share %):
+  hUTC :  ALL  ORIG   |  hUTC :  ALL  ORIG
+  00:00 :  3.5  3.6   |  12:00 :  2.9  2.3
+  01:00 :  3.5  3.5   |  13:00 :  3.9  3.3
+  02:00 :  3.4  3.4   |  14:00 :  5.2  5.0
+  03:00 :  3.8  3.8   |  15:00 :  5.5  5.5
+  04:00 :  3.9  4.5   |  16:00 :  5.6  6.0
+  05:00 :  6.1  6.2   |  17:00 :  5.6  6.2
+  06:00 :  6.4  6.2   |  18:00 :  4.9  5.3
+  07:00 :  4.8  4.8   |  19:00 :  4.8  5.1
+  08:00 :  3.9  3.4   |  20:00 :  4.1  4.2
+  09:00 :  2.7  2.4   |  21:00 :  3.5  3.7
+  10:00 :  2.5  2.0   |  22:00 :  3.3  3.6
+  11:00 :  2.4  2.1   |  23:00 :  3.8  4.1
+
+Shape agreement ALL vs ORIG: r=0.973 (high => repost/reply inclusion doesn't distort the clock)
+
+Posts/active-hour weekday vs weekend (ET): weekday n=16,033 weekend n=5,972
+By day-of-week (ET, share %): Mon 14.1  Tue 14.5  Wed 14.8  Thu 15.0  Fri 14.5  Sat 13.2  Sun 13.9
+
+Monthly deep-sleep center drift (UTC hour of 5h trough center):
+  month  trough_center_utc    n
+2024-06                  9  183
+2024-07                  9  317
+2024-08                  8  419
+2024-09                 12  783
+2024-10                 11  953
+2024-11                 10 1273
+2024-12                 12  908
+2025-01                 10 1106
+2025-02                 11 1913
+2025-03                  9 1006
+2025-04                 10  349
+2025-05                 11  321
+2025-06                 11  309
+2025-07                 13  261
+2025-08                 12  597
+2025-09                 10  383
+2025-10                  0  472
+2025-11                 10  915
+2025-12                  2 1648
+2026-01                  2 2136
+2026-02                  2 1226
+2026-03                 23 1330
+2026-04                 11 1050
+2026-05                  6 1486
+2026-06                  6  629
+  trough center UTC: mean=9.2h std=4.6h (low std => stable body clock)
+
+======================================================================
+Q2 — BURST CLUSTERS / CONTINUATION HAZARD
+======================================================================
+Window for hazard: 2025-11-01 -> 2026-06-12  posts=10,420  gaps=10,419
+Gap minutes: median=3.0  mean=30.9  p25=1.0  p75=12.8  p90=80.0
+
+CONTINUATION TABLE  (DONE = silence >= 120 min)
+ silent_so_far | P(post w/in 5m) | P(w/in 15m) | P(w/in 30m) | P(DONE>=2h) | median_more_wait
+      0 min     |    59.9%      |   76.3%    |   83.0%    |     7.7%    |    4.0 min
+      1 min     |    50.5%      |   69.2%    |   77.3%    |    10.3%    |    5.0 min
+      2 min     |    42.4%      |   62.6%    |   72.0%    |    12.9%    |    8.0 min
+      3 min     |    36.0%      |   57.1%    |   67.5%    |    15.2%    |   11.0 min
+      5 min     |    28.4%      |   48.9%    |   60.3%    |    19.1%    |   16.0 min
+      8 min     |    21.3%      |   40.1%    |   51.9%    |    23.7%    |   27.0 min
+     10 min     |    17.6%      |   35.4%    |   46.8%    |    26.6%    |   36.0 min
+     15 min     |    13.5%      |   28.1%    |   39.2%    |    32.3%    |   51.0 min
+     20 min     |     9.3%      |   22.2%    |   33.4%    |    37.3%    |   61.0 min
+     30 min     |     6.4%      |   15.5%    |   26.4%    |    44.9%    |   75.0 min
+     45 min     |     5.3%      |   13.0%    |   25.8%    |    53.1%    |   85.0 min
+     60 min     |     5.3%      |   14.7%    |   23.9%    |    61.1%    |   91.0 min
+     90 min     |     4.3%      |   10.7%    |   19.8%    |    80.2%    |  105.0 min
+
+Sessions (break = gap>120m): 777  posts/session median=10 mean=13.4 max=91
+  session duration min: median=96 mean=130
+  share of sessions that are single-post: 9.7%   >=10 posts: 50.5%
+
+======================================================================
+Q3 — WAKE/SLEEP: START -> END CORRELATION
+======================================================================
+Active days (>=4 posts): 715
+  first-post ET hour: median=10.0  p25=8.3 p75=11.6
+  last-post  ET hour: median=3.7  p25=2.2 p75=5.8
+  active span hrs:   median=17.1  mean=16.5
+
+HYPOTHESIS TEST: later start -> later end?
+  corr(start, end)      r=-0.038   slope=-0.04 (end shifts -0.04h per +1h start)
+  corr(start, duration) r=-0.689   (negative => later start = shorter day)
+              days  med_end_et   med_span  med_posts
+start_bucket                                        
+overnight<6      4    4.675000   4.749444        8.0
+early6-9       247    3.966667  19.668333       35.0
+mid9-12        319    3.683333  16.663333       26.0
+late>12        145    3.566667  13.053889       12.0
+
+======================================================================
+Q4 — TOP RETWEET PARTNERS
+======================================================================
+Reposts captured: 5,523  (window 2025-10-31 -> 2026-06-12)  partner-parsed: 5,523 (100%)
+
+Top 25 retweet partners (all captured reposts):
+   1. @XFreeze               340  (6.2%)
+   2. @cb_doge               310  (5.6%)
+   3. @teslaownersSV         214  (3.9%)
+   4. @MarioNawfal           166  (3.0%)
+   5. @SpaceX                129  (2.3%)
+   6. @SawyerMerritt         107  (1.9%)
+   7. @dvorahfr              100  (1.8%)
+   8. @Starlink               82  (1.5%)
+   9. @Rothmus                71  (1.3%)
+  10. @tetsuoai               67  (1.2%)
+  11. @ArthurMacwaters        50  (0.9%)
+  12. @elonmusk               49  (0.9%)
+  13. @art_muse               47  (0.9%)
+  14. @TheRabbitHole          46  (0.8%)
+  15. @Tesla                  39  (0.7%)
+  16. @KatieMiller            38  (0.7%)
+  17. @AdamLowisz             37  (0.7%)
+  18. @BasedMikeLee           36  (0.7%)
+  19. @EricLDaugh             35  (0.6%)
+  20. @grok                   32  (0.6%)
+  21. @GadSaad                31  (0.6%)
+  22. @C_3C_3                 29  (0.5%)
+  23. @doganuraldesign        29  (0.5%)
+  24. @libsoftiktok           28  (0.5%)
+  25. @TheAliceSmith          28  (0.5%)
+
+Top 12 partners LAST 90 DAYS of data (n=1766):
+   1. @XFreeze               117
+   2. @SpaceX                 62
+   3. @cb_doge                61
+   4. @SawyerMerritt          45
+   5. @dvorahfr               29
+   6. @teslaownersSV          28
+   7. @Rothmus                28
+   8. @Tesla                  25
+   9. @MarioNawfal            25
+  10. @Starlink               24
+  11. @elonmusk               24
+  12. @ArthurMacwaters        23

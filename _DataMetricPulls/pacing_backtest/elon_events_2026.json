@@ -1,0 +1,2504 @@
+[
+ {
+  "date": "2024-06-13",
+  "name": "Tesla shareholders sue Musk in Delaware Chancery for diverting AI talent/GPUs to xAI",
+  "entity": "Tesla",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://cointelegraph.com/news/tesla-investors-sue-board-elon-musk-over-xai-startup",
+  "notes": "Ongoing into 2026. Seeks to force Musk to hand xAI stake to Tesla. 'Digital Optimus' admissions (Mar 2026) cited as undermining defense."
+ },
+ {
+  "date": "2025-01-14",
+  "name": "SEC sues Musk over late disclosure of 2022 Twitter 5% stake (filed)",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://lawreview.law.miami.edu/sec-sues-elon-musk-over-twitter-stock-disclosures/",
+  "notes": "Alleged 21-day-late disclosure saved Musk ~$150M. Context for 2026 settlement."
+ },
+ {
+  "date": "2025-04-01",
+  "name": "Wisconsin Supreme Court race — Musk/America PAC spent $12M, lost",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://thehill.com/policy/technology/5727198-musk-political-fray-big-2026-midterm-donations/",
+  "notes": "Pre-window context (Apr 1 2025) but the defining test of Musk's electoral spending that shaped his 2025-26 strategy. Liberal candidate won despite $12M America PAC spend."
+ },
+ {
+  "date": "2025-05-28",
+  "name": "Judge Chutkan lets 14-state suit vs Musk/DOGE proceed (Appointments Clause challenge)",
+  "entity": "Political",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.npr.org/2025/05/28/nx-s1-5414191/musk-lawsuit-doge-trump-spending-bill",
+  "notes": "Denied motion to dismiss. Argues Musk acted as de facto principal officer without Senate confirmation."
+ },
+ {
+  "date": "2025-05-30",
+  "name": "Musk departs DOGE / leaves Trump administration",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.npr.org/2025/05/30/nx-s1-5415641/musk-leaves-doge-what-comes-next",
+  "notes": "End of 130-day special-government-employee tenure. High-volume posting around his exit, DOGE savings claims, and his future role. Anchor event for the summer feud arc."
+ },
+ {
+  "date": "2025-06-03",
+  "name": "Musk attacks 'One Big Beautiful Bill' as 'disgusting abomination'",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Trump%E2%80%93Musk_feud",
+  "notes": "3:32pm EST 'fire all politicians who betrayed the American people' + 'pork-filled' / 'disgusting abomination' posts. Start of the open Trump feud. Massive posting spike."
+ },
+ {
+  "date": "2025-06-05",
+  "name": "Feud erupts: Epstein-files allegation + SpaceX Dragon decommission threat + America Party poll",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Trump%E2%80%93Musk_feud",
+  "notes": "Same day: Trump/Merz presser, Musk claims Trump in Epstein files, threatens to decommission Dragon 2 (later deleted), and runs the 'new political party' X poll (80.4% yes of 5.6M). Highest single-day posting volume of the year. Tesla fell ~15%, Musk lost ~$34B paper."
+ },
+ {
+  "date": "2025-06-06",
+  "name": "Trump says Musk 'lost his mind'; White House denies reconciliation call",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Trump%E2%80%93Musk_feud",
+  "notes": "Trump ABC News comments; continued back-and-forth posting."
+ },
+ {
+  "date": "2025-06-07",
+  "name": "Trump warns Musk of 'very serious consequences' if he funds Democrats",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Trump%E2%80%93Musk_feud",
+  "notes": "Escalation; Musk posting in response."
+ },
+ {
+  "date": "2025-06-11",
+  "name": "Musk publicly apologizes: some posts 'went too far'",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Trump%E2%80%93Musk_feud",
+  "notes": "Partial de-escalation post on X; Trump says he appreciates the apology. He deleted several attack posts including the Epstein allegation around this window."
+ },
+ {
+  "date": "2025-06-26",
+  "name": "Neuralink Summer 2025 Update (\"A Year of Telepathy\") livestream event",
+  "entity": "Personal",
+  "category": "livestream",
+  "recurring": false,
+  "source": "https://neuralink.com/updates/a-year-of-telepathy/",
+  "notes": "Musk + execs presented Telepathy and Blindsight progress, 2nd-gen surgical robot, robotic-arm/Optimus-hand demos. Posted to YouTube June 26-27 2025. Just before window but anchors the cadence; Neuralink tends to do a major mid-year update."
+ },
+ {
+  "date": "2025-06-27",
+  "name": "Musk donates $15M to GOP super PACs (Senate Leadership Fund, Congressional Leadership Fund, MAGA Inc.)",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.cnn.com/2025/07/31/politics/elon-musk-republicans",
+  "notes": "$5M each to SLF, CLF, and Trump's MAGA Inc. on June 27, 2025. Largest individual donor to SLF/CLF in H1 2025. Came days before he floated the America Party."
+ },
+ {
+  "date": "2025-07-01",
+  "name": "Trump floats deporting Musk / 'putting DOGE on Elon'; Musk backs Rep. Thomas Massie",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Trump%E2%80%93Musk_feud",
+  "notes": "Deportation threat reignites feud as the bill nears passage. Musk pledges to back Massie (who opposed the bill) and threatens primaries against bill supporters."
+ },
+ {
+  "date": "2025-07-04",
+  "name": "Trump signs 'One Big Beautiful Bill'; Musk runs 'independence from the uniparty' poll",
+  "entity": "Political",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/America_Party",
+  "notes": "July 4 bill signing. Musk's July 4 X poll (65.4% in favor) sets up the next-day party announcement. Heavy holiday posting."
+ },
+ {
+  "date": "2025-07-05",
+  "name": "Musk announces formation of the 'America Party'",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2025/07/05/elon-musk-america-party-democrats-trump.html",
+  "notes": "Third-party announcement on X. Strategy: target 2-3 Senate seats + 8-10 House districts. Days of follow-up posting, polls, and replies."
+ },
+ {
+  "date": "2025-07-06",
+  "name": "Cuban / Scaramucci signal support for America Party",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/America_Party",
+  "notes": "Mark Cuban and Anthony Scaramucci express interest in ballot-access help. Musk engaged in replies."
+ },
+ {
+  "date": "2025-07-06",
+  "name": "Musk launches 'America Party' (amid Trump feud)",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.npr.org/2025/07/06/g-s1-76292/musk-political-party-america",
+  "notes": "Just before window but anchors the political arc. America Party announced Jul 6 2025 after OBBBA split with Trump. Extremely high posting period. Note: by Aug 2025 Musk reportedly softened, floated backing Vance 2028."
+ },
+ {
+  "date": "2025-07-07",
+  "name": "Trump: Musk has gone 'off the rails... a TRAIN WRECK'",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/America_Party",
+  "notes": "Truth Social attack; Musk responses."
+ },
+ {
+  "date": "2025-07-09",
+  "name": "Grok 4 + Grok 4 Heavy launch livestream (8pm PT) — anchor for cadence",
+  "entity": "xAI",
+  "category": "livestream",
+  "recurring": true,
+  "source": "https://www.teslarati.com/elon-musk-confirms-grok-4-launch-july-9-livestream-event/",
+  "notes": "RECURRING SERIES: xAI flagship model launches use an 8pm-PT X livestream (Grok 3 Feb 17 2025, Grok 4 Jul 9 2025; ~1.5M concurrent viewers). Expect a similar livestream for Grok 5. Cadence: major model every few months. Grok 4 itself is pre-window (Jul 2025) but the livestream format recurs through the window."
+ },
+ {
+  "date": "2025-07-24",
+  "name": "Musk announces Vine returning \"in AI form\" (X platform)",
+  "entity": "X-platform",
+  "category": "product",
+  "recurring": false,
+  "source": "https://x.com/elonmusk/status/1948358524935004201",
+  "notes": "Tied to xAI 'Imagine' text-to-video tool; also said X recovered the Vine archive and is restoring user access."
+ },
+ {
+  "date": "2025-07-30",
+  "name": "America Party launch reported stalled (no FEC filing, no endorsements)",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/America_Party",
+  "notes": "Reported by Tesla investor James Fishback. Party momentum fizzles through August."
+ },
+ {
+  "date": "2025-08",
+  "name": "Macrohard announced — Elon's 'purely AI software company' to clone Microsoft",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://x.com/elonmusk/status/1958852874236305793?lang=en",
+  "notes": "Musk X-post in Aug 2025; trademark filed Aug 2025. Officially unveiled as joint Tesla-xAI 'Macrohard'/'Digital Optimus' on 2026-03-11."
+ },
+ {
+  "date": "2025-08",
+  "name": "Musk reconsiders America Party; floats backing JD Vance for 2028",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/America_Party",
+  "notes": "August 2025; tight range. Signals pivot back toward GOP. No single confirmed date."
+ },
+ {
+  "date": "2025-08-01",
+  "name": "Miami jury finds Tesla partly liable in fatal Autopilot crash; ~$243M verdict ($200M punitive)",
+  "entity": "Tesla",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.anzalonelaw.com/jury-finds-tesla-autopilot-defective-in-landmark-329-million-verdict-what-it-means-for-future-cases/",
+  "notes": "Benavides v. Tesla. First US wrongful-death verdict tied to Autopilot. 33% fault on Tesla."
+ },
+ {
+  "date": "2025-08-23",
+  "name": "X Corp settles ~$500M Twitter laid-off-employee severance class action (announced)",
+  "entity": "X-platform",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://fortune.com/2025/08/23/twitter-lawsuit-class-action-settlement-500-million-severance-elon-musk/",
+  "notes": "~6,000 ex-employees. Deal struck ~1 month before Ninth Circuit oral argument. Terms undisclosed."
+ },
+ {
+  "date": "2025-08-24",
+  "name": "CRS-33 Cargo Dragon resupply to ISS",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/SpaceX_CRS-33",
+  "notes": "Falcon 9 from SLC-40, Cape Canaveral. 33rd commercial resupply mission. Just before the window start; included as context anchor."
+ },
+ {
+  "date": "2025-08-25",
+  "name": "X Corp / xAI sue Apple and OpenAI (antitrust, ChatGPT-iPhone integration) — filed",
+  "entity": "X-platform",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2025/08/25/musk-lawsuit-apple-openai-monopoly.html",
+  "notes": "Filed in Fort Worth, TX. Alleges collusion to maintain smartphone + generative-AI monopolies."
+ },
+ {
+  "date": "2025-08-26",
+  "name": "Grok Code Fast 1 released — xAI's agentic coding model",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.infoq.com/news/2025/09/xai-grok-fast1/",
+  "notes": "Cost-efficient agentic coding model (TypeScript/Python/Java/Rust/C++/Go). Deprecated 2026-05-15, retires 2026-08-15. Some sources cite Aug 28; InfoQ/xAI docs late Aug 2025."
+ },
+ {
+  "date": "2025-08-27",
+  "name": "Neuralink first Canada implant (CAN-PRIME) at UHN Toronto Western Hospital",
+  "entity": "Personal",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.uhn.ca/corporate/News/PressReleases/Pages/uhn-performs-first-neuralink-implant-surgeries-outside-the-us.aspx",
+  "notes": "First Neuralink surgery outside the US. Cervical spinal cord injury patient, team led by Dr. Andres Lozano."
+ },
+ {
+  "date": "2025-09",
+  "name": "Colossus 2 — first ~1GW datacenter milestone (200MW live, kickoff Mar 7 2025)",
+  "entity": "xAI",
+  "category": "data-release",
+  "recurring": false,
+  "source": "https://newsletter.semianalysis.com/p/xais-colossus-2-first-gigawatt-datacenter",
+  "notes": "Memphis Colossus 2; 200MW live ~6 months after Mar 2025 site acquisition; >1GW planned by end of quarter. Recurring buildout milestone series."
+ },
+ {
+  "date": "2025-09",
+  "name": "Neuralink passes ~12 human implants (Reuters-confirmed milestone)",
+  "entity": "Personal",
+  "category": "data-release",
+  "recurring": false,
+  "source": "https://www.neurapod.com/blog/neuralink-implants-humans-2025",
+  "notes": "By Sept 2025 Reuters confirmed 12 recipients; running cumulative-hours milestones (15,000+ hrs)."
+ },
+ {
+  "date": "2025-09",
+  "name": "xAI sues OpenAI for trade-secret theft / engineer poaching (Grok source code) — filed",
+  "entity": "xAI",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.eweek.com/news/xai-sues-openai-trade-secrets-poaching-lawsuit/",
+  "notes": "DTSA + interference + unfair competition claims. Centered on ex-xAI engineer Xuechen Li."
+ },
+ {
+  "date": "2025-09-01",
+  "name": "Tesla Master Plan Part IV released",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.tesla.com/master-plan-part-4",
+  "notes": "AI-focused master plan published on tesla.com. Musk amplified heavily on X."
+ },
+ {
+  "date": "2025-09-01/2025-12-31",
+  "name": "Falcon 9 Starlink launches (Sep-Dec 2025, routine high-cadence series)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": true,
+  "source": "https://en.wikipedia.org/wiki/List_of_Starlink_and_Starshield_launches",
+  "notes": "ROUTINE. ~13-15 Falcon 9 launches/month, majority Starlink (24 or 29 sats each), from both coasts (Cape Canaveral SLC-40/LC-39A + Vandenberg SLC-4E). 2025 totaled 165 Falcon 9 launches, 123 Starlink-dedicated. Representative confirmed dates: Dec 17 2025 (29 Starlink from FL). Cadence ~2-3x/week."
+ },
+ {
+  "date": "2025-09-01/2026-12-31",
+  "name": "SpaceX dual NLRB constitutionality lawsuits (challenging removal protections / Article II)",
+  "entity": "SpaceX",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://workerorganizing.org/elon-musk-spacex-nlrb-15975/",
+  "notes": "Both suits on hold pending Fifth Circuit decision during window. Ongoing regulatory-structure fight."
+ },
+ {
+  "date": "2025-09-01/2026-12-31",
+  "name": "Recurring: long-form Musk interviews/keynotes (JRE, All-In, Tesla/SpaceX earnings calls, ad-hoc)",
+  "entity": "Personal",
+  "category": "interview",
+  "recurring": true,
+  "source": "https://www.podchaser.com/creators/elon-musk-107Zzj88OH/appearances",
+  "notes": "RECURRING META-SERIES for backtesting: Musk does ~1 major long-form interview/keynote per 1-2 months (JRE Oct 31 2025 & Jun 16 2026; Abundance Summit Mar 12 2026; earnings calls quarterly). Each reliably spikes posting for 1-3 days around airdate. Enumerate individually where dated above."
+ },
+ {
+  "date": "2025-09-03",
+  "name": "Neuralink second Canada implant (CAN-PRIME) at UHN Toronto",
+  "entity": "Personal",
+  "category": "product",
+  "recurring": false,
+  "source": "https://globalnews.ca/news/11393006/elon-musk-neuralink-toronto-canada/",
+  "notes": "Second of two Canadian-first implants; first was Aug 27 2025."
+ },
+ {
+  "date": "2025-09-04",
+  "name": "Declined White House tech-leaders reception (X post)",
+  "entity": "Personal",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.cnn.com/2025/09/04/tech/elon-musk-white-house-summit-invitation",
+  "notes": "Musk said on X he was invited to a White House reception but would not attend — notable mid-feud signal that drove posting/commentary."
+ },
+ {
+  "date": "2025-09-08",
+  "name": "All-In Summit 2025 fireside talk",
+  "entity": "Personal",
+  "category": "interview",
+  "recurring": false,
+  "source": "https://summit.allinpodcast.co/",
+  "notes": "~44-min live talk at All-In Summit (Los Angeles, Sep 7-9). Topics: DOGE, Optimus, Starlink smartphones, Grokipedia, Mars. Interview clip posted Sep 9. Drove a posting burst around Grokipedia tease."
+ },
+ {
+  "date": "2025-09-10",
+  "name": "Charlie Kirk assassination — Musk high-volume posting/reaction",
+  "entity": "Breaking news",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Memorial_service_of_Charlie_Kirk",
+  "notes": "Kirk (close Musk ally) shot Sept 10. Musk posted heavily on the killing, free-speech/political-violence framing, and platform response. Drove the Sept reconciliation."
+ },
+ {
+  "date": "2025-09-10/2025-09-30",
+  "name": "Trump-Musk feud thaw / reconciliation period",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Trump%E2%80%93Musk_feud",
+  "notes": "After the June-Aug 2025 public breakup (Musk left govt May 30; 'disgusting abomination' posts Jun 3), the feud thawed through Sept, culminating at the Sep 21 Kirk memorial. Drove heavy X posting throughout."
+ },
+ {
+  "date": "2025-09-15",
+  "name": "Neuralink announces UAE-PRIME trial at Cleveland Clinic Abu Dhabi",
+  "entity": "Personal",
+  "category": "product",
+  "recurring": false,
+  "source": "https://x.com/CCAD/status/1967527967539495381",
+  "notes": "Region's first BCI study; explores motor/speech impairment device control. Announced mid-Sept 2025 via CCAD + Neuralink. Sets up UAE implants/Blindsight in 2026."
+ },
+ {
+  "date": "2025-09-19",
+  "name": "Grok 4 Fast released — 2M-token context, reasoning + non-reasoning variants",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://x.ai/news/grok-4-fast",
+  "notes": "grok-4-fast-reasoning + grok-4-fast-non-reasoning; 2M context; ~40% fewer thinking tokens vs Grok 4. Announced Sept 2025 (~Sep 19)."
+ },
+ {
+  "date": "2025-09-21",
+  "name": "Trump-Musk public reconciliation at Charlie Kirk memorial",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://fortune.com/2025/09/21/trump-elon-musk-charlie-kirk-memorial-service-feud-alliance-doge-tesla/",
+  "notes": "State Farm Stadium, Glendale AZ. Musk sits next to Trump, handshake; posts photo captioned 'For Charlie.' Major reconciliation marker. (Kirk assassinated Sept 10, 2025 - also a high-engagement posting event for Musk.)"
+ },
+ {
+  "date": "2025-09-21",
+  "name": "Charlie Kirk memorial service (Trump reunion)",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Memorial_service_of_Charlie_Kirk",
+  "notes": "State Farm Stadium, Glendale AZ. Musk attended (did NOT speak) and publicly reconciled with Trump after the June-Aug feud. Posted 'For Charlie' photo on X. Major posting-burst driver."
+ },
+ {
+  "date": "2025-09-21",
+  "name": "Trump–Musk public reconciliation at Charlie Kirk memorial",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Trump%E2%80%93Musk_feud",
+  "notes": "POLITICAL GAP inside window. The Jun-Sep 2025 feud thawed; Trump and Musk reunited/shook hands at Kirk's memorial (State Farm Stadium, Glendale AZ) ~Sep 21 2025. Feud + reconciliation = one of the highest posting-volume arcs of the window."
+ },
+ {
+  "date": "2025-10",
+  "name": "Grok Imagine text-to-video with synchronized audio (Aurora engine) launches",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://mlq.ai/news/grok-to-launch-text-to-video-generation-with-sound-via-imagine-feature-in-october/",
+  "notes": "Video-generation feature; early access required SuperGrok. Foretold on Grok 4 livestream roadmap (video model 'in October')."
+ },
+ {
+  "date": "2025-10-02",
+  "name": "Tesla Q3 2025 production & delivery report",
+  "entity": "Tesla",
+  "category": "data-release",
+  "recurring": true,
+  "source": "https://electrek.co/2025/10/02/tesla-tsla-announces-497000-ev-deliveries-in-q3/",
+  "notes": "Record 497,099 deliveries / 447,450 produced. Released after market close. Quarterly cadence: ~1st-2nd day of the month after quarter-end (Jan/Apr/Jul/Oct)."
+ },
+ {
+  "date": "2025-10-07",
+  "name": "Tesla unveils 'Standard' (cheaper) Model 3 and Model Y",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.cnn.com/2025/10/07/cars/tesla-model-y-3-cheaper-evs",
+  "notes": "Lower-cost Standard variants of Model 3/Y; deliveries Dec 2025-Jan 2026. Investor reaction mixed (no sub-$30k model)."
+ },
+ {
+  "date": "2025-10-07",
+  "name": "Tesla FSD v14.1 begins customer rollout",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.teslaoracle.com/2025/10/07/tesla-tsla-beings-the-rollout-of-fsd-v14-software-update-2025-32-8-5-release-notes/",
+  "notes": "First FSD v14 build (firmware 2025.32.8.5) to customer cars. Point releases followed: v14.1.4 ~Oct 25, v14.1.7 Nov 12."
+ },
+ {
+  "date": "2025-10-07",
+  "name": "Grok Imagine v0.9 video-generation model launch",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://x.com/grok/status/1975706454456701100",
+  "notes": "WHOLE CATEGORY GAP: xAI product cadence was absent. Native audio-video sync, major upgrade from v0.1. Musk amplified on X. Heavy posting trigger."
+ },
+ {
+  "date": "2025-10-13",
+  "name": "Starship Flight 11 (final Block 2 flight)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/List_of_Starship_launches",
+  "notes": "MARQUEE. Liftoff 23:23 UTC from Starbase. Success: booster splashdown Gulf, Ship 38 splashdown Indian Ocean after Starlink deploy demo + engine relight. Last Block 2 vehicle flight."
+ },
+ {
+  "date": "2025-10-13",
+  "name": "UAE AI Minister says Boring Company Dubai Loop to open in 2026",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.bloomberg.com/news/articles/2025-10-13/elon-musk-s-boring-company-will-open-dubai-loop-in-2026-uae-ai-minister-says",
+  "notes": "Boring Company Dubai Loop timeline signal; initial RTA agreement signed at World Governments Summit 2025, definitive deal at WGS 2026."
+ },
+ {
+  "date": "2025-10-15",
+  "name": "Delaware Supreme Court hears oral argument on Musk's $56B Tesla pay package appeal",
+  "entity": "Tesla",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.insurancejournal.com/news/east/2025/10/15/843752.htm",
+  "notes": "Appeal of Jan 2024 Chancery rescission. High-profile hearing; likely Musk-posting trigger."
+ },
+ {
+  "date": "2025-10-19",
+  "name": "Judge keeps X v. Apple/OpenAI antitrust case in Fort Worth, Texas (venue ruling)",
+  "entity": "X-platform",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2025/10/19/x-musk-apple-openai-lawsuit-texas-fort-worth.html",
+  "notes": "Apple/OpenAI later failed to get case dismissed; suit proceeds."
+ },
+ {
+  "date": "2025-10-20",
+  "name": "X launches Handle Marketplace (inactive/rare usernames)",
+  "entity": "X-platform",
+  "category": "product",
+  "recurring": false,
+  "source": "https://techcrunch.com/2025/10/20/x-to-launch-marketplace-for-buying-inactive-handles/",
+  "notes": "Premium+/Premium Business only. Priority handles free, rare handles $2,500 to seven figures. Waitlist live."
+ },
+ {
+  "date": "2025-10-22",
+  "name": "Tesla Q3 2025 earnings call",
+  "entity": "Tesla",
+  "category": "earnings",
+  "recurring": true,
+  "source": "https://www.fool.com/earnings/call-transcripts/2025/10/22/tesla-tsla-q3-2025-earnings-call-transcript/",
+  "notes": "Financial results after market close + Q&A webcast 4:30pm CT / 5:30pm ET. Quarterly cadence: ~3rd-4th Wed of month after quarter-end."
+ },
+ {
+  "date": "2025-10-27",
+  "name": "Grokipedia v0.1 launches — AI Wikipedia competitor (~800k articles)",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2025/10/28/elon-musks-ai-wikipedia-competitor-grokipedia-goes-live.html",
+  "notes": "Rocky launch, site briefly crashed. Musk framed it as de-'woke'-ified alternative to Wikipedia."
+ },
+ {
+  "date": "2025-10-27",
+  "name": "Neuralink first UK implant (GB-PRIME) at UCLH, London",
+  "entity": "Personal",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.uclh.nhs.uk/news/first-uk-patient-uses-thought-control-computer-hours-after-neuralink-implant",
+  "notes": "Patient 'Paul' with motor neurone disease controlled cursor hours after surgery; discharged next day. GB-PRIME sites: UCLH + Newcastle."
+ },
+ {
+  "date": "2025-10-27",
+  "name": "Grokipedia launch (xAI)",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.washingtonpost.com/technology/2025/10/27/grokipedia-wikipedia-musk-/",
+  "notes": "AI encyclopedia launched with ~800K+ articles, crashed on launch day. Announced Sep 2025; beta date set Oct 6. Heavy Musk posting around the rollout."
+ },
+ {
+  "date": "2025-10-27",
+  "name": "Grokipedia v0.1 launch (AI encyclopedia)",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Grokipedia",
+  "notes": "Launched labeled v0.1 with ~800k+ articles as a Wikipedia rival. Very high Musk-posting event. v0.2 follow-up expected later."
+ },
+ {
+  "date": "2025-10-28",
+  "name": "Neuralink milestone: 13 humans implanted (10 US, 2 Canada, 1 UK)",
+  "entity": "Personal",
+  "category": "data-release",
+  "recurring": false,
+  "source": "https://www.neurapod.com/blog/neuralink-implants-humans-2025",
+  "notes": "Running implant-count milestone publicized late Oct 2025; >15,000 cumulative hours."
+ },
+ {
+  "date": "2025-10-31",
+  "name": "100th Starlink flight of 2025",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://spaceflightnow.com/2025/10/31/live-coverage-spacex-to-launch-100th-starlink-flight-of-2025/",
+  "notes": "Falcon 9. Milestone Starlink mission marking 100th Starlink-dedicated flight of the year."
+ },
+ {
+  "date": "2025-10-31",
+  "name": "Joe Rogan Experience #2404",
+  "entity": "Personal",
+  "category": "podcast",
+  "recurring": false,
+  "source": "https://open.spotify.com/episode/6vBr2kDnmrUu17xdiRVbXR",
+  "notes": "3h23m. Rogan's 5th Musk interview; first in 8 months. 7.3M+ YouTube views in under a week. Topics: govt spending, AI/jobs, Starship, Twitter 'mind virus', Cybertruck. Big posting driver."
+ },
+ {
+  "date": "2025-10-31",
+  "name": "Elon Musk on Joe Rogan Experience #2404 (3h23m)",
+  "entity": "Personal",
+  "category": "interview",
+  "recurring": false,
+  "source": "https://podcasts.apple.com/us/podcast/2404-elon-musk/id360084272?i=1000734471135",
+  "notes": "MARQUEE interview. 7.3M+ YouTube views in a week. Covered SpaceX/Mars/full reusability. Long-form interviews reliably spike his posting around airdate."
+ },
+ {
+  "date": "2025-11",
+  "name": "Bandwagon-4 mid-inclination rideshare",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": true,
+  "source": "https://www.space.com/space-exploration/launches-spacecraft/spacex-launches-european-reentry-capsule-on-bandwagon-3-rideshare-mission",
+  "notes": "Falcon 9. Bandwagon mid-inclination rideshare series; Bandwagon-3 was Apr 2025, Bandwagon-4 ~Nov 2025. Recurring ~2x/yr."
+ },
+ {
+  "date": "2025-11",
+  "name": "DOGE reported to no longer exist as a centralized entity (absorbed into OPM/OMB)",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.nextgov.com/digital-government/2025/11/doge-no-longer-has-centralized-leadership-under-white-house-tech-team-personnel-head-says/409765/",
+  "notes": "OPM director Scott Kupor tells Reuters DOGE has ceased centralized operation ~8 months before its scheduled July 4, 2026 sunset. Triggered Musk DOGE-legacy posting."
+ },
+ {
+  "date": "2025-11-06",
+  "name": "Tesla 2025 Annual Shareholder Meeting (Musk $1T pay package vote)",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": true,
+  "source": "https://www.cnbc.com/2025/11/06/tesla-shareholders-vote-on-elon-musks-1-trillion-pay-package.html",
+  "notes": "Annual meeting; shareholders voted on Musk's ~$1T pay package. High Musk-posting event. 2026 meeting required within 13 months under Texas law (likely Nov 2026, not yet announced)."
+ },
+ {
+  "date": "2025-11-06",
+  "name": "Tesla 2025 Annual Shareholder Meeting + $1T pay vote",
+  "entity": "Tesla",
+  "category": "other",
+  "recurring": true,
+  "source": "https://www.cnbc.com/2025/11/06/tesla-shareholders-musk-pay.html",
+  "notes": "Austin TX. Shareholders approved $1T 10-yr Musk pay package (>75% in favor) + xAI investment vote. Annual cadence (next ~June 2026). Major posting-burst event."
+ },
+ {
+  "date": "2025-11-06",
+  "name": "Tesla shareholders approve new ~$1 trillion / $88B 2025 CEO Performance Award (75% in favor)",
+  "entity": "Tesla",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2025/11/06/tesla-shareholders-musk-pay.html",
+  "notes": "At Nov 2025 annual meeting. Glass Lewis + ISS opposed. 12-tranche milestone package."
+ },
+ {
+  "date": "2025-11-14",
+  "name": "Baron Investment Conference fireside chat (Ron Baron)",
+  "entity": "Personal",
+  "category": "interview",
+  "recurring": true,
+  "source": "https://www.baroncapitalgroup.com/conference-2025/ron-baron-elon-musk-discuss-the-future",
+  "notes": "32nd Annual Baron Conference, virtual fireside, livestream 1:05 PM ET. Tesla, Optimus, AI5 chip, Neuralink, xAI, Grok 5, FSD. Recurring annual Baron appearance."
+ },
+ {
+  "date": "2025-11-17",
+  "name": "Grok 4.1 released — hallucination rate cut 12.09% → 4.22% (~65% improvement)",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://docs.x.ai/developers/release-notes",
+  "notes": "Grok 4.1 / Grok 4.1 Fast; Fast variant later in Enterprise API. Major reliability update."
+ },
+ {
+  "date": "2025-11-17",
+  "name": "Grok 4.1 released to all users (Thinking + Non-Thinking)",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://llm-stats.com/models/grok-4.1-2025-11-17",
+  "notes": "Public release Nov 17 after a silent rollout starting Nov 1, 2025. Major chat-quality/EQ/factuality upgrade. Musk amplified heavily."
+ },
+ {
+  "date": "2025-11-19",
+  "name": "U.S.-Saudi Investment Forum remarks (with Jensen Huang)",
+  "entity": "Personal",
+  "category": "interview",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2025/11/19/watch-elon-musk-jensen-huang-talk-ai-at-us-saudi-investment-forum.html",
+  "notes": "Kennedy Center, Washington DC. Musk + Huang AI discussion during MBS visit. Musk: AI/robots make work 'optional', money 'irrelevant'."
+ },
+ {
+  "date": "2025-11-21",
+  "name": "Tesla FSD v14.2 limited rollout begins",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.teslaoracle.com/2025/11/21/tesla-begins-limited-rollout-of-the-fsd-v14-2-2025-38-9-5-update-adds-self-driving-stats-feature-official-release-notes/",
+  "notes": "Firmware 2025.38.9.5; added Self-Driving Stats feature. Went wide release ~Nov 27, 2025."
+ },
+ {
+  "date": "2025-11-21",
+  "name": "X rolls out \"About This Account\" location/transparency feature",
+  "entity": "X-platform",
+  "category": "product",
+  "recurring": false,
+  "source": "https://techcrunch.com/2025/11/21/x-begins-rolling-out-the-about-this-account-feature-to-users-profiles/",
+  "notes": "Head of product Nikita Bier announced Nov 22; shows account country, creation date, username-change count, app store country. Sparked major political/sports-sphere controversy."
+ },
+ {
+  "date": "2025-11-22",
+  "name": "150th Falcon 9 mission of 2025",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://www.space.com/space-exploration/launches-spacecraft/spacex-starlink-6-79-b1090-ccsfs-asog",
+  "notes": "Falcon 9 Starlink. Annual-cadence milestone; SpaceX set new record of 165 Falcon 9 launches in 2025 (123 Starlink-dedicated, >3,000 sats)."
+ },
+ {
+  "date": "2025-11-28",
+  "name": "Transporter-15 dedicated SSO rideshare (140 spacecraft)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": true,
+  "source": "https://spaceflightnow.com/2025/11/28/live-coverage-spacex-to-launch-140-spacecraft-on-transporter-15-rideshare/",
+  "notes": "Falcon 9 from Vandenberg. Transporter rideshare series runs ~3-4x/yr. Transporter-16 ~Mar 2026, Transporter-17 NET Jul 31 2026."
+ },
+ {
+  "date": "2025-12",
+  "name": "RECURRING: Immigration-and-elections / 'great replacement'-style posting theme",
+  "entity": "Political",
+  "category": "political",
+  "recurring": true,
+  "source": "https://www.yahoo.com/news/articles/elon-musk-criticizes-immigration-policies-194618921.html",
+  "notes": "Highest-volume recurring driver late-2025 onward: Somali/Minnesota fraud, Ilhan Omar, H-1B, 'your vote will mean nothing.' Reliably spikes on any immigration/voter-fraud news. Representative cluster Dec 2025-Jan 2026; recurs on new triggers."
+ },
+ {
+  "date": "2025-12 to 2026-01",
+  "name": "Neuralink completes ~20-implant goal; >20 patients across US/UK/Canada/UAE",
+  "entity": "Personal",
+  "category": "data-release",
+  "recurring": false,
+  "source": "https://www.neurapod.com/blog/neuralink-successfully-completes-goal-of-20-implants-by-2026",
+  "notes": "Goal of ~20 participants by end of 2025 hit; early 2026 count exceeds 20."
+ },
+ {
+  "date": "2025-12-02",
+  "name": "Musk defends H-1B visas, says tariffs distort markets",
+  "entity": "Political",
+  "category": "interview",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2025/12/02/tesla-ceo-elon-musk-bats-for-h-1b-visa-says-tariffs-distort-markets-.html",
+  "notes": "Recurring skilled-immigration / free-trade theme that reliably draws MAGA-vs-Musk engagement. Tariff/Navarro-style free-trade posting is a repeat driver."
+ },
+ {
+  "date": "2025-12-05",
+  "name": "European Commission fines X €120M under Digital Services Act (first DSA non-compliance decision)",
+  "entity": "X-platform",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://digital-strategy.ec.europa.eu/en/news/commission-fines-x-eu120-million-under-digital-services-act",
+  "notes": "Blue-checkmark deceptive design, ad-repository + researcher-data transparency failures. X appealed to EU General Court."
+ },
+ {
+  "date": "2025-12-10",
+  "name": "Musk 'This sounds like treason' post re: Ilhan Omar / Somali voters",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.foxnews.com/politics/elon-musk-accuses-ilhan-omar-treason-over-somalia-comments-viral-social-media-post",
+  "notes": "Reposts 2024 Omar clip; launches the immigration-and-elections 'your vote will mean nothing' theme. Omar fires back. Opening of the Minnesota campaign."
+ },
+ {
+  "date": "2025-12-10",
+  "name": "Katie Miller Podcast Ep.18",
+  "entity": "Personal",
+  "category": "podcast",
+  "recurring": false,
+  "source": "https://singjupost.com/elon-musk-on-doge-katie-miller-podcast-ep-18-transcript/",
+  "notes": "'DOGE, AI, Mars, and the Future of Humanity'. Reflections on what DOGE accomplished and why he wouldn't repeat it."
+ },
+ {
+  "date": "2025-12-11",
+  "name": "Neuralink implants patient Jon L. Noble (London, NHNN) - part of 7-implant UK batch",
+  "entity": "Personal",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.neurapod.com/blog/neuralink-successfully-completes-goal-of-20-implants-by-2026",
+  "notes": "Part of batch of seven GB implants; robot then slated to relocate to UAE for ~seven more. Tied to ~20-by-end-2025 goal."
+ },
+ {
+  "date": "2025-12-15",
+  "name": "Tesla begins driverless robotaxi testing (no safety driver) in Austin",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://techcrunch.com/2025/12/15/tesla-starts-testing-robotaxis-in-austin-with-no-safety-driver/",
+  "notes": "First Austin robotaxi tests with no in-car safety driver (employee/testing phase)."
+ },
+ {
+  "date": "2025-12-16",
+  "name": "Axios scoop: Musk diving into 2026 midterms for GOP; +$15M to super PACs",
+  "entity": "Political",
+  "category": "data-release",
+  "recurring": false,
+  "source": "https://www.axios.com/2025/12/16/elon-musk-donations-midterms-republicans-trump",
+  "notes": "$5M each to two GOP leadership super PACs + $5M to MAGA Inc. (mid-Dec). Confirms full return to GOP donor camp after a Naval Observatory dinner with Vance/Wiles/Budowich."
+ },
+ {
+  "date": "2025-12-19",
+  "name": "Delaware Supreme Court reverses rescission, restores Musk's $56B (now ~$139B) Tesla 2018 pay package",
+  "entity": "Tesla",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2025/12/19/musk-tesla-pay-delaware-supreme-court.html",
+  "notes": "Unanimous reversal; called Chancery cancellation too extreme a remedy. Major win, strong posting trigger."
+ },
+ {
+  "date": "2025-12-19",
+  "name": "Delaware Supreme Court reinstates Musk's 2018 ~$56B Tesla pay package",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.gibsondunn.com/delaware-reinstates-musk-pay-package-slashes-345-million-fee-award/",
+  "notes": "MARQUEE legal win. Reversed Chancery rescission; plaintiff got $1 nominal + slashed fee. Net-worth headlines (~$679B). Big Musk-posting trigger. Some sources cite Dec 20."
+ },
+ {
+  "date": "2025-12-22",
+  "name": "Moonshots w/ Peter Diamandis #220 (recording)",
+  "entity": "Personal",
+  "category": "podcast",
+  "recurring": true,
+  "source": "https://www.diamandis.com/podcast",
+  "notes": "Recorded Dec 22, 2025 at Giga Texas; released Jan 6, 2026. ~3h on AGI timeline, US-vs-China AI/solar, humanoid robots, abundance. Agreed to an annual Diamandis deep-dive (recurring)."
+ },
+ {
+  "date": "2025-12-26",
+  "name": "Minnesota Somali daycare-fraud campaign goes viral; Musk amplifies",
+  "entity": "Breaking news",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.cnn.com/2026/01/05/us/minnesota-child-care-fraud-investigation",
+  "notes": "Post-Christmas viral video (Nick Shirley / 23yo creator). Dec 27 Musk posts 'Prosecute Tim Walz' + 'your vote will mean nothing.' Boosted by Vance. Drove DHS/FBI surge + statewide childcare funding freeze. One of Musk's highest-volume posting runs of the period."
+ },
+ {
+  "date": "2025-12-29/2026-01-08",
+  "name": "Grok mass image-generation controversy on X (lawsuit basis)",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.robertkinglawfirm.com/mass-torts/grok-lawsuit/",
+  "notes": "Grok generated ~3M sexualized images Dec 29-Jan 8; ~23,000 allegedly depicting children. Baltimore City Circuit Court suit. xAI paywalled rather than removed feature. Major advertiser-safety/legal event."
+ },
+ {
+  "date": "2025-12-31",
+  "name": "Musk 'Then it is war' reply to Somali TikToker death-threat clip",
+  "entity": "Breaking news",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.foxnews.com/politics/elon-musk-declares-war-perceived-death-threat-somali-tiktoker",
+  "notes": "Viral clip surfaces Dec 31; Musk declares war. Extends the Minnesota fraud campaign into early January with sustained posting."
+ },
+ {
+  "date": "2026",
+  "name": "Neuralink high-volume device production + automated through-the-dura surgery (targeted)",
+  "entity": "Personal",
+  "category": "product",
+  "recurring": false,
+  "source": "https://x.com/elonmusk/status/2006513491105165411",
+  "notes": "FUTURE/targeted 2026 per Musk. Threads through dura without removing it; almost entirely automated procedure. PMA application filed Q4 2025 for N1 communication restoration; Q1 2026 IDE for Parkinson's tremor closed-loop stim."
+ },
+ {
+  "date": "2026",
+  "name": "Neuralink high-volume production start + automated surgery (2026 plan)",
+  "entity": "Neuralink",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.foxnews.com/health/elon-musk-shares-plan-mass-produce-brain-implants-paralysis-neurological-disease",
+  "notes": "WHOLE CATEGORY GAP: Neuralink absent. Musk announced 2026 high-volume production + near-fully-automated surgery (threads through dura). Target >1,000 patients by end-2026. No single firm date; recurring Neuralink 'Show & Tell'-style updates drive posting."
+ },
+ {
+  "date": "2026",
+  "name": "Neuralink Blindsight first patient trial (vision restoration)",
+  "entity": "Neuralink",
+  "category": "product",
+  "recurring": false,
+  "source": "https://neuralink.com/updates/",
+  "notes": "Blindsight implant first-in-human trial scheduled 2026 (date TBD). Each Neuralink first/milestone is a high Musk-posting trigger."
+ },
+ {
+  "date": "2026-01",
+  "name": "Colossus expands to 2GW — third Memphis building, 555,000 GPUs (~$18B)",
+  "entity": "xAI",
+  "category": "data-release",
+  "recurring": false,
+  "source": "https://introl.com/blog/xai-colossus-2-gigawatt-expansion-555k-gpus-january-2026",
+  "notes": "Musk announced third building Jan 2026; 2GW total, 555k NVIDIA GPUs. Plan to reach 1M GPUs total."
+ },
+ {
+  "date": "2026-01",
+  "name": "RECURRING: Musk GOP super-PAC donation cadence (2026 cycle)",
+  "entity": "Political",
+  "category": "political",
+  "recurring": true,
+  "source": "https://www.nbcnews.com/politics/2026-election/elon-musk-gives-millions-republican-super-pacs-ahead-midterms-rcna222114",
+  "notes": "Roughly quarterly large checks: ~$15M late-June 2025, ~$15M mid-Dec 2025, $10M mid-Jan 2026 (Morris). Each disclosure/scoop drives a posting cycle. Expect continued tranches through Nov 2026 midterms."
+ },
+ {
+  "date": "2026-01",
+  "name": "Custody filing for son Romulus (announced on X)",
+  "entity": "Personal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://parade.com/celebrities/elon-musk-children",
+  "notes": "Musk announced via X (Jan 2026) he would file for full custody of Romulus (son with Ashley St. Clair, paternity confirmed Apr 2025). Personal-life posting driver."
+ },
+ {
+  "date": "2026-01-01/2026-12-31",
+  "name": "Falcon 9 Starlink launches (full-year 2026, routine high-cadence series)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": true,
+  "source": "https://rocketlaunch.org/launch-schedule/spacex/falcon-9",
+  "notes": "ROUTINE. SpaceX targeting ~140-145 Falcon 9 launches in 2026 (~2.7-2.8/week), majority Starlink (24 or 29 sats/flight), from Cape Canaveral SLC-40/LC-39A + Vandenberg SLC-4E. 74 Falcon-family launches by Jun 23 2026; 50th on Apr 26. Vandenberg is the 2026 workhorse pad as Cape pads shift toward Starship. Cadence ~2-3x/week; individual dates too numerous to enumerate, available on nextspaceflight.com / spaceflightnow.com launch schedule."
+ },
+ {
+  "date": "2026-01-02",
+  "name": "Tesla Q4 2025 production & delivery report",
+  "entity": "Tesla",
+  "category": "data-release",
+  "recurring": true,
+  "source": "https://www.teslarati.com/tesla-q4-fy-2025-vehicle-delivery-production-results/",
+  "notes": "418,227 deliveries / 434,358 produced. Full-year 2025 figures included. After market close."
+ },
+ {
+  "date": "2026-01-02",
+  "name": "Coverage: Neuralink gears up for mass brain-implant manufacturing in 2026",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.technology.org/2026/01/02/musks-neuralink-gears-up-for-mass-brain-implant-manufacturing-in-2026/",
+  "notes": "Frames Musk's high-volume-production + automated-surgery roadmap for 2026."
+ },
+ {
+  "date": "2026-01-02",
+  "name": "Neuralink 2026 mass-production pledge (X post)",
+  "entity": "Neuralink",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.fiercebiotech.com/medtech/elon-musks-neuralink-kickstart-high-volume-production-brain-computer-interface-devices",
+  "notes": "New Year pledge: high-volume BCI production + almost fully automated surgery in 2026; threads through dura. Drove Neuralink-themed posting burst."
+ },
+ {
+  "date": "2026-01-05",
+  "name": "Tim Walz drops 2026 reelection bid amid fraud controversy Musk amplified",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.cnn.com/2026/01/05/us/minnesota-child-care-fraud-investigation",
+  "notes": "Direct political outcome of the Musk/Vance-amplified Minnesota campaign. Musk victory-lap posting."
+ },
+ {
+  "date": "2026-01-06",
+  "name": "xAI raises $20B Series E at ~$230B valuation (NVIDIA, Cisco, Fidelity, QIA, MGX)",
+  "entity": "xAI",
+  "category": "earnings",
+  "recurring": false,
+  "source": "https://x.ai/news/series-e",
+  "notes": "Upsized from $15B target. Strategic investors NVIDIA + Cisco. Funds Colossus compute buildout."
+ },
+ {
+  "date": "2026-01-06",
+  "name": "Moonshots w/ Peter Diamandis #220 (release)",
+  "entity": "Personal",
+  "category": "podcast",
+  "recurring": false,
+  "source": "https://www.teslarati.com/elon-musks-biggest-revelations-on-ai-robots-and-the-future-of-work-from-the-moonshots-podcast/",
+  "notes": "First Musk interview released in 2026; AGI-in-2026 prediction. Drove posting around AI/China/energy themes."
+ },
+ {
+  "date": "2026-01-06",
+  "name": "xAI Series E funding ($20B raised, NVIDIA-led)",
+  "entity": "xAI",
+  "category": "other",
+  "recurring": false,
+  "source": "https://x.ai/news/series-e",
+  "notes": "Raised $20B vs $15B target. Investors incl NVIDIA, Cisco, Fidelity, QIA, MGX. Note: this is the xAI raise; distinct from the SpaceX-xAI IPO rumor already in calendar. Some trackers cite Jan 28 for the announcement."
+ },
+ {
+  "date": "2026-01-17",
+  "name": "xAI Colossus 2 1GW AI training cluster goes live",
+  "entity": "xAI",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.teslarati.com/elon-musk-xai-brings-1gw-colossus-2-ai-training-cluster-online/",
+  "notes": "World-first ~1GW supercluster online (announced Jan 17), targeting ~2GW; trains Grok 5. Musk posted milestone. Approx date from announcement."
+ },
+ {
+  "date": "2026-01-19",
+  "name": "Musk donates $10M to super PAC backing Nate Morris (KY Senate)",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.axios.com/2026/01/19/elon-musk-10-million-campaign-donation-kentucky",
+  "notes": "Largest single Musk donation to a non-Trump federal candidate. Morris is the anti-McConnell, pro-Trump, Vance-allied outsider for the open KY seat. Reported ~Jan 19."
+ },
+ {
+  "date": "2026-01-22",
+  "name": "Tesla launches public unsupervised robotaxi rides (no safety monitor) in Austin",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://electrek.co/2026/01/22/tesla-starts-robotaxi-rides-without-safety-monitor-in-austin-what-you-need-to-know/",
+  "notes": "First public paid rides with no in-car safety monitor, geographically restricted. Major Musk-posting milestone."
+ },
+ {
+  "date": "2026-01-22",
+  "name": "Davos World Economic Forum 2026 (first-ever appearance)",
+  "entity": "Personal",
+  "category": "interview",
+  "recurring": false,
+  "source": "https://www.euronews.com/2026/01/22/elon-musk-predicts-robot-majority-future-in-first-davos-appearance",
+  "notes": "On-stage with Larry Fink (BlackRock). Musk's first-ever in-person Davos appearance despite being a longtime WEF critic. Predicted robots will outnumber humans. Significant posting-burst driver."
+ },
+ {
+  "date": "2026-01-26",
+  "name": "European Commission opens formal DSA investigation into Grok's integration on X",
+  "entity": "X-platform",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://ec.europa.eu/commission/presscorner/detail/en/ip_26_203",
+  "notes": "Systemic-risk probe incl. manipulated explicit images / potential CSAM. X ordered to retain Grok records through end-2026."
+ },
+ {
+  "date": "2026-01-28",
+  "name": "Tesla Q4 2025 / full-year earnings call",
+  "entity": "Tesla",
+  "category": "earnings",
+  "recurring": true,
+  "source": "https://www.fool.com/earnings/call-transcripts/2026/01/28/tesla-tsla-q4-2025-earnings-call-transcript/",
+  "notes": "Results after close + Q&A 4:30pm CT / 5:30pm ET. Announced 7-city robotaxi expansion plan for H1 2026 (Dallas, Houston, Phoenix, Miami, Orlando, Tampa, Las Vegas)."
+ },
+ {
+  "date": "2026-01-28",
+  "name": "Grok Imagine API launches — text-to-video, image-to-video, video editing",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://x.ai/news/grok-imagine-api",
+  "notes": "Most powerful video-audio generative model; API GA. grok-imagine-video-1.5-preview followed."
+ },
+ {
+  "date": "2026-01-28",
+  "name": "Musk: Neuralink \"ready\" for first human Blindsight implant, awaiting regulatory approval",
+  "entity": "Personal",
+  "category": "interview",
+  "recurring": false,
+  "source": "https://www.mobihealthnews.com/news/elon-musk-announces-neuralinks-first-human-implant-blindsight-coming-year",
+  "notes": "Vision-restoration (Blindsight) first human implant flagged for 2026, likely UAE. FDA had not publicly confirmed approval."
+ },
+ {
+  "date": "2026-01-28",
+  "name": "Tesla Q4 2025 earnings call",
+  "entity": "Tesla",
+  "category": "earnings",
+  "recurring": true,
+  "source": "https://www.sec.gov/Archives/edgar/data/0001318605/000162828026000016/exhibit9914.htm",
+  "notes": "5:30 PM ET. Confirmed Optimus Gen 3 unveil for Q1 2026. Musk admitted no Optimus doing 'useful work' yet (Electrek, Jan 28)."
+ },
+ {
+  "date": "2026-01-30",
+  "name": "DOJ releases 3M+ Epstein files (Epstein Files Transparency Act); Musk named",
+  "entity": "Breaking news",
+  "category": "data-release",
+  "recurring": false,
+  "source": "https://www.cnn.com/politics/live-news/epstein-files-release-doj-01-30-26",
+  "notes": "Emails show Musk tried to coordinate 2012-13 island trips. Musk posts same night defending himself ('very little correspondence... declined repeated invitations'). Epstein is a recurring Musk-engagement theme (also weaponized in the June feud)."
+ },
+ {
+  "date": "2026-02",
+  "name": "First Tesla Cybercab production vehicle built at Giga Texas",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.sec.gov/Archives/edgar/data/0001318605/000162828026026551/exhibit991.htm",
+  "notes": "PRODUCT GAP. First Cybercab production unit announced Feb 2026; volume production began ~April 2026 (Q1 call confirmed underway). Distinct from robotaxi-service items."
+ },
+ {
+  "date": "2026-02-02",
+  "name": "SpaceX acquires xAI — $1.25T combined entity (xAI valued ~$250B)",
+  "entity": "xAI",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://techcrunch.com/2026/02/02/elon-musk-spacex-acquires-xai-data-centers-space-merger/",
+  "notes": "Largest corporate merger ever; rationale = orbital data centers. Combined entity targeting IPO 2026. Announced via Musk blog post Mon Feb 2."
+ },
+ {
+  "date": "2026-02-04",
+  "name": "Judge Chuang orders Musk deposition in USAID/DOGE shutdown case",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.axios.com/2026/02/05/state-department-elon-musk-doge",
+  "notes": "District court (D. Md.) denies protective order; rejects apex doctrine; orders Musk + 2 officials to sit for depositions on the USAID takedown. Reported Feb 5."
+ },
+ {
+  "date": "2026-02-11/2026-02-12",
+  "name": "Boring Company signs definitive Dubai Loop deal with Dubai RTA (World Governments Summit 2026)",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.boringcompany.com/dubai",
+  "notes": "$154M first phase (~1yr after design); tunneling targeted H2 2026. Full system 14 mi / 19 stations / $545M. WGS 2026 is mid-Feb."
+ },
+ {
+  "date": "2026-02-13",
+  "name": "Crew-12 crewed Dragon launch to ISS",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://www.nasa.gov/news-release/nasas-spacex-crew-12-launches-to-international-space-station/",
+  "notes": "MARQUEE crewed. Falcon 9 from SLC-40, 5:15 a.m. EST. Crew: Jessica Meir, Jack Hathaway (NASA), Sophie Adenot (ESA), Andrey Fedyaev (Roscosmos)."
+ },
+ {
+  "date": "2026-02-17",
+  "name": "First Cybercab rolls off production line at Giga Texas",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Tesla_Cybercab",
+  "notes": "First production Cybercab built; announced via Tesla X post ~Feb 18. Volume production ramped from April 2026."
+ },
+ {
+  "date": "2026-02-17",
+  "name": "Grok 4.20 public beta released — weekly rapid-learning, 4-agent collaboration",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.adwaitx.com/grok-4-20-beta-release-date-xai-launch/",
+  "notes": "Beta Feb 17-18 2026; rapid-learning architecture updates weekly on real-world feedback; medical doc analysis. Musk pre-announced 'in 3-4 weeks' on 2025-12-08. Wider 3rd-party API availability ~Mar 31."
+ },
+ {
+  "date": "2026-02-18",
+  "name": "Boring Company Nashville: Metro Nashville Airport Authority 7-0 approval",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.teslarati.com/the-boring-company-music-city-loop-gains-unanimous-approval/",
+  "notes": "Key Music City Loop approval; precedes state/federal greenlight."
+ },
+ {
+  "date": "2026-02-20",
+  "name": "Federal judge (Beth Bloom) denies Tesla's bid to toss $243M Autopilot verdict",
+  "entity": "Tesla",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2026/02/20/tesla-loses-bid-toss-243-million-verdict-fatal-autopilot-crash-suit.html",
+  "notes": "Tesla vowed to appeal; punitive-damages constitutionality to be tested."
+ },
+ {
+  "date": "2026-02-21",
+  "name": "Tucker Carlson interview",
+  "entity": "Personal",
+  "category": "interview",
+  "recurring": false,
+  "source": "https://podcasts.federatedmedia.com/podcast/tucker-carlson-interviews-elon-musk/",
+  "notes": "1hr+. AI regulation, sustainable energy, urban futurism, humanity's survival. Musk advocated global AI oversight/treaties."
+ },
+ {
+  "date": "2026-02-25",
+  "name": "Boring Company Nashville Music City Loop: state+federal approval, construction starts same evening",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.tn.gov/governor/news/2026/2/25/gov--lee-announces-approval-of-lease-and-permit-for-the-boring-company-s-use-of-state-right-of-way.html",
+  "notes": "TDOT + FHWA joint approval; Prufrock machine in the ground hours later. ~10-mi downtown-to-airport tunnel. First segment late 2026, full route 2029."
+ },
+ {
+  "date": "2026-03",
+  "name": "AWE 2026 Shanghai – Optimus Gen 3 showcase",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://nriglobe.com/technology/tesla-optimus-gen-3-unveil/",
+  "notes": "Optimus Gen 3 displayed at AWE2026 (Appliance & Electronics World Expo), Shanghai. Tight range: March 2026."
+ },
+ {
+  "date": "2026-03-01/2026-03-05",
+  "name": "Vegas Loop carries ~82,000 passengers over 5 days at CONEXPO",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": true,
+  "source": "https://www.basenor.com/blogs/news/the-boring-company-is-still-drilling-whats-next-for-vegas-loop",
+  "notes": "CONEXPO-CON/AGG is a recurring Las Vegas mega-trade-show (every 3 years; 2026 edition). Loop operational-capacity demonstration."
+ },
+ {
+  "date": "2026-03-02",
+  "name": "Twitter shareholder fraud class-action trial begins (San Francisco, N.D. Cal.)",
+  "entity": "X-platform",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2026/03/20/elon-musk-determined-to-be-liable-for-misleading-twitter-investors.html",
+  "notes": "Nearly 3-week trial; Musk testified over a day. Over the 2022 stake-disclosure tweets."
+ },
+ {
+  "date": "2026-03-04",
+  "name": "4th Circuit blocks Musk DOGE/USAID deposition (2-1)",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.bloomberg.com/news/articles/2026-03-04/elon-musk-deposition-blocked-by-appeals-court-in-doge-fight",
+  "notes": "Appeals court grants Musk's petition, reverses Chuang. Opinion filed Mar 4 (amended Mar 5). Recurring DOGE-litigation thread through 2026."
+ },
+ {
+  "date": "2026-03-04/2026-03-31",
+  "name": "Musk securities-fraud trial (Twitter buyout) testifies in SF; jury finds he misled investors",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2026/03/04/elon-musk-to-testify-securities-fraud-trial-over-twitter-deal-in-sf.html",
+  "notes": "LEGAL GAP. Trial opened early March 2026, Musk testified; March jury found he misled Twitter investors re: stake-disclosure timing. High-profile, posting trigger."
+ },
+ {
+  "date": "2026-03-10",
+  "name": "Musk: \"X Money early public access will launch next month\" (April)",
+  "entity": "X-platform",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.coindesk.com/markets/2026/03/11/dogecoin-zooms-as-elon-musk-announces-x-money-launch-date-for-april",
+  "notes": "X Money entered limited external beta early March 2026; Musk set April public access. 6% APY, metal Visa debit card, P2P, FDIC via Cross River Bank."
+ },
+ {
+  "date": "2026-03-10",
+  "name": "Boring Company Prufrock-2 completes 2.28-mi tunnel near Westgate (longest Vegas Loop drive)",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.reviewjournal.com/news/news-columns/road-warrior/boring-co-plans-vegas-loop-airport-rides-in-early-2026-3589025/",
+  "notes": "Longest single Vegas Loop tunnel drive to date."
+ },
+ {
+  "date": "2026-03-11",
+  "name": "Macrohard / 'Digital Optimus' officially unveiled (joint Tesla-xAI project)",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2026/03/11/musk-unveils-joint-tesla-xai-project-macrohard.html",
+  "notes": "Grok as 'navigator' + Tesla AI agent reading screen/keyboard/mouse; runs on Tesla AI4 chip + NVIDIA servers."
+ },
+ {
+  "date": "2026-03-11",
+  "name": "Musk confirms joint xAI-Tesla 'Digital Optimus' project (cited in shareholder-diversion suit)",
+  "entity": "Tesla",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://electrek.co/2026/03/11/musk-confirms-xai-tesla-joint-digital-optimus-project-shareholder-lawsuit/",
+  "notes": "Tesla disclosed $2B investment in xAI Series E ($230B valuation). Legal-risk relevance to Chancery suit."
+ },
+ {
+  "date": "2026-03-12",
+  "name": "Musk at Abundance Summit / China Gen-3 Optimus showcase (Optimus V3 production timeline)",
+  "entity": "Tesla",
+  "category": "interview",
+  "recurring": false,
+  "source": "https://cnevpost.com/2026/03/12/tesla-showcases-upcoming-gen-3-humanoid-robot-china/",
+  "notes": "Musk's Mar 12 Abundance Summit interview set Optimus V3 'Summer 2026' production timeline; Gen-3 robot showcased in China same window. Posting trigger."
+ },
+ {
+  "date": "2026-03-20",
+  "name": "Jury finds Musk liable for misleading Twitter investors; ~$2.1B-$2.6B damages, but no intentional scheme",
+  "entity": "X-platform",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.npr.org/2026/03/20/g-s1-114660/elon-musk-misled-investors-twitter-purchase",
+  "notes": "Liable on two tweets incl. 'deal temporarily on hold'; absolved of intentional fraud. Strong posting trigger."
+ },
+ {
+  "date": "2026-03-24",
+  "name": "Boring Company secures Music City Center easement (Convention Center Authority vote)",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.teslarati.com/the-boring-company-nashville-music-city-loop-approved/",
+  "notes": "Final Nashville hurdle cleared for routing along Music City Center."
+ },
+ {
+  "date": "2026-03-25",
+  "name": "X hires crypto-savvy design lead as X Money push nears",
+  "entity": "X-platform",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.coindesk.com/business/2026/03/25/elon-musk-s-x-hires-crypto-savvy-design-lead-as-x-money-payments-push-inches-closer",
+  "notes": "Signals crypto/Smart-Cashtags ambitions on top of fiat X Money launch."
+ },
+ {
+  "date": "2026-03-26",
+  "name": "Judge Jane Boyle dismisses X's advertiser-boycott antitrust suit (WFA/GARM, Nestle, Shell) with prejudice",
+  "entity": "X-platform",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.bloomberg.com/news/articles/2026-03-26/musk-s-x-loses-suit-accusing-advertisers-of-boycotting-platform",
+  "notes": "Cannot be refiled. X failed to show antitrust harm."
+ },
+ {
+  "date": "2026-03-29",
+  "name": "Tesla ends Model S / Model X production",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.teslaoracle.com/2026/03/29/tesla-ends-model-s-and-model-x-production-only-a-limited-inventory-is-left/",
+  "notes": "S/X production wound down (final units Q2 2026). 'Signature Edition' farewell run (250 S / 100 X). Model X line repurposed for Optimus. Final Model S off line ~May 11, 2026."
+ },
+ {
+  "date": "2026-03-30",
+  "name": "Transporter-16 dedicated SSO rideshare (119 payloads)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": true,
+  "source": "https://www.satellitetoday.com/launch/2026/03/30/spacex-launches-119-payloads-on-the-transporter-16-rideshare-mission/",
+  "notes": "Falcon 9 from Vandenberg. 119 payloads. Part of recurring Transporter rideshare series."
+ },
+ {
+  "date": "2026-03-31",
+  "name": "Optimus 3 unveil delay announcement",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.basenor.com/blogs/news/tesla-delays-optimus-3-unveil-what-we-know-so-far",
+  "notes": "Musk announced the Optimus 3 unveil (expected March) delayed to April due to unfinished development; said it's walking autonomously around Tesla offices."
+ },
+ {
+  "date": "2026-04",
+  "name": "X Money public access launch (fiat, P2P, 6% APY savings)",
+  "entity": "X-platform",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://www.pymnts.com/news/payments-innovation/2026/elon-musk-says-x-money-debut-april/",
+  "notes": "April public rollout per Musk; specific day not officially confirmed in coverage. Visa debit card, Cross River Bank FDIC deposits, 40+ state money-transmitter licenses."
+ },
+ {
+  "date": "2026-04",
+  "name": "Optimus Gen 3 official unveiling (expected)",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://nriglobe.com/technology/tesla-optimus-gen-3-unveil/",
+  "notes": "Rescheduled from Q1; expected April 2026 per Musk's late-March statement. Date not officially fixed — tight range April 2026."
+ },
+ {
+  "date": "2026-04-02",
+  "name": "Tesla Q1 2026 production & delivery report",
+  "entity": "Tesla",
+  "category": "data-release",
+  "recurring": true,
+  "source": "https://ir.tesla.com/press-release/tesla-first-quarter-2026-production-deliveries-and-deployments",
+  "notes": "408,386 produced / 358,023 delivered; missed consensus; ~50k excess inventory build. After close."
+ },
+ {
+  "date": "2026-04-13",
+  "name": "Coverage of Musk continuing to avoid DOGE depositions (served 14x)",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.cnn.com/2026/04/13/politics/elon-musk-doge-lawsuits-avoid-deposition-questions",
+  "notes": "Ongoing DOGE-accountability litigation. Texas constables attempted service 14 times. Periodic flare-ups drive Musk posting."
+ },
+ {
+  "date": "2026-04-17",
+  "name": "XChat global release (encrypted messaging, voice/video calls, Grok-integrated)",
+  "entity": "X-platform",
+  "category": "product",
+  "recurring": false,
+  "source": "https://finance.biggo.com/news/202604162120_Musk_XChat_Launch_Details_and_Risks",
+  "notes": "E2E encryption, disappearing messages, screenshot blocking, 481-person groups, Rust-built. Requires iOS 26. Brought to iPhone/iPad Apr 24 2026."
+ },
+ {
+  "date": "2026-04-20",
+  "name": "Tesla settles Florida teen wrongful-death (disabled speed limiter) hours before trial",
+  "entity": "Tesla",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://evxl.co/2026/04/20/tesla-settles-florida-teen-wrongful-death-speed-limiter/",
+  "notes": "Avoided jury on speed-limiter issue. Part of ~$14.5B in pending Tesla litigation exposure."
+ },
+ {
+  "date": "2026-04-22",
+  "name": "Tesla Q1 2026 earnings call",
+  "entity": "Tesla",
+  "category": "earnings",
+  "recurring": true,
+  "source": "https://www.notateslaapp.com/news/4022/teslas-q1-2026-earnings-call-how-to-listen-and-what-to-expect",
+  "notes": "Results after close + Q&A 4:30pm CT / 5:30pm ET. Cybercab production-start confirmation; Optimus V3 reveal pushed later in year."
+ },
+ {
+  "date": "2026-04-22",
+  "name": "X announces Grok will curate user timelines",
+  "entity": "X-platform",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.businessstory.org/2026/04/22/x-is-going-to-allow-grok-to-curate-your-timeline/",
+  "notes": "Deeper Grok/xAI integration into core feed-ranking."
+ },
+ {
+  "date": "2026-04-22",
+  "name": "Tesla Q1 2026 earnings: $25B AI capex pivot, robotaxi guidance reset",
+  "entity": "Tesla",
+  "category": "earnings",
+  "recurring": false,
+  "source": "https://www.heygotrade.com/en/blog/tesla-q1-2026-earnings-recap/",
+  "notes": "Already in user's calendar as a date, but flag content: 2026 capex raised to >$25B, AI5 chip tape-out, robotaxi revenue 'not material in 2026' pushed to 2027. Context for posting spike."
+ },
+ {
+  "date": "2026-04-23",
+  "name": "Tesla confirms Cybercab volume production started",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://electrek.co/2026/04/23/tesla-cybercab-production-starts-no-nhtsa-2500-vehicle-cap/",
+  "notes": "Continuous/volume Cybercab manufacturing at Giga Texas; ramping to several hundred units/week."
+ },
+ {
+  "date": "2026-04-24",
+  "name": "X launches Grok-powered Custom Timelines (75+ topic categories, Premium)",
+  "entity": "X-platform",
+  "category": "product",
+  "recurring": false,
+  "source": "https://theaiinsider.tech/2026/04/24/x-launches-grok-powered-custom-timelines-as-ai-reshapes-social-media-feeds/",
+  "notes": "Grok reads/labels every post by topic to build custom feeds. X-platform AI feature."
+ },
+ {
+  "date": "2026-04-26",
+  "name": "50th Falcon 9 launch of 2026 (25 Starlink)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://spaceflightnow.com/2026/04/26/live-coverage-spacex-to-fly-25-starlink-satellites-on-its-50th-falcon-9-launch-of-the-year/",
+  "notes": "Milestone Starlink mission. Confirms 2026 pace toward ~140-145 Falcon 9 launches (per Shotwell)."
+ },
+ {
+  "date": "2026-04-27",
+  "name": "Musk v. Altman (OpenAI) jury selection begins; liability trial opens Apr 28 (Oakland, N.D. Cal.)",
+  "entity": "Personal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Musk_v._Altman",
+  "notes": "Musk testified Tue-Thu. Breach-of-founding-agreement / charitable-trust claims vs OpenAI + Altman."
+ },
+ {
+  "date": "2026-04-28/2026-05-18",
+  "name": "Musk v. Altman (OpenAI) jury trial in Oakland; verdict dismisses Musk's claims",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.npr.org/2026/05/18/nx-s1-5822366/musk-altman-openai-jury-verdict-claims-dismissed",
+  "notes": "MARQUEE legal. Trial late Apr 2026, Musk on stand Tue-Thu; May 18 jury found suit time-barred. Very high posting trigger across the trial window."
+ },
+ {
+  "date": "2026-04-29",
+  "name": "Tesla Semi high-volume production begins (Nevada)",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.automotiveworld.com/news/long-awaited-tesla-semi-enters-volume-production-in-nevada/",
+  "notes": "1.7M sq ft dedicated factory near Giga Nevada; 50,000 units/yr capacity target."
+ },
+ {
+  "date": "2026-04-29",
+  "name": "California Coastal Commission settles SpaceX retaliation suit, apologizes for anti-Musk political bias",
+  "entity": "SpaceX",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.kclu.org/2026-04-29/new-details-released-about-settlement-in-spacex-lawsuit-against-state-coastal-commission",
+  "notes": "Over Oct 2024 hearing comments on Vandenberg Falcon 9 launch cadence. Settlement filed April 2026."
+ },
+ {
+  "date": "2026-04-30",
+  "name": "Grok 4.3 released via xAI API — reasoning-first, 1M context, lowest hallucination",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://x.ai/news/grok-amazon-bedrock",
+  "notes": "Direct xAI API release ~Apr 30 2026; configurable reasoning effort. Reached Amazon Bedrock 2026-06-15."
+ },
+ {
+  "date": "2026-04-30",
+  "name": "X announces biggest ad-platform rebuild in company history (xAI/Grok-powered)",
+  "entity": "X-platform",
+  "category": "product",
+  "recurring": false,
+  "source": "https://techcrunch.com/2026/04/30/x-announces-a-rebuilt-ad-platform-powered-by-ai/",
+  "notes": "First full ad-system rebuild in 20 yrs. New Ads Manager phased rollout; Grok does semantic targeting, brand-safety, product-rec. Announced by @XBusiness + xAI head of global advertising Monique Pintarelli."
+ },
+ {
+  "date": "2026-05",
+  "name": "GB-PRIME at 7 enrolled participants (Neuralink UK study)",
+  "entity": "Personal",
+  "category": "data-release",
+  "recurring": false,
+  "source": "https://www.basenor.com/blogs/news/neuralink-reaches-26th-patient-in-ongoing-brain-computer-interface-trials",
+  "notes": "Trials span PRIME (quadriplegia) + VOICE (speech) studies across US/UK/Canada/UAE; 26th patient reached by mid-2026."
+ },
+ {
+  "date": "2026-05",
+  "name": "Clark County approves amended Vegas Loop tunnel-safety ordinance",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.reviewjournal.com/news/politics-and-government/clark-county/vegas-loop-expansion-ready-to-explode-with-countys-adoption-of-ordinance-3826639/",
+  "notes": "Regulates design/construction/operation for further expansion; sensors, fire suppression, ventilation, exit spacing. Enables 25-mi / 18-station expansion already approved 6-1."
+ },
+ {
+  "date": "2026-05",
+  "name": "FTC and Media Matters settle; X's related advertiser-boycott matter dismissed",
+  "entity": "X-platform",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.socialmediatoday.com/news/ftc-settles-lawsuit-over-alleged-x-ad-boycott/819395/",
+  "notes": "Musk's separate Media Matters defamation/disparagement suit reported still ongoing."
+ },
+ {
+  "date": "2026-05-04",
+  "name": "Musk and SEC agree to settle Twitter-stake disclosure suit for $1.5M (announced)",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2026/05/04/sec-and-elon-musk-agree-to-settle-lawsuit-over-twitter-buyout-in-2022.html",
+  "notes": "Largest SEC penalty of its type; no admission of liability. Paid via Musk revocable trust."
+ },
+ {
+  "date": "2026-05-04/2026-05-13",
+  "name": "SEC–Musk Twitter-disclosure lawsuit settlement ($1.5M civil penalty)",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.cnbc.com/2026/05/04/sec-and-elon-musk-agree-to-settle-lawsuit-over-twitter-buyout-in-2022.html",
+  "notes": "LEGAL GAP. Settlement agreed ~May 4; both sides defended it before the court May 13. Musk trust pays $1.5M civil penalty. Distinct from the SF securities-fraud trial above."
+ },
+ {
+  "date": "2026-05-08",
+  "name": "Judge Sooknanan declines to rubber-stamp Musk-SEC $1.5M settlement, cites 'red flags'",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.cnbc.com/amp/2026/05/09/elon-musk-sec-settlement.html",
+  "notes": "Ordered parties to answer questions by June 1, 2026 re: trust structure. Settlement still pending as of early June 2026."
+ },
+ {
+  "date": "2026-05-15",
+  "name": "CRS-34 Cargo Dragon resupply to ISS",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/SpaceX_CRS-34",
+  "notes": "MARQUEE. Falcon 9 from SLC-40. ~6,500 lb cargo. Docked ISS May 17 10:37 UTC. Monitored by Hathaway + Adenot."
+ },
+ {
+  "date": "2026-05-18",
+  "name": "Jury clears OpenAI/Altman in Musk v. Altman; claims barred by statute of limitations",
+  "entity": "Personal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.npr.org/2026/05/18/nx-s1-5822366/musk-altman-openai-jury-verdict-claims-dismissed",
+  "notes": "Jury took under 2 hours. Musk called it a 'technicality,' vowed Ninth Circuit appeal. Strong posting trigger."
+ },
+ {
+  "date": "2026-05-20",
+  "name": "Neuralink surgical robot can now reach any brain region (Parkinson's/epilepsy/depression scope)",
+  "entity": "Personal",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.techtimes.com/articles/316912/20260520/neuralink-robot-reaches-any-brain-region-parkinsons-epilepsy-depression-now-within-surgical.htm",
+  "notes": "Robot capability expansion broadening addressable indications."
+ },
+ {
+  "date": "2026-05-22",
+  "name": "Starship Flight 12 (Block 3 + Pad 2 debut)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Starship_flight_test_12",
+  "notes": "MARQUEE. Liftoff 22:30 UTC (5:30 p.m. CT) from Starbase Pad 2. Booster B19 / Ship S39. Success: deployed 20 sat simulators + 2 functional Starlink V3; booster had engine relight failures during landing. Ship fiery splashdown Indian Ocean."
+ },
+ {
+  "date": "2026-06",
+  "name": "Neuralink reaches 26th patient in BCI trials",
+  "entity": "Personal",
+  "category": "data-release",
+  "recurring": false,
+  "source": "https://www.basenor.com/blogs/news/neuralink-reaches-26th-patient-in-ongoing-brain-computer-interface-trials",
+  "notes": "Cumulative patient-count milestone; trials in US, UK, Canada, UAE."
+ },
+ {
+  "date": "2026-06",
+  "name": "Tesla 2026 Annual Shareholder Meeting (expected)",
+  "entity": "Tesla",
+  "category": "other",
+  "recurring": true,
+  "source": "https://evwire.com/p/roundup-everything-you-need-to-know-about-tesla-shareholder-meeting",
+  "notes": "Expected June 2026; exact date TBD. Full Optimus Gen 3 body reveal + production count expected. Annual cadence."
+ },
+ {
+  "date": "2026-06-02",
+  "name": "SEC and Musk file briefs defending $1.5M settlement after judge's 'red flags'",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.insurancejournal.com/news/national/2026/06/03/872219.htm",
+  "notes": "Response to June 1 deadline. Final approval still outstanding; watch for a ruling later in 2026."
+ },
+ {
+  "date": "2026-06-03",
+  "name": "Tesla robotaxi full metro-wide unsupervised rollout in Austin",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.techtimes.com/articles/317890/20260605/tesla-robotaxi-covers-entire-austin-metro-245-square-miles-about-20-driverless-cars.htm",
+  "notes": "Confirmed via Robotaxi X account; ~245 sq mi incl. Pflugerville, Manor, I-35 corridor, Giga Texas, Austin-Bergstrom Airport. No in-car monitor."
+ },
+ {
+  "date": "2026-06-14",
+  "name": "No Kings nationwide anti-Trump protests (Trump 80th birthday)",
+  "entity": "Political",
+  "category": "political",
+  "recurring": true,
+  "source": "https://en.wikipedia.org/wiki/No_Kings_protests",
+  "notes": "RECURRING anti-Trump protest series (major waves: June 2025, Oct 2025, March 2026, June 14 2026). Musk reliably counter-posts on these as a free-speech/anti-left engagement driver. Use representative dates: ~2025-06-14, 2025-10-18, 2026-03, 2026-06-14."
+ },
+ {
+  "date": "2026-06-14/2026-06-20",
+  "name": "VivaTech 2026 keynote (Paris) — scheduled",
+  "entity": "Personal",
+  "category": "interview",
+  "recurring": true,
+  "source": "https://startupsmagazine.co.uk/article-elon-musk-take-part-vivatech-paris",
+  "notes": "Musk scheduled as keynote speaker at VivaTech 2026, Paris Expo Porte de Versailles. Sources conflict on exact dates (June 14-17 vs June 17-20). Musk also keynoted VivaTech June 2025 (recurring)."
+ },
+ {
+  "date": "2026-06-15",
+  "name": "Grok 4.3 lands on Amazon Bedrock — first xAI model on Bedrock, 1M context",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://aws.amazon.com/about-aws/whats-new/2026/06/grok-amazon-bedrock/",
+  "notes": "GA June 15 2026 ($1.25 in / $2.50 out per M tokens). xAI becomes 3rd major independent lab on Bedrock alongside Anthropic + OpenAI."
+ },
+ {
+  "date": "2026-06-15",
+  "name": "Judge Rita Lin dismisses xAI's trade-secret suit against OpenAI with prejudice",
+  "entity": "xAI",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.aljazeera.com/economy/2026/6/15/us-judge-dismisses-musks-xai-trade-secret-lawsuit-against-openai",
+  "notes": "Ruling dated Jun 15-16, 2026; called refiling 'futile.' Posting trigger."
+ },
+ {
+  "date": "2026-06-15",
+  "name": "Federal judge dismisses xAI trade-secret suit vs OpenAI (ex-engineer)",
+  "entity": "Legal",
+  "category": "legal",
+  "recurring": false,
+  "source": "https://www.aljazeera.com/economy/2026/6/15/us-judge-dismisses-musks-xai-trade-secret-lawsuit-against-openai",
+  "notes": "LEGAL GAP. Judge tossed xAI's claim that OpenAI induced ex-xAI engineer Xuechen Li to leak Grok secrets. Posting trigger."
+ },
+ {
+  "date": "2026-06-16",
+  "name": "Elon Musk on Joe Rogan Experience (June 2026 episode, ~2h37m)",
+  "entity": "Personal",
+  "category": "interview",
+  "recurring": false,
+  "source": "https://www.youtube.com/watch?v=O4wBUysNe2k",
+  "notes": "INTERVIEW GAP. Second 2026 JRE appearance (~June 16). Long-form interview = reliable multi-day posting spike. Recurring-ish: Musk does JRE roughly 2x/yr."
+ },
+ {
+  "date": "2026-06-24",
+  "name": "West Coast Falcon 9 Starlink launch (Vandenberg)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": true,
+  "source": "https://spaceflightnow.com/2026/06/24/live-coverage-west-coast-falcon-9-launch-to-continue-expansion-of-spacexs-starlinks-network/",
+  "notes": "ROUTINE Starlink. Representative of June 2026 cadence: ~8 Vandenberg + ~6 Florida launches planned for the month. As of Jun 23, 74 Falcon-family launches in 2026 YTD."
+ },
+ {
+  "date": "2026-06-28",
+  "name": "SXM-11 SiriusXM geostationary satellite",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://spaceflightnow.com/launch-schedule/",
+  "notes": "Falcon 9 from Cape Canaveral. Commercial GTO comsat for SiriusXM."
+ },
+ {
+  "date": "2026-07-02",
+  "name": "Tesla Q2 2026 production & delivery report (expected)",
+  "entity": "Tesla",
+  "category": "data-release",
+  "recurring": true,
+  "source": "https://ir.tesla.com/press",
+  "notes": "FORECAST. Quarterly cadence places it ~Jul 2, 2026 (early July). Not yet released as of late June 2026."
+ },
+ {
+  "date": "2026-07-02/2026-07-03",
+  "name": "Tesla Q2 2026 production & delivery report",
+  "entity": "Tesla",
+  "category": "data-release",
+  "recurring": true,
+  "source": "https://ir.tesla.com/press",
+  "notes": "RECURRING data-release. Tesla posts quarterly P&D in first 1-3 days after quarter-end; Q2 2026 ~July 2-3. (User has earnings Jul 22 but the separate P&D release ~3 weeks earlier is its own posting trigger.)"
+ },
+ {
+  "date": "2026-07-04",
+  "name": "DOGE temporary-organization scheduled sunset date",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Department_of_Government_Efficiency",
+  "notes": "Per Jan 20 2025 EO, DOGE was chartered to end July 4, 2026 (already effectively wound down Nov 2025). Likely Musk legacy/retrospective posting around the date."
+ },
+ {
+  "date": "2026-07-22",
+  "name": "Tesla Q2 2026 earnings call (expected)",
+  "entity": "Tesla",
+  "category": "earnings",
+  "recurring": true,
+  "source": "https://www.wallstreethorizon.com/tesla-earnings-calendar",
+  "notes": "FORECAST/unconfirmed date per Wall Street Horizon: Jul 22, 2026 after close. Follows historical late-July pattern."
+ },
+ {
+  "date": "2026-07-31",
+  "name": "Starship Flight 13 (Block 3, B20/S40)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://www.spacelaunchschedule.com/launch/starship-flight-13/",
+  "notes": "MARQUEE. NET July 31 2026 (also cited 'July 2026 NET'). Booster 20 / Ship 40. Second Block 3 suborbital test, essentially a Flight 12 do-over. Catch attempt now pushed to Flight 14/15."
+ },
+ {
+  "date": "2026-07-31",
+  "name": "Transporter-17 dedicated SSO rideshare",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": true,
+  "source": "https://www.spacelaunchschedule.com/launch/falcon-9-block-5-transporter-17-dedicated-sso-rideshare/",
+  "notes": "Falcon 9 from Vandenberg, NET Jul 31 2026. Part of recurring Transporter rideshare series (date is placeholder/NET)."
+ },
+ {
+  "date": "2026-07-31/2026-08-31",
+  "name": "Tesla Optimus V3 reveal + Fremont production start",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.basenor.com/blogs/news/tesla-optimus-v3-reveal-set-for-late-july-what-we-know",
+  "notes": "MARQUEE product. V3 unveil targeted late Jul/early Aug 2026, production begins at Fremont (ex Model S/X line) same window. Date slipped repeatedly; treat as NET late-Jul. Big posting event."
+ },
+ {
+  "date": "2026-08",
+  "name": "Cargo Dragon CRS-35 resupply to ISS",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://spaceflightnow.com/launch-schedule/",
+  "notes": "MARQUEE. NET August 2026. Falcon 9 Cargo Dragon 2 resupply to ISS."
+ },
+ {
+  "date": "2026-08",
+  "name": "SDA Tranche 2 Transport Layer (Space Development Agency)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://spaceflightnow.com/launch-schedule/",
+  "notes": "NET August 2026. Falcon 9 classified national-security mission for Space Development Agency Tranche 2 Transport Layer."
+ },
+ {
+  "date": "2026-08-15",
+  "name": "Tesla Optimus V3 production start (expected, summer 2026)",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.basenor.com/blogs/news/tesla-optimus-v3-production-starts-this-summer-full-timeline",
+  "notes": "FORECAST. Musk: Optimus V3 production begins summer 2026 (late July/August) at Fremont. V3 design reveal also expected H2 2026. High-volume 2027."
+ },
+ {
+  "date": "2026-08-30",
+  "name": "Roman Space Telescope (Falcon Heavy)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://www.space.com/space-exploration/launches-spacecraft/nasas-roman-space-telescope-arrives-in-florida-ahead-of-spacex-falcon-heavy-launch-this-summer",
+  "notes": "MARQUEE Falcon Heavy. NASA targeting Aug 30 2026 (moved up 8 weeks from Oct 2026) from LC-39A. To Sun-Earth L2 halo orbit. Telescope arrived KSC Jun 21 2026."
+ },
+ {
+  "date": "2026-08-30",
+  "name": "SpaceX Starship V3 next flight cadence (Flight 13 NET Jul → Flight 14 fall 2026)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/SpaceX_Starship_flight_tests",
+  "notes": "Context/gap: FAA required a Flight-12 mishap investigation (announced May 27 2026) before Flight 13, pushing the V3 cadence right. Flight 14 (and first catch attempt) likely fall 2026, date TBD. Marquee posting events when they fly."
+ },
+ {
+  "date": "2026-09",
+  "name": "SES O3b mPOWER MEO comsats (Boeing-built, 3 satellites)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://spaceflightnow.com/launch-schedule/",
+  "notes": "NET September 2026. Falcon 9. Three high-throughput MEO comsats built by Boeing, operated by SES."
+ },
+ {
+  "date": "2026-09-13/2026-09-15",
+  "name": "All-In Summit 2026 (Los Angeles) — likely Musk appearance",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": true,
+  "source": "https://theallinsummit.com/",
+  "notes": "Annual summit Sep 13-15 2026 at The Shrine, LA. Musk has appeared/keynoted prior years; 2026 lineup not yet confirmed but high-probability appearance. Recurring annual."
+ },
+ {
+  "date": "2026-09-15",
+  "name": "Crew-13 crewed Dragon launch to ISS",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/SpaceX_Crew-13",
+  "notes": "MARQUEE crewed. NET mid-September 2026 (advanced from November). Crew: Jessica Watkins, Luke Delaney (NASA), Joshua Kutryk (CSA), Sergey Teteryatnikov (Roscosmos)."
+ },
+ {
+  "date": "2026-10-02/2026-10-03",
+  "name": "Tesla Q3 2026 production & delivery report",
+  "entity": "Tesla",
+  "category": "data-release",
+  "recurring": true,
+  "source": "https://ir.tesla.com/press",
+  "notes": "RECURRING data-release. Quarterly P&D early Oct 2026. Separate from the ~Oct 21 earnings call already in calendar."
+ },
+ {
+  "date": "2026-10-21",
+  "name": "Tesla Q3 2026 production & delivery report (expected)",
+  "entity": "Tesla",
+  "category": "data-release",
+  "recurring": true,
+  "source": "https://www.wallstreethorizon.com/tesla-earnings-calendar",
+  "notes": "FORECAST. Delivery report ~Oct 1-2, 2026; this date is the placeholder for the Q3 release cycle. Official date TBA."
+ },
+ {
+  "date": "2026-10-21",
+  "name": "Tesla Q3 2026 earnings call (expected)",
+  "entity": "Tesla",
+  "category": "earnings",
+  "recurring": true,
+  "source": "https://www.wallstreethorizon.com/tesla-earnings-calendar",
+  "notes": "FORECAST. Historical pattern = ~3rd-4th Wed of October. Official date not yet announced."
+ },
+ {
+  "date": "2026-10-21",
+  "name": "Tesla Q3 2026 earnings call (projected)",
+  "entity": "Tesla",
+  "category": "earnings",
+  "recurring": true,
+  "source": "https://www.tipranks.com/stocks/tsla/earnings",
+  "notes": "Projected ~late-Oct 2026 (Tesla's Q3 calls land ~Oct 22). Date not yet announced — recurring quarterly pattern."
+ },
+ {
+  "date": "2026-10/2026-12",
+  "name": "USSF-75 national security launch (Falcon Heavy)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://rocketlaunch.org/launch-schedule/spacex/falcon-heavy",
+  "notes": "MARQUEE Falcon Heavy. 2026 from KSC. Classified USSF payload to geostationary orbit. Exact date TBD within 2026."
+ },
+ {
+  "date": "2026-11",
+  "name": "Griffin Mission One lunar lander (Falcon Heavy)",
+  "entity": "SpaceX",
+  "category": "launch",
+  "recurring": false,
+  "source": "https://www.spacelaunchschedule.com/launch/falcon-heavy-griffin-mission-one/",
+  "notes": "MARQUEE Falcon Heavy. NET November 2026 (one source cites Dec 31 2026) from KSC. Astrobotic Griffin lander carrying Astrolab FLIP lunar rover (replaced cancelled VIPER)."
+ },
+ {
+  "date": "2026-11",
+  "name": "Tesla 2026 Annual Shareholder Meeting (required within 13 months of Nov 6 2025)",
+  "entity": "Tesla",
+  "category": "other",
+  "recurring": true,
+  "source": "https://www.cnbc.com/2025/11/06/tesla-shareholders-vote-on-elon-musks-1-trillion-pay-package.html",
+  "notes": "RECURRING ANNUAL. 2025 meeting was Nov 6; under Texas law next meeting required within 13 months (likely Nov-Dec 2026), date not yet announced. Always a heavy Musk-posting event."
+ },
+ {
+  "date": "2026-11-03",
+  "name": "2026 US midterm elections — Musk-funded GOP races resolve",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://www.nbcnews.com/politics/2026-election/elon-musk-gives-millions-republican-super-pacs-ahead-midterms-rcna222114",
+  "notes": "Election Day. Musk = 3rd-largest 2026 cycle donor (behind a16z and Soros). Expect heavy results-night and endorsed-race posting (KY/Morris, House/Senate leadership PACs). Tight date: first Tue after first Mon in Nov."
+ },
+ {
+  "date": "2026-11-03",
+  "name": "2026 U.S. midterm elections (Musk political spending/posting driver)",
+  "entity": "Political",
+  "category": "political",
+  "recurring": false,
+  "source": "https://en.wikipedia.org/wiki/Political_activities_of_Elon_Musk",
+  "notes": "FUTURE POLITICAL GAP. Nov 3 2026 midterms. Musk gave $15M to GOP super PACs (June) and could spend big; America Party targeting select House/Senate races. Expect elevated posting through Oct-Nov 2026."
+ },
+ {
+  "date": "2026-11-04",
+  "name": "Tesla 2026 Annual Shareholder Meeting (expected)",
+  "entity": "Tesla",
+  "category": "product",
+  "recurring": true,
+  "source": "https://ir.tesla.com/node/16",
+  "notes": "FORECAST. Texas law requires annual meeting within 13 months of prior (Nov 6, 2025), so ~Nov 2026. Date not yet announced. Proxy filed within 120 days of FY-end."
+ },
+ {
+  "date": "2026-H2",
+  "name": "Boring Company Dubai Loop tunneling begins (targeted)",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.boringcompany.com/dubai",
+  "notes": "FUTURE/targeted. Seeking ~48 permits/NOCs across ~10 entities; goal to begin tunneling H2 2026."
+ },
+ {
+  "date": "2026-H2",
+  "name": "Neuralink first human Blindsight (vision-restoration) implant (targeted)",
+  "entity": "Personal",
+  "category": "product",
+  "recurring": false,
+  "source": "https://www.neurapod.com/blog/neuralink-blindsight-human-trials-what-to-expect",
+  "notes": "FUTURE/targeted 2026, likely UAE. Awaiting regulatory approval as of Jan 2026. Camera-glasses bypass eyes via 1,000+ electrode threads to visual cortex."
+ },
+ {
+  "date": "2026-late",
+  "name": "Boring Company Nashville Music City Loop first operational segment (targeted)",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.boringcompany.com/music-city-loop",
+  "notes": "FUTURE/targeted late 2026; full route by 2029."
+ },
+ {
+  "date": "2026-late/2027-early",
+  "name": "Vegas Loop airport line opens (targeted) - 17,000-20,000 pax/hour",
+  "entity": "Personal",
+  "category": "other",
+  "recurring": false,
+  "source": "https://www.reviewjournal.com/news/news-columns/road-warrior/boring-co-plans-vegas-loop-airport-rides-in-early-2026-3589025/",
+  "notes": "FUTURE/targeted. Reid Airport connection; capacity 17k-20k people/hr at full operation."
+ },
+ {
+  "date": "2026-Q3",
+  "name": "Grok 5 release (expected) — 6T-parameter MoE, trained on Colossus 2",
+  "entity": "xAI",
+  "category": "product",
+  "recurring": false,
+  "source": "https://felloai.com/all-we-know-so-far-about-grok-5/",
+  "notes": "FUTURE/UNCONFIRMED. Originally Q1 2026, slipped past Q2; as of June 2026 still training, no official date. 6T params, native video understanding. Watch for launch livestream when announced."
+ },
+ {
+  "date": "2027-01-28",
+  "name": "Tesla Q4 2026 / full-year earnings call (expected)",
+  "entity": "Tesla",
+  "category": "earnings",
+  "recurring": true,
+  "source": "https://www.wallstreethorizon.com/tesla-earnings-calendar",
+  "notes": "FORECAST (just past window edge but part of Q4 2026 cycle). Q4 delivery report ~Jan 2, 2027; earnings ~late Jan 2027. Official dates TBA."
+ },
+ {
+  "date": "recurring",
+  "name": "Neuralink mid-year \"Update\" / Show-and-Tell event (recurring series)",
+  "entity": "Personal",
+  "category": "livestream",
+  "recurring": true,
+  "source": "https://www.youtube.com/c/neuralink",
+  "notes": "Recurring cadence: Show & Tell Nov 30 2022; Summer Update Jun 26 2025. Expect another major update livestream ~mid-2026 (June/July) - watch for Musk-heavy posting around it. No 2026 date confirmed yet."
+ },
+ {
+  "date": "2024-06-28",
+  "name": "Elon Musk birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Born June 28, 1971, in Pretoria, South Africa."
+ },
+ {
+  "date": "2025-06-28",
+  "name": "Elon Musk birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Born June 28, 1971, in Pretoria, South Africa."
+ },
+ {
+  "date": "2026-06-28",
+  "name": "Elon Musk birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Born June 28, 1971, in Pretoria, South Africa."
+ },
+ {
+  "date": "2027-06-28",
+  "name": "Elon Musk birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Born June 28, 1971, in Pretoria, South Africa."
+ },
+ {
+  "date": "2024-05-04",
+  "name": "Son X Æ A-Xii (\"X\") birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Son with Grimes, born May 4, 2020. Publicly confirmed."
+ },
+ {
+  "date": "2024-04-15",
+  "name": "Twins Griffin & Vivian birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Twins with Justine Musk, born April 15, 2004. Vivian's DOB public via 2022 name-change filing."
+ },
+ {
+  "date": "2025-05-04",
+  "name": "Son X Æ A-Xii (\"X\") birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Son with Grimes, born May 4, 2020. Publicly confirmed."
+ },
+ {
+  "date": "2025-04-15",
+  "name": "Twins Griffin & Vivian birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Twins with Justine Musk, born April 15, 2004. Vivian's DOB public via 2022 name-change filing."
+ },
+ {
+  "date": "2026-05-04",
+  "name": "Son X Æ A-Xii (\"X\") birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Son with Grimes, born May 4, 2020. Publicly confirmed."
+ },
+ {
+  "date": "2026-04-15",
+  "name": "Twins Griffin & Vivian birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Twins with Justine Musk, born April 15, 2004. Vivian's DOB public via 2022 name-change filing."
+ },
+ {
+  "date": "2027-05-04",
+  "name": "Son X Æ A-Xii (\"X\") birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Son with Grimes, born May 4, 2020. Publicly confirmed."
+ },
+ {
+  "date": "2027-04-15",
+  "name": "Twins Griffin & Vivian birthday",
+  "entity": "Personal",
+  "category": "personal",
+  "recurring": true,
+  "source": "public-record",
+  "notes": "Twins with Justine Musk, born April 15, 2004. Vivian's DOB public via 2022 name-change filing."
+ },
+ {
+  "date": "2024-01-01",
+  "name": "US holiday: New Year's Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2024-01-15",
+  "name": "US holiday: Martin Luther King Jr. Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2024-02-19",
+  "name": "US holiday: Washington's Birthday",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2024-05-27",
+  "name": "US holiday: Memorial Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2024-06-19",
+  "name": "US holiday: Juneteenth National Independence Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2024-07-04",
+  "name": "US holiday: Independence Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2024-09-02",
+  "name": "US holiday: Labor Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2024-10-14",
+  "name": "US holiday: Columbus Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2024-11-11",
+  "name": "US holiday: Veterans Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2024-11-28",
+  "name": "US holiday: Thanksgiving Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2024-12-25",
+  "name": "US holiday: Christmas Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2025-01-01",
+  "name": "US holiday: New Year's Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2025-01-20",
+  "name": "US holiday: Martin Luther King Jr. Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2025-02-17",
+  "name": "US holiday: Washington's Birthday",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2025-05-26",
+  "name": "US holiday: Memorial Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2025-06-19",
+  "name": "US holiday: Juneteenth National Independence Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2025-07-04",
+  "name": "US holiday: Independence Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2025-09-01",
+  "name": "US holiday: Labor Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2025-10-13",
+  "name": "US holiday: Columbus Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2025-11-11",
+  "name": "US holiday: Veterans Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2025-11-27",
+  "name": "US holiday: Thanksgiving Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2025-12-25",
+  "name": "US holiday: Christmas Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-01-01",
+  "name": "US holiday: New Year's Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-01-19",
+  "name": "US holiday: Martin Luther King Jr. Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-02-16",
+  "name": "US holiday: Washington's Birthday",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-05-25",
+  "name": "US holiday: Memorial Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-06-19",
+  "name": "US holiday: Juneteenth National Independence Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-07-03",
+  "name": "US holiday: Independence Day (observed)",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-07-04",
+  "name": "US holiday: Independence Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-09-07",
+  "name": "US holiday: Labor Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-10-12",
+  "name": "US holiday: Columbus Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-11-11",
+  "name": "US holiday: Veterans Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-11-26",
+  "name": "US holiday: Thanksgiving Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2026-12-25",
+  "name": "US holiday: Christmas Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-01-01",
+  "name": "US holiday: New Year's Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-01-18",
+  "name": "US holiday: Martin Luther King Jr. Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-02-15",
+  "name": "US holiday: Washington's Birthday",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-05-31",
+  "name": "US holiday: Memorial Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-06-18",
+  "name": "US holiday: Juneteenth National Independence Day (observed)",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-06-19",
+  "name": "US holiday: Juneteenth National Independence Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-07-04",
+  "name": "US holiday: Independence Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-07-05",
+  "name": "US holiday: Independence Day (observed)",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-09-06",
+  "name": "US holiday: Labor Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-10-11",
+  "name": "US holiday: Columbus Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-11-11",
+  "name": "US holiday: Veterans Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-11-25",
+  "name": "US holiday: Thanksgiving Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-12-24",
+  "name": "US holiday: Christmas Day (observed)",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-12-25",
+  "name": "US holiday: Christmas Day",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ },
+ {
+  "date": "2027-12-31",
+  "name": "US holiday: New Year's Day (observed)",
+  "entity": "US Holiday",
+  "category": "holiday",
+  "recurring": true,
+  "source": "federal-calendar",
+  "notes": "US federal holiday. Added for posting-cadence correlation analysis."
+ }
+]

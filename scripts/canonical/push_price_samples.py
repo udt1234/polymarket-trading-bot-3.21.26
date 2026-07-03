@@ -4,10 +4,10 @@ Push price/auction sample tabs to the canonical sheet.
 Tabs created/replaced:
   - Trump_Auctions_Inventory  (every Trump auction with duration_type, brackets, winner, OHLC)
   - Elon_Auctions_Inventory   (every Elon auction)
-  - Trump_Prices_Sample       (sample auction, every trade, ET+UTC)
-  - Elon_Prices_Sample        (sample auction, every trade, ET+UTC)
+  - Trump_Prices       (sample auction, every trade, ET+UTC)
+  - Elon_Prices        (sample auction, every trade, ET+UTC)
 
-Source: .claude/worktrees/epic-blackburn-d2bbbb/_DataMetricPulls/whale_analysis/
+Source: _DataMetricPulls/canonical/_raw_imports/api_trades_v2/
 
 Fixes applied in this version:
   Bug 1: duration_type now uses the AUCTION window parsed from filename
@@ -36,8 +36,23 @@ SPREADSHEET_ID = "1bXBnXz4a1Nn44ZLORNo2cNqZx6pnqER3rcoTUZMC1Q8"
 SA_KEY = Path.home() / ".claude" / "google-service-account.json"
 SUBJECT = "darwin@xagency.com"
 
-WHALE_DIR = ROOT / ".claude" / "worktrees" / "epic-blackburn-d2bbbb" / "_DataMetricPulls" / "whale_analysis"
+RAW_TRADES_DIR = ROOT / "_DataMetricPulls" / "canonical" / "_raw_imports" / "api_trades_v2"
+CANON_AUCTIONS = ROOT / "_DataMetricPulls" / "canonical" / "auctions"
 ET = ZoneInfo("America/New_York")
+
+
+def _load_canonical_auction_meta() -> dict[str, dict]:
+    """Load auction_slug -> {title, duration_type} map from canonical/auctions/."""
+    meta = {}
+    for handle in ["elonmusk", "realDonaldTrump"]:
+        for p in (CANON_AUCTIONS / handle).glob("*.parquet"):
+            df = pd.read_parquet(p, columns=["auction_slug", "title", "duration_type"])
+            for _, r in df.iterrows():
+                meta[str(r["auction_slug"])] = {
+                    "title": str(r["title"]),
+                    "duration_type": str(r["duration_type"]),
+                }
+    return meta
 
 MONTH_MAP = {
     "jan": 1, "january": 1,
@@ -171,7 +186,7 @@ def winning_bucket_from_data(df: pd.DataFrame) -> tuple[str, str]:
 
 
 def inventory(handle_filter: str) -> list[list[str]]:
-    files = sorted(WHALE_DIR.glob("trades_*.parquet"))
+    files = sorted(RAW_TRADES_DIR.glob("*.parquet"))
     rows = [[
         "file",
         "auction_slug",
@@ -268,7 +283,7 @@ def inventory(handle_filter: str) -> list[list[str]]:
 
 
 def sample_auction(handle_filter: str, max_trades: int = 500) -> tuple[str, list[list[str]]]:
-    files = sorted(WHALE_DIR.glob("trades_*.parquet"))
+    files = sorted(RAW_TRADES_DIR.glob("*.parquet"))
     candidates = []
     for f in files:
         name = f.name.lower()
@@ -297,7 +312,17 @@ def sample_auction(handle_filter: str, max_trades: int = 500) -> tuple[str, list
         idx = list(range(0, len(df), len(df) // max_trades))[:max_trades]
         df = df.iloc[idx]
 
+    # Look up parent auction title + duration_type from canonical
+    auction_slug = pick.stem  # api_trades_v2/{slug}.parquet
+    canonical_meta = _load_canonical_auction_meta()
+    auction_meta = canonical_meta.get(auction_slug, {})
+    auction_title = auction_meta.get("title", "")
+    auction_duration = auction_meta.get("duration_type", "")
+
     rows = [[
+        "auction_slug",
+        "auction_title",
+        "duration_type",
         "ts_et",
         "ts_utc",
         "hours_in",
@@ -305,13 +330,13 @@ def sample_auction(handle_filter: str, max_trades: int = 500) -> tuple[str, list
         "outcome",
         "bucket",
         "is_winning_bucket",
+        "bracket_market_title",
         "price",
         "size_shares",
         "notional_usd",
         "trader_name",
         "trader_wallet",
         "tx_hash",
-        "title",
     ]]
     for _, r in df.iterrows():
         ts_utc = r["ts"]
@@ -319,6 +344,9 @@ def sample_auction(handle_filter: str, max_trades: int = 500) -> tuple[str, list
         bucket = str(r.get("_bucket", ""))
         is_winner = "YES" if (winning_bucket and bucket == winning_bucket) else ""
         rows.append([
+            auction_slug,
+            auction_title,
+            auction_duration,
             ts_et.strftime("%Y-%m-%d %H:%M:%S ET") if ts_et else "",
             ts_utc.strftime("%Y-%m-%d %H:%M:%S UTC") if pd.notna(ts_utc) else "",
             f"{r.get('hours_in', 0):.2f}",
@@ -326,13 +354,13 @@ def sample_auction(handle_filter: str, max_trades: int = 500) -> tuple[str, list
             str(r.get("outcome", "")),
             bucket,
             is_winner,
+            str(r.get("title", "")),
             f"{r.get('price', 0):.4f}",
             f"{r.get('size', 0):.2f}",
             f"{r.get('notional', 0):.2f}",
             str(r.get("name", ""))[:30],
             str(r.get("proxyWallet", ""))[:20] + "...",
             str(r.get("transactionHash", ""))[:20] + "...",
-            str(r.get("title", ""))[:60],
         ])
     return (pick.name, rows)
 
@@ -407,7 +435,7 @@ def main() -> int:
             res_counts = Counter(r[12] for r in rows[1:])
             print(f"        resolution_status counts: {dict(res_counts)}")
 
-    for handle, title in [("trump", "Trump_Prices_Sample"), ("elon", "Elon_Prices_Sample")]:
+    for handle, title in [("trump", "Trump_Prices"), ("elon", "Elon_Prices")]:
         print(f"[push] building {title}...")
         fname, rows = sample_auction(handle, max_trades=500)
         sid = ensure_tab(sheets, sheet_id_map, title)

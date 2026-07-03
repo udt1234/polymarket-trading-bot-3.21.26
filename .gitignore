@@ -55,3 +55,25 @@ MISC/
 _DataMetricPulls/canonical/
 _DataMetricPulls/trump_posts_raw.parquet
 _DataMetricPulls/elon_posts_raw.parquet
+
+# Live tweet-market recorder output (raw L2 book/trade capture — large, local only)
+_DataMetricPulls/recordings/
+_DataMetricPulls/recordings_pulled/
+_DataMetricPulls/pacing_backtest/*.parquet
+
+# Local-only data stores (large, regenerable or archived elsewhere)
+_DataMetricPulls/l2_history/
+_DataMetricPulls/pmxt_pulled/
+_DataMetricPulls/legacy_sheets/
+_DataMetricPulls/foretest/*.parquet
+_DataMetricPulls/pacing_backtest/*.csv
+_DataMetricPulls/elon_schedule_analysis/*.parquet
+_DataMetricPulls/elon_schedule_analysis/*.csv
+
+# Local tool state
+.codex/
+vchk.json
+
+# Manual trading tools: moved to the polymarket-manual-tools repo (split 2026-07-03)
+research_toolkit/
+scripts/recorder/

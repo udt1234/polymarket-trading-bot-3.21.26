@@ -4,7 +4,7 @@ Nuclear delete of messy _DataMetricPulls/ sources after canonical/ is built.
 KEEPS:
   _DataMetricPulls/canonical/                  (the new canonical layer)
   _DataMetricPulls/canonical/_audit/           (historical audit)
-  _DataMetricPulls/canonical/_raw_imports/     (frozen copy of whale_analysis)
+  _DataMetricPulls/canonical/_raw_imports/     (frozen copy of api_trades_v2)
   _DataMetricPulls/duckdb_remote.py            (HF remote query helper, if present)
   _DataMetricPulls/trump_posts_raw.parquet     (source of posts canonical)
   _DataMetricPulls/elon_posts_raw.parquet      (source of posts canonical)
