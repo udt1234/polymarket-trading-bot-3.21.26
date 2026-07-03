@@ -1,9 +1,19 @@
 import asyncio
 import logging
+import time
 from abc import ABC, abstractmethod
 from api.services.risk_manager import Signal
 
 log = logging.getLogger(__name__)
+
+
+class HealthState:
+    """Health states a module can report. Maps to dashboard banner colors:
+    HEALTHY (green), DEGRADED (yellow), CRITICAL (red), UNKNOWN (gray)."""
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    CRITICAL = "critical"
+    UNKNOWN = "unknown"
 
 
 class BaseModule(ABC):
@@ -230,3 +240,103 @@ class BaseModule(ABC):
         except Exception:
             return []
         return [r["auction_slug"] for r in (res.data or []) if r.get("auction_slug")]
+
+    # --- Health assertions (added 2026-05-16) ---
+    #
+    # Modules silently failing is Sir's #1 pain. A module can loop 100 cycles
+    # on an active auction, emit zero signals, and the dashboard shows green
+    # because no exception was raised. These assertions watch for that.
+    #
+    # Each module gets a per-instance cycle history (last 6h of cycles).
+    # After every evaluate(), call _record_cycle(signals, context_dict).
+    # Then _run_health_assertions() checks for known silent-failure modes
+    # and writes the result to Supabase + the dashboard endpoint.
+
+    _cycle_history_max = 360  # 6h at one cycle per minute
+
+    def _record_cycle(self, signals: list, context: dict | None = None) -> None:
+        """Call this at the END of every evaluate() cycle.
+        signals: list of Signal objects emitted this cycle (may be empty)
+        context: dict with optional keys:
+            active_auction (bool) — is there a live auction this module trades?
+            last_price_age_s (float) — seconds since last market price fetch
+            risk_rejections (int) — signals rejected by risk this cycle
+            stuck_positions (int) — positions with no decision update > 2h
+        """
+        if not hasattr(self, "_cycle_history"):
+            self._cycle_history = []
+        ctx = dict(context or {})
+        ctx["t"] = time.time()
+        ctx["n_signals"] = len(signals or [])
+        self._cycle_history.append(ctx)
+        if len(self._cycle_history) > self._cycle_history_max:
+            self._cycle_history = self._cycle_history[-self._cycle_history_max:]
+
+    def _run_health_assertions(self, min_cycles: int = 10) -> dict:
+        """Check for silent-failure patterns. Returns a dict:
+        {state: HealthState, reasons: [str, ...], recent_cycles: int}
+        """
+        if not hasattr(self, "_cycle_history"):
+            self._cycle_history = []
+        now = time.time()
+        recent = [c for c in self._cycle_history if now - c["t"] < 6 * 3600]
+        if len(recent) < min_cycles:
+            return {"state": HealthState.UNKNOWN, "reasons": [], "recent_cycles": len(recent)}
+
+        reasons = []
+        state = HealthState.HEALTHY
+
+        # Assertion 1: silent on active auction
+        active_cycles = [c for c in recent if c.get("active_auction")]
+        if len(active_cycles) >= min_cycles:
+            total_signals = sum(c["n_signals"] for c in active_cycles)
+            if total_signals == 0:
+                reasons.append(
+                    f"Module ran {len(active_cycles)} cycles on an active auction in the last 6h but emitted 0 signals"
+                )
+                state = HealthState.DEGRADED
+
+        # Assertion 2: stale data
+        recent_with_age = [c for c in recent[-10:] if c.get("last_price_age_s") is not None]
+        if recent_with_age:
+            avg_age = sum(c["last_price_age_s"] for c in recent_with_age) / len(recent_with_age)
+            if avg_age > 1800:  # 30 min stale
+                reasons.append(f"Market prices stale by avg {int(avg_age)}s over last 10 cycles")
+                state = HealthState.DEGRADED
+
+        # Assertion 3: 100% risk rejection over 30 min
+        last_30 = [c for c in recent if now - c["t"] < 1800]
+        if len(last_30) >= 10:
+            total_sig = sum(c["n_signals"] for c in last_30)
+            total_rej = sum(c.get("risk_rejections", 0) for c in last_30)
+            if total_sig > 0 and total_rej >= total_sig:
+                reasons.append(
+                    f"All {total_sig} signals rejected by risk over the last 30 min — config or risk rule problem"
+                )
+                state = HealthState.DEGRADED
+
+        # Assertion 4: stuck positions
+        last_cycle = recent[-1] if recent else {}
+        stuck = last_cycle.get("stuck_positions", 0)
+        if stuck > 0:
+            reasons.append(f"{stuck} open position(s) have no decision update in over 2h")
+            state = HealthState.DEGRADED
+
+        return {"state": state, "reasons": reasons, "recent_cycles": len(recent)}
+
+    def _persist_health(self, health: dict) -> None:
+        """Write current health state to Supabase module_health table.
+        Upserts every cycle (cheap, single-row write keyed by module_name).
+        Wrapped in try/except so a Supabase outage cannot break the trading cycle."""
+        try:
+            from api.dependencies import get_supabase
+            sb = get_supabase()
+            sb.table("module_health").upsert({
+                "module_name": self.name,
+                "state": health["state"],
+                "reasons": health["reasons"],
+                "recent_cycles": health["recent_cycles"],
+                "updated_at": "now()",
+            }, on_conflict="module_name").execute()
+        except Exception as e:
+            log.warning(f"[{self.name}] _persist_health failed: {e}")

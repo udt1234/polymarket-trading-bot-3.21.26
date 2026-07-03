@@ -601,6 +601,18 @@ class TruthSocialModule(BaseModule):
                   f"sched={[e.get('event_type') for e in schedule_events[:3]]}, "
                   f"signals={len(signals)}")
 
+        # Health assertions (added 2026-05-16). See BaseModule._record_cycle.
+        # Wrapped in try/except so health checks can never block the trading cycle.
+        try:
+            self._record_cycle(
+                signals=signals,
+                context={"active_auction": bool(tracking)},
+            )
+            health = self._run_health_assertions()
+            self._persist_health(health)
+        except Exception as he:
+            log.warning(f"[{self.name}] health hook failed: {he}")
+
         return signals
 
     def get_status(self) -> dict:
