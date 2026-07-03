@@ -82,3 +82,6 @@ scripts/recorder/
 supabase_export_*/
 supabase_export_*.zip
 NEW_BOT_CREDENTIALS.md
+
+# analysis log backups (data, local only)
+*.csv.bak
