@@ -12,6 +12,11 @@ Living mistake log. After every bug fix or correction, append a rule here.
 
 ---
 
+### 2026-07-01 — Speed hot path: pre-sign between events, never compute or sign after the trigger
+**What happened**: In the architecture diagram vAI drew the hot path as "tweet lands -> recompute fair value -> re-quote", which implies building and signing an order AFTER the trigger. Sir pushed back: weren't we going to keep multiple preset (pre-signed) limit bids ready so we cancel stale bids and fire already-built ones simultaneously? Yes, and that is faster.
+**Root cause**: vAI put the expensive work (compute fair value + EIP-712 sign) ON the latency-critical path. Signing and recomputing after the event is dead weight when the plausible next states are knowable in advance.
+**Rule**: On any speed hot path, never compute or sign after the trigger event. A continuous BACKGROUND loop (off the hot path, between events) pre-computes the target order set for the next plausible states and PRE-SIGNS it, refreshed every few seconds. The hot path then only (1) batch-cancels the now-stale resting orders and (2) submits the already-signed set. Caveat for Polymarket CLOB V2: the ms timestamp is baked in at signing, so pre-compute far ahead but sign as late as the staleness window allows and refresh the signed pool (open question: confirm that window). Also: stream every feed that offers one (tweets, book, our fills, on-chain settlement); poll only feeds with no stream (whale wallet, Gamma discovery). Auto-loaded rule at memory `lesson_presign_hotpath.md`.
+
 ### 2026-07-01 — Maker-only: never default a mispricing strategy to taking
 **What happened**: While specing the S4 finish-line and S5 sweeper strategies, vAI recommended a "taker exception" to capture mispriced brackets. Sir corrected: the bot is maker-only, so why take? The right way to capture the exact same mispricing is to REST a post-only bid and let the seller cross to you.
 **Root cause**: vAI framed "buy the mispriced bracket" and complete-set arb as taking (lifting an ask), when a resting maker bid captures it for zero fee (maker pays no exchange fee under CLOB V2) via FIFO queue priority. Taker fees also eat thin arbs, so taking is doubly wrong here.
