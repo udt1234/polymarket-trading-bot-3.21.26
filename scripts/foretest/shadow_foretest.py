@@ -11,16 +11,16 @@ Live data sources (both already exist in this repo):
                   (default reads the local X-API parquet; --pull does a small,
                   cost-guarded incremental fetch for the open window, ~$0.005/tweet)
   - bracket px  : the Railway tweet-recorder 'elon-tweets-48h' stream, pulled via
-                  scripts/recorder/pull_and_merge.py into recordings_pulled/
+                  ../polymarket-tweet-recorder/pull_and_merge.py into recordings_pulled/
 
 Model artifact: the dispersion is LEARNED from realized 2-day projection errors
 (historical auctions). winning_bucket is used ONLY to fit dispersion + to score.
 
 Commands:
-  python scripts/recorder/shadow_foretest.py --list          # recorded 2-day markets + window/elapsed
-  python scripts/recorder/shadow_foretest.py --snapshot SLUG  # log one shadow snapshot (dry count)
-  python scripts/recorder/shadow_foretest.py --snapshot SLUG --pull   # + live X-API count (~$1)
-  python scripts/recorder/shadow_foretest.py --score          # running model-vs-market tally
+  python scripts/foretest/shadow_foretest.py --list          # recorded 2-day markets + window/elapsed
+  python scripts/foretest/shadow_foretest.py --snapshot SLUG  # log one shadow snapshot (dry count)
+  python scripts/foretest/shadow_foretest.py --snapshot SLUG --pull   # + live X-API count (~$1)
+  python scripts/foretest/shadow_foretest.py --score          # running model-vs-market tally
 """
 import sys, io, os, re, json, argparse, time, urllib.request, urllib.parse, urllib.error
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
@@ -138,8 +138,11 @@ def refresh_recorder():
                     if l.startswith("RECORDER_TOKEN=")), "")
         if not tok:
             return
+        pull = ROOT.parent/"polymarket-tweet-recorder"/"pull_and_merge.py"
+        if not pull.exists():
+            return
         subprocess.run([sys.executable, "-W", "ignore",
-                        str(ROOT/"scripts/recorder/pull_and_merge.py"),
+                        str(pull),
                         "--url", "https://tweet-recorder-production.up.railway.app",
                         "--token", tok], timeout=120, capture_output=True)
         print("  recorder refreshed")
