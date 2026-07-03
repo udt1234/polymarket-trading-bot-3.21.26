@@ -1,6 +1,6 @@
 """Pull Polymarket L2 order-book HISTORY for OUR tweet markets from the free pmxt archive
 (https://r2v2.pmxt.dev, one parquet per UTC hour), filtered to our condition IDs, and normalize
-it to the SAME schema our recorder writes (scripts/recorder/tweet_market_recorder.py) so any
+it to the SAME schema our recorder writes (the polymarket-tweet-recorder repo (tweet_market_recorder.py)) so any
 backtest can read pmxt and recorder data interchangeably.
 
 pmxt schema -> recorder schema mapping:
