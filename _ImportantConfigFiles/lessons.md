@@ -12,6 +12,13 @@ Living mistake log. After every bug fix or correction, append a rule here.
 
 ---
 
+### 2026-07-03 - Append-forever parquet merges OOM; partition by day
+**What happened**: The daily `PolymarketRecorderPull` task silently grew one parquet per series since Jun 23. The merge step loaded the whole existing file + concat in pandas; at 87M rows (elon-tweets-48h) it crashed with a 3.26 GiB allocation error, exit code 1.
+**Root cause**: Unbounded append design: every run re-read the entire history into memory to add one day of data. Works at week one, guaranteed OOM later.
+**Rule**: Any recurring merge job must have bounded memory per run. Recorder layout is now `{series}.parquet/` as a DIRECTORY of `{YYYYMMDD}.parquet` day files: merges touch one day only, `pd.read_parquet(dir)` still reads the whole dataset, `l2_history._files()` globs one level deeper. Never design an append job that re-reads its full history.
+
+---
+
 ### 2026-07-01 — Speed hot path: pre-sign between events, never compute or sign after the trigger
 **What happened**: In the architecture diagram vAI drew the hot path as "tweet lands -> recompute fair value -> re-quote", which implies building and signing an order AFTER the trigger. Sir pushed back: weren't we going to keep multiple preset (pre-signed) limit bids ready so we cancel stale bids and fire already-built ones simultaneously? Yes, and that is faster.
 **Root cause**: vAI put the expensive work (compute fair value + EIP-712 sign) ON the latency-critical path. Signing and recomputing after the event is dead weight when the plausible next states are knowable in advance.
