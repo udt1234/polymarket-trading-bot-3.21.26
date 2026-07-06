@@ -275,7 +275,7 @@ All backtests read only from `_DataMetricPulls/canonical/` (posts, auctions, pri
 ## I1. Network stack (Dublin, gated)
 - Optional VPS in AWS eu-west-1 (Dublin), ~2ms from London (eu-west-2). Bypasses the geoblock (UK + US datacenter IPs blocked; Dublin allowed). Only needed for a microsecond FIFO race (crypto sweep).
 - Warm keep-alive pooled HTTPS to the CLOB (cold ~85ms, warm ~23ms) with TCP_NODELAY. Local caching DNS resolver (dnsmasq/systemd-resolved) so lookups are <1ms.
-- Interim geoblock fix (free): route all Polymarket traffic through a Cloudflare Worker proxy via a boot-time httpx monkey-patch. Env: POLYMARKET_PROXY_URL + POLYMARKET_PROXY_KEY.
+- Cloudflare Worker proxy (boot-time httpx monkey-patch, env POLYMARKET_PROXY_URL + POLYMARKET_PROXY_KEY): READS ONLY as of 2026-07-06 - order POSTs through it get the region 403 (see PART M). Keep it for Gamma/xTracker/CLOB reads from geo-awkward hosts; do not rely on it for trading.
 
 ## I2. Railway services + deploy
 - API + worker services each deploy from a GitHub repo. Deploy by git push to master (production, no preview env). Verify it landed via the Railway dashboard + Supabase log behavior, not just a merge.
@@ -304,10 +304,11 @@ Read-only web terminal to watch everything in real time. NEVER places orders. Ne
 - Data path: reads Supabase + a lightweight WebSocket relay from the API service pushes live book/fill updates to the browser (real-time without hammering the DB).
 - Access control: behind Supabase auth (a login), not public (it shows wallet P&L).
 
-# PART M: Hosting decision
-- Dublin VPS is GATED/optional (only for the microsecond crypto sweep). The maker bot reacts sub-second and does not need it.
-- Now: Railway region EU-West (Amsterdam), closest to London, + the Cloudflare Worker proxy for the geoblock. Good enough.
-- Later (crypto sweep only): rent an AWS eu-west-1 (Ireland) instance and run just the execution worker there.
+# PART M: Hosting decision (CORRECTED 2026-07-06 - verified by live test)
+- **Railway CANNOT place orders from ANY of its regions.** Verified 2026-07-06 with a real signed post-only order: Railway europe-west4 (Amsterdam = Netherlands, a Polymarket-restricted country) returns the region 403. us-west/us-east are US (blocked); asia-southeast1 is Singapore (blocked). The old "Railway Amsterdam is good enough" line is FALSE for trading.
+- **The Cloudflare Worker proxy no longer bypasses the ORDER geoblock** (verified 2026-07-06: signed order POST through the worker from a US client returns the region 403). It still works for reads (Gamma/xTracker/CLOB GETs). Treat the worker as a read proxy only.
+- **Live trading therefore REQUIRES a host in an allowed country from day one: the Dublin VPS (AWS eu-west-1, Ireland) is no longer optional/gated - it is the execution host.** Railway remains fine for the recorder, alerter, dashboard, and any read-only worker.
+- Everything up to Step 4 (paper) runs anywhere; Step 2's live rest/cancel acceptance and Steps 5+ live execution run on the Dublin box.
 
 # PART N: Additional pre-build items (gaps closed 2026-07-03)
 - Paper vs production isolation: run paper against a SEPARATE Supabase project (or schema), so paper never competes with the live engine for jobs/rows.
