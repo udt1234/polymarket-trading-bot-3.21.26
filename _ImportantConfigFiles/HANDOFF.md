@@ -1,10 +1,15 @@
 # PolyMarket Bot — Handoff
 
-## 🚧 BUILD PROGRESS (PART J of BUILD_SPEC.md)
-- **Step 1 Skeleton: DONE 2026-07-06** on branch `feat/newbot-step1-skeleton`. Fresh `api/` (main, config, health router, BaseModule, auto-discovery registry, demo module); old bot code removed from the branch (kept: `api/modules/shared/`, `api/services/polymarket_proxy.py`; all old code lives on master). Acceptance passed: boot clean, registry discovers `demo`, GET /api/healthz = 200 unauth.
-- Supabase schema: all PART H1 tables already exist on `xdonwowgqvmtrduikaon` via migrations 001-021 (schema kept at teardown). No new migration needed for Step 1; Step 2+ adds deltas forward-only.
-- Pending Sir: starting bankroll + gas reserve (Step 4 sizing); paper-Supabase isolation choice (Part N).
-- **Next: Step 2 Execution core** (CLOB V2 signer, post-only placement, heartbeat daemon, fill poller).
+## 🚧 BUILD PROGRESS (PART J of BUILD_SPEC.md) — updated 2026-07-06
+All on branch `feat/newbot-step1-skeleton` (steps 1-6, one commit each). Migrations 022 (orders lifecycle) + 023 (positions 'closing') APPLIED to prod Supabase.
+- **Step 1 Skeleton: DONE** — boot + registry + unauth healthz. ACCEPT PASS.
+- **Step 2 Execution core: CODE DONE** — clob.py (post-only only, tick/minimums, 425 backoff), heartbeat daemon (2.5s), order_state machine (never filled-on-ack, ghost-fill aware), fills.py (user WS + REST reconciler). Live rest+cancel acceptance BLOCKED by geoblock (see Part M correction): creds/V2 endpoints/balance verified live; final test runs on the Dublin VPS.
+- **Step 3 Data + brain: DONE** — discovery (tag 972), slug noon-ET windows, xTracker count, Gamma-Poisson projection, bracket distribution. ACCEPT PASS live (6 auctions, sum=1, impossible=0).
+- **Step 4 S2 + Copytrader (paper): DONE** — fail-closed risk gate, aggregate price ceiling, paper maker fills, positions + accumulating realized P&L, 5-min engine. ACCEPT PASS live (2 S2 signals approved + rested; simulated dip filled; P&L exact). Copytrader = Option B, whale 0xd218e474...5c9 verified active ($473k).
+- **Step 5 Speed: CODE DONE, acceptance GATED** — tweet_stream.py (needs TWITTERAPI_IO_KEY + verified WS URL), pre-sign loop (20s refresh) + hot path (batch cancel + pre-signed POST). SDK already keeps a warm http2 client.
+- **Step 6 Observability + safety: DONE** — breaker (persisted, trips on 5 losses, fail-closed read), Telegram heartbeat (delivered ✓), per-module /api/engine/health, kill-switch CLI (pause / cancel-all only). ACCEPT PASS.
+- **BLOCKED ON SIR:** (1) Dublin VPS (AWS eu-west-1) — no Railway region can place orders (verified; CF worker = reads only now); (2) fund BOT wallet 0xD0f99f...d400 (currently 0 POL / 0 USDC / 0 pUSD) + V2 approvals; (3) TwitterAPI.io key; (4) confirm bankroll setting (config default $1000; S2 module budget row seeded $300).
+- ⚠️ Alerter risk: manual /sellnow path uses the same CF worker for order POSTs — likely geoblocked now too (untested). Also its PnL Telegram send is failing 400 every minute (separate bug, chip spawned).
 
 ## 🏗️ CURRENT: New maker-only bot build spec (2026-07-03)
 

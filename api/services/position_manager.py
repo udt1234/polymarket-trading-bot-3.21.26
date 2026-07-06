@@ -78,14 +78,19 @@ def apply_sell_fill(position_id: str, sell_price: float, sold_size: float) -> di
 
 
 def resolve_at(position_id: str, settle_price: float) -> dict | None:
-    """Resolution settlement: winning bracket -> 1.00, losers -> 0.00."""
+    """Resolution settlement: winning bracket -> 1.00, losers -> 0.00.
+    Uses the same atomic claim as exits - if another exit is in flight
+    ('closing'), skip now; the resolution sweep retries next cycle after
+    sweep_stuck_closing() releases abandoned claims."""
     sb = get_supabase()
-    res = sb.table("positions").select("size").eq("id", position_id).limit(1).execute()
+    res = sb.table("positions").select("size,status").eq("id", position_id).limit(1).execute()
     row = (res.data or [None])[0]
-    if not row:
+    if not row or row["status"] == "closed":
         return None
-    if claim_for_exit(position_id) or True:  # resolution overrides claims
-        return apply_sell_fill(position_id, settle_price, float(row["size"]))
+    if not claim_for_exit(position_id):
+        log.info("resolve_at: %s is %s - retry next sweep", position_id, row["status"])
+        return None
+    return apply_sell_fill(position_id, settle_price, float(row["size"]))
 
 
 def open_positions(module_id: str | None = None) -> list[dict]:

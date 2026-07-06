@@ -86,7 +86,9 @@ class Engine:
                 signals.sort(key=lambda x: not x.is_exit)  # exits first (E8)
                 for sig in signals:
                     summary["signals"] += 1
-                    verdict = risk_manager.check(sig, breaker_tripped=breaker and not sig.is_exit)
+                    # risk_manager itself lets exits through before the
+                    # breaker check (E8) - no engine-side special case.
+                    verdict = risk_manager.check(sig, breaker_tripped=breaker)
                     _record_signal(sb, sig, verdict.approved, verdict.reason)
                     if not verdict.approved:
                         log.info("REJECT %s %s: %s", sig.side, sig.bracket, verdict.reason)

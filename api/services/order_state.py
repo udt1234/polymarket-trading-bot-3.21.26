@@ -77,4 +77,36 @@ def advance(clob_order_id: str, new_status: str, *, size_filled: float | None = 
     sb.table("orders").update(patch).eq("id", row["id"]).execute()
     log.info("order %s: %s -> %s%s", clob_order_id[:16], cur, new_status,
              f" (filled {size_filled})" if size_filled is not None else "")
+    if new_status == "confirmed":
+        _apply_position_effects(sb, row["id"])
     return True
+
+
+def _apply_position_effects(sb, order_row_id: str) -> None:
+    """A LIVE order reaching 'confirmed' (on-chain, E6) opens/grows or
+    closes the position. Runs exactly once per order - the terminal-state
+    guard in advance() prevents a second 'confirmed' transition."""
+    res = sb.table("orders").select("*").eq("id", order_row_id).limit(1).execute()
+    o = (res.data or [None])[0]
+    if not o or o.get("executor") == "paper":
+        return  # paper fills apply their own effects in PaperExecutor
+    from api.services import position_manager
+    size = float(o.get("size_filled") or o.get("size") or 0)
+    price = float(o.get("price") or 0)
+    if size <= 0:
+        return
+    try:
+        if o["side"] == "BUY":
+            position_manager.apply_buy_fill(
+                module_id=o.get("module_id"), market_id=o.get("market_id") or "",
+                bracket=o.get("bracket") or "", token_id=o.get("token_id") or "",
+                price=price, size=size)
+        else:
+            pos_id = (o.get("metadata") or {}).get("position_id")
+            if pos_id:
+                position_manager.apply_sell_fill(pos_id, price, size)
+            else:
+                log.error("confirmed SELL %s has no position_id metadata - "
+                          "position table now stale, reconcile manually", o["id"])
+    except Exception:
+        log.exception("position effects failed for order %s", o["id"])

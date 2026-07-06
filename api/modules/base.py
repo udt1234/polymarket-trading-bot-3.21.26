@@ -24,16 +24,15 @@ class BaseModule(ABC):
         never resolve their own row by display name. Wraps the async impl
         for use from synchronous scheduler callbacks."""
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    return pool.submit(
-                        lambda: asyncio.run(self._evaluate_async(module_id))
-                    ).result(timeout=120)
-            return loop.run_until_complete(self._evaluate_async(module_id))
-        except RuntimeError:
             return asyncio.run(self._evaluate_async(module_id))
+        except RuntimeError:
+            # Called from inside a running loop (e.g. a FastAPI route) -
+            # run the coroutine on a worker thread with its own loop.
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(
+                    lambda: asyncio.run(self._evaluate_async(module_id))
+                ).result(timeout=120)
 
     async def _evaluate_async(self, module_id: str) -> list:
         """Async strategy implementation. Returns a list of

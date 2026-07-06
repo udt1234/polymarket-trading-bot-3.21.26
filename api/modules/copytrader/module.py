@@ -65,11 +65,18 @@ class CopytraderModule(BaseModule):
         resting_keys = {(r["market_id"], r["bracket"]) for r in resting}
         held_keys = {(p["market_id"], p["bracket"]) for p in open_positions(module_id)}
 
+        held_prices_by_slug: dict[str, float] = {}
+        for p in open_positions(module_id):
+            held_prices_by_slug[p.get("market_id") or ""] = float(p["avg_price"])
+
         for auction in auctions:
             targets = [b for b in auction["brackets"]
                        if b["condition_id"] in active_conditions]
             if not targets or not auction["window_start"]:
                 continue
+            # Aggregate price ceiling per auction (D4), same rule as S2.
+            basket_sum = sum(held_prices_by_slug.get(b["condition_id"], 0.0)
+                             for b in auction["brackets"])
             tracking = tweet_count.fetch_tracking_for_slug(auction["slug"])
             count = tweet_count.current_count(tracking["id"]) if tracking else None
             if count is None:
@@ -93,12 +100,15 @@ class CopytraderModule(BaseModule):
                 edge = fair - price
                 if edge < cfg["min_edge_threshold"]:
                     continue
+                if basket_sum + price > min(cfg["aggregate_price_ceiling"], 0.65):
+                    continue
                 f_star = (fair - price) / (1 - price) if price < 1 else 0
                 stake = min(cfg["kelly_fraction"] * f_star * bankroll,
                             cfg["max_bet_pct"] * bankroll)
                 size = int(stake / price) if price > 0 else 0
                 if size * price < 1.0 or size < 5:
                     continue
+                basket_sum += price
                 signals.append(Signal(
                     module_id=module_id, market_id=b["condition_id"],
                     bracket=b["label"], side="BUY", price=price, size=size,

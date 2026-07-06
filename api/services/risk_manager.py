@@ -45,16 +45,26 @@ class RiskVerdict:
 
 
 def _open_exposure(sb, module_id: str | None = None) -> tuple[float, dict[str, float]]:
-    """(total open notional, per-market notional) across open positions.
-    Raises on DB error - caller treats that as fail-closed."""
-    q = sb.table("positions").select("market_id,size,avg_price").eq("status", "open")
-    rows = (q.execute().data) or []
+    """(total notional, per-market notional) across open positions PLUS
+    resting/unconfirmed BUY orders - a submitted order commits collateral
+    before any fill confirms (E6: count unconfirmed exposure). Raises on
+    DB error - caller treats that as fail-closed."""
     per_market: dict[str, float] = {}
     total = 0.0
+    rows = (sb.table("positions").select("market_id,size,avg_price")
+            .in_("status", ["open", "closing"]).execute().data) or []
     for r in rows:
         n = float(r.get("size") or 0) * float(r.get("avg_price") or 0)
         total += n
         per_market[r.get("market_id") or ""] = per_market.get(r.get("market_id") or "", 0) + n
+    orders = (sb.table("orders").select("market_id,size,price")
+              .eq("side", "BUY")
+              .in_("status", ["submitted", "open", "partially_filled"])
+              .execute().data) or []
+    for o in orders:
+        n = float(o.get("size") or 0) * float(o.get("price") or 0)
+        total += n
+        per_market[o.get("market_id") or ""] = per_market.get(o.get("market_id") or "", 0) + n
     return total, per_market
 
 
@@ -68,8 +78,6 @@ def _realized_pnl_since(sb, since: datetime) -> float | None:
 def check(signal: Signal, breaker_tripped: bool = False) -> RiskVerdict:
     s = get_settings()
 
-    if breaker_tripped:
-        return RiskVerdict(False, "circuit_breaker")
     if signal.price <= 0 or signal.price >= 1:
         return RiskVerdict(False, f"bad_price:{signal.price}")
     if signal.size <= 0:
@@ -77,10 +85,14 @@ def check(signal: Signal, breaker_tripped: bool = False) -> RiskVerdict:
     if not signal.token_id:
         return RiskVerdict(False, "missing_token_id")
 
-    # SELLs bypass entry gates (edge/spread/exposure) but sized as 100% of
-    # THIS position, which the exit path guarantees - not re-checked here.
+    # Exits FIRST, before the breaker (E8/G4): the breaker pauses new
+    # ENTRIES; exits keep firing during a cooldown. SELLs bypass entry
+    # gates and are sized as 100% of THIS position by the exit path.
     if signal.side == "SELL" or signal.is_exit:
         return RiskVerdict(True, "exit")
+
+    if breaker_tripped:
+        return RiskVerdict(False, "circuit_breaker")
 
     # Spread check: reject when spread > tolerance OR no data (fail closed).
     if signal.spread is None or signal.best_ask is None:
@@ -98,6 +110,17 @@ def check(signal: Signal, breaker_tripped: bool = False) -> RiskVerdict:
 
     try:
         sb = get_supabase()
+
+        # Duplicate-signal guard: never stack a second resting BUY on the
+        # same (module, market, bracket).
+        dup = (sb.table("orders").select("id", count="exact")
+               .eq("module_id", signal.module_id).eq("market_id", signal.market_id)
+               .eq("bracket", signal.bracket).eq("side", "BUY")
+               .in_("status", ["submitted", "open", "partially_filled"])
+               .execute().count) or 0
+        if dup:
+            return RiskVerdict(False, "duplicate_resting_order")
+
         total, per_market = _open_exposure(sb)
         if signal.notional + per_market.get(signal.market_id, 0.0) > s.max_single_market_exposure * s.bankroll:
             return RiskVerdict(False, "single_market_cap")
@@ -111,11 +134,54 @@ def check(signal: Signal, breaker_tripped: bool = False) -> RiskVerdict:
         weekly = _realized_pnl_since(sb, now - timedelta(days=7))
         if weekly is not None and weekly < -s.weekly_loss_limit * s.bankroll:
             return RiskVerdict(False, "weekly_loss_limit")
+        if _drawdown_exceeded(sb, s):
+            return RiskVerdict(False, "max_drawdown")
     except Exception as e:
         log.error("risk gate DB failure - failing CLOSED: %s", e)
         return RiskVerdict(False, f"db_error:{type(e).__name__}")
 
+    # Depth check LAST (one live book fetch): reject when our order is
+    # more than 30% of the visible book, or the book is unreadable/empty
+    # (refuse to trade empty books - fail closed).
+    depth = _book_depth_shares(signal.token_id)
+    if depth is None or depth <= 0:
+        return RiskVerdict(False, "no_depth_data")
+    if signal.size > s.max_book_depth_fraction * depth:
+        return RiskVerdict(False, f"depth_{signal.size:.0f}>{s.max_book_depth_fraction:.0%}_of_{depth:.0f}")
+
     return RiskVerdict(True, "ok")
+
+
+def _drawdown_exceeded(sb, s) -> bool:
+    """Equity = bankroll + all-time realized P&L. Track the peak in the
+    settings table; block entries once equity falls max_drawdown below it."""
+    rows = (sb.table("positions").select("realized_pnl").eq("status", "closed")
+            .execute().data) or []
+    equity = s.bankroll + sum(float(r.get("realized_pnl") or 0) for r in rows)
+    res = sb.table("settings").select("value").eq("key", "equity_peak").limit(1).execute()
+    peak = float((res.data[0]["value"] or {}).get("peak", 0)) if res.data else 0.0
+    if equity > peak:
+        sb.table("settings").upsert({"key": "equity_peak",
+                                     "value": {"peak": equity}}).execute()
+        return False
+    return equity < peak * (1 - s.max_drawdown)
+
+
+def _book_depth_shares(token_id: str) -> float | None:
+    """Total visible resting size (both sides) from the CLOB book. None on
+    any failure (caller fails closed)."""
+    import httpx
+    from api.services.polymarket_proxy import clob_base, proxy_headers
+    try:
+        r = httpx.get(f"{clob_base()}/book", params={"token_id": token_id},
+                      headers=proxy_headers(), timeout=10)
+        r.raise_for_status()
+        book = r.json() or {}
+        return (sum(float(x.get("size") or 0) for x in book.get("bids") or [])
+                + sum(float(x.get("size") or 0) for x in book.get("asks") or []))
+    except Exception:
+        log.exception("book depth fetch failed for %s", token_id[:16])
+        return None
 
 
 def aggregate_price_ceiling_ok(existing_avg_prices: list[float], new_price: float,

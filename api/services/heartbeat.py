@@ -20,7 +20,7 @@ class HeartbeatDaemon:
     def __init__(self):
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._heartbeat_id: str | None = None  # empty on first send (E4)
+        self._heartbeat_id: str = ""  # empty string on first send (E4)
         self.last_ok_ts: float | None = None
         self.consecutive_failures = 0
 

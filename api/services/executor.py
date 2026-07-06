@@ -76,7 +76,7 @@ class PaperExecutor:
             "executor": "paper", "token_id": signal.token_id,
             "post_only": True, "order_type": "GTC",
             "clob_order_id": f"paper-{uuid.uuid4()}",
-            "metadata": {**signal.metadata, "position_id": signal.metadata.get("position_id")},
+            "metadata": signal.metadata,
         }
         sb.table("orders").insert(row).execute()
         log.info("PAPER rest %s %s %.4f x %.0f (%s)", signal.side, signal.bracket,

@@ -28,12 +28,12 @@ _ORDER_EVENT_STATE = {
     "PLACEMENT": "open",
     "CANCELLATION": "cancelled",
 }
-# CLOB trade status -> our state (E6: MATCHED is provisional)
+# CLOB trade status -> our state (E6: MATCHED is provisional; FAILED is
+# handled explicitly in handle_user_message, never via this map)
 _TRADE_STATUS_STATE = {
     "MATCHED": "filled",
     "MINED": "filled",
     "CONFIRMED": "confirmed",
-    "FAILED": "open",  # settlement reverted - the order book position is gone but exposure isn't ours; flag loudly
 }
 
 
