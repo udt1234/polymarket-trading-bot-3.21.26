@@ -1,0 +1,18 @@
+[Unit]
+Description=Polymarket maker bot (API + engine)
+After=network-online.target chrony.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=polybot
+WorkingDirectory=/home/polybot/bot
+EnvironmentFile=/home/polybot/bot/.env
+ExecStart=/home/polybot/venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+# The CLOB heartbeat is the dead-man switch: if this process dies, the
+# exchange cancels all resting orders within ~15s.
+
+[Install]
+WantedBy=multi-user.target

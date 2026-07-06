@@ -21,6 +21,21 @@ def get_module_config(module_id: str, defaults: dict) -> dict:
     return merged
 
 
+def module_bankroll(module_id: str) -> float:
+    """The bankroll a module sizes against = its modules.budget row (the
+    playbook footgun fix: budget must BOUND sizing, not just display).
+    Falls back to the global bankroll setting when unset/unreadable."""
+    from api.config import get_settings
+    try:
+        res = (get_supabase().table("modules").select("budget")
+               .eq("id", module_id).limit(1).execute())
+        if res.data and res.data[0].get("budget") is not None:
+            return float(res.data[0]["budget"])
+    except Exception:
+        log.exception("budget read failed for %s", module_id)
+    return get_settings().bankroll
+
+
 def save_module_config(module_id: str, patch: dict, defaults: dict) -> dict:
     merged = get_module_config(module_id, defaults)
     merged.update(patch or {})

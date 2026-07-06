@@ -39,6 +39,13 @@ class Engine:
                                 hour="9,17", minute=0,
                                 timezone="America/New_York",
                                 id="daily-heartbeat")
+        from api.services.resolution import run_resolution_sweep
+        self._scheduler.add_job(run_resolution_sweep, "interval", minutes=30,
+                                id="resolution-sweep")
+        from api.services.retention import run_retention_cleanup
+        self._scheduler.add_job(run_retention_cleanup, "cron",
+                                hour=3, minute=30, timezone="UTC",
+                                id="retention-cleanup")
         self._scheduler.start()
         log.info("engine scheduler started (every %ss)", s.default_interval)
 
@@ -71,6 +78,12 @@ class Engine:
             sweep_stuck_closing()
         except Exception:
             log.exception("stuck-closing sweep failed")
+
+        # 2b. Hourly price snapshots (dashboard charts + model history).
+        try:
+            self._write_price_snapshots()
+        except Exception:
+            log.exception("price snapshot write failed")
 
         breaker = self._breaker_tripped(sb)
 
@@ -126,6 +139,34 @@ class Engine:
         except Exception:
             log.exception("live quote fetch failed")
         return quotes
+
+    def _write_price_snapshots(self) -> None:
+        """One mid-price row per live bracket per hour (upsert on the
+        unique (module_id, bracket, snapshot_hour) index; module_id NULL =
+        market-level snapshot shared by all modules)."""
+        from api.modules.shared import discovery
+        sb = get_supabase()
+        hour = datetime.now(timezone.utc).replace(minute=0, second=0,
+                                                  microsecond=0)
+        rows = []
+        for a in discovery.fetch_tweet_auctions():
+            for b in a["brackets"]:
+                bid, ask = b["best_bid"], b["best_ask"]
+                if bid is None and ask is None:
+                    continue
+                mid = (bid + ask) / 2 if bid is not None and ask is not None else (bid or ask)
+                rows.append({
+                    "module_id": None,
+                    "bracket": f"{a['slug']}|{b['label']}",
+                    "price": round(mid, 4),
+                    "snapshot_hour": hour.isoformat(),
+                    "dow": hour.weekday(),
+                    "hour_of_day": hour.hour,
+                })
+        if rows:
+            sb.table("price_snapshots").upsert(
+                rows, on_conflict="module_id,bracket,snapshot_hour",
+                ignore_duplicates=True).execute()
 
     def _breaker_tripped(self, sb) -> bool:
         s = get_settings()

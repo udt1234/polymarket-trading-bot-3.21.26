@@ -21,7 +21,9 @@ def counts_for_auction(tweet: dict, handle_user_id: str = ELON_USER_ID) -> bool:
     self-replies count. Pure replies to OTHERS do not. (Community reposts
     are excluded by xTracker but indistinguishable in raw fields - the
     xTracker cross-check absorbs that gap.)"""
-    reply_to = tweet.get("in_reply_to_user_id")
+    reply_to = (tweet.get("in_reply_to_user_id")
+                or tweet.get("inReplyToUserId")
+                or tweet.get("in_reply_to_user_id_str"))
     if reply_to and str(reply_to) != str(handle_user_id):
         return False
     return True

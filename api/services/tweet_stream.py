@@ -1,10 +1,11 @@
 """Tweet ingestion stream (BUILD_SPEC C4, B7 step 1) - the hot-path trigger.
 
-TwitterAPI.io filtered WebSocket (paid, sub-500ms). NOT ACTIVE until Sir
-buys a key: set TWITTERAPI_IO_KEY plus TWITTERAPI_WS_URL (the exact
-filtered-stream WS URL from twitterapi.io docs for rule from:elonmusk).
-Endpoint shape must be VERIFIED against their docs when the key exists -
-do not guess it into production.
+TwitterAPI.io filtered WebSocket (paid, sub-500ms). Endpoint verified
+against twitterapi.io docs 2026-07-06:
+  WS:  wss://ws.twitterapi.io/twitter/tweet/websocket  (x-api-key header)
+  Msg: {"event_type": "tweet", "rule_id": ..., "tweets": [{...}]}
+NOT ACTIVE until Sir buys a key (TWITTERAPI_IO_KEY) and the filter rule
+`from:elonmusk` is registered (scripts/setup_tweet_rule.py).
 
 Feed hygiene (playbook 2026-07-03): drop the first (possibly cached) tick,
 require fresh timestamps, guard against stale/duplicate tweet ids.
@@ -33,10 +34,11 @@ class TweetStream:
 
     async def run(self):
         import websockets
-        url = os.getenv("TWITTERAPI_WS_URL", "")
+        url = os.getenv("TWITTERAPI_WS_URL",
+                        "wss://ws.twitterapi.io/twitter/tweet/websocket")
         key = os.getenv("TWITTERAPI_IO_KEY", "")
-        if not url or not key:
-            log.warning("TweetStream dormant: TWITTERAPI_WS_URL / TWITTERAPI_IO_KEY unset")
+        if not key:
+            log.warning("TweetStream dormant: TWITTERAPI_IO_KEY unset")
             return
         backoff = 1
         first_after_connect = True

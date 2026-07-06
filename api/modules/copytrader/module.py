@@ -36,9 +36,9 @@ class CopytraderModule(BaseModule):
         save_module_config(module_id, config)
 
     async def _evaluate_async(self, module_id: str) -> list:
-        from api.config import get_settings
         from api.dependencies import get_supabase
         from api.modules.shared import discovery, fair_value, tweet_count, windows
+        from api.modules.shared.config_store import module_bankroll
         from api.services.position_manager import open_positions
 
         cfg = self.get_config(module_id)
@@ -57,7 +57,7 @@ class CopytraderModule(BaseModule):
         # Which LIVE Elon tweet brackets is the whale active in?
         auctions = discovery.fetch_tweet_auctions(slug_contains="elon-musk-of-tweets")
         signals: list[Signal] = []
-        bankroll = get_settings().bankroll
+        bankroll = module_bankroll(module_id)
         sb = get_supabase()
         resting = (sb.table("orders").select("bracket,market_id")
                    .eq("module_id", module_id).eq("side", "BUY")

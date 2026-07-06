@@ -55,8 +55,8 @@ class S2BasketHoldModule(BaseModule):
         ]
 
     async def _evaluate_async(self, module_id: str) -> list:
-        from api.config import get_settings
         from api.dependencies import get_supabase
+        from api.modules.shared.config_store import module_bankroll
         from api.services.position_manager import open_positions
 
         cfg = self.get_config(module_id)
@@ -71,7 +71,7 @@ class S2BasketHoldModule(BaseModule):
                    .eq("module_id", module_id).eq("side", "BUY")
                    .in_("status", ["submitted", "open"]).execute().data) or []
         resting_brackets = {r["bracket"] for r in resting}
-        bankroll = get_settings().bankroll
+        bankroll = module_bankroll(module_id)
         signals = decision.build_entry_signals(module_id, auction, cfg, bankroll,
                                                held, resting_brackets)
         signals += decision.build_salvage_exits(module_id, auction, cfg, held)
