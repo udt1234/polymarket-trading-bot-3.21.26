@@ -61,10 +61,7 @@ class PreSignLoop:
         self._stop.set()
 
     def _run(self):
-        from py_clob_client.clob_types import OrderArgs
-        from py_clob_client.order_builder.constants import BUY
-        from api.services.clob import get_clob_client, validate_order
-        client = get_clob_client()
+        from api.services.clob import create_signed_post_only
         while not self._stop.wait(REFRESH_S):
             base = self.current_count
             if base is None:
@@ -74,11 +71,9 @@ class PreSignLoop:
                     ladder = self.build_ladder(count)
                     if not ladder:
                         continue
-                    signed = []
-                    for token_id, price, size in ladder["orders"]:
-                        price, size = validate_order(price, size, ladder.get("tick", 0.01))
-                        signed.append(client.create_order(
-                            OrderArgs(token_id=token_id, price=price, size=size, side=BUY)))
+                    signed = [create_signed_post_only(token_id, "BUY", price, size,
+                                                      tick=ladder.get("tick", 0.01))
+                              for token_id, price, size in ladder["orders"]]
                     self.pool.put(count, {"signed": signed,
                                           "condition_id": ladder["condition_id"],
                                           "signed_at": time.time()})
@@ -95,17 +90,14 @@ class HotPath:
         self.last_latency_ms: float | None = None
 
     def fire(self, new_count: int) -> bool:
-        from py_clob_client.clob_types import OrderType, PostOrdersArgs
-        from api.services.clob import get_clob_client
-        client = get_clob_client()
+        from api.services import clob
         entry = self.presign.pool.take(new_count)
         if entry is None:
             self.presign.current_count = new_count
             return False  # pool miss - slow path will requote next cycle
         t0 = time.perf_counter()
-        client.cancel_market_orders(market=entry["condition_id"])
-        client.post_orders([PostOrdersArgs(order=s, orderType=OrderType.GTC,
-                                           postOnly=True) for s in entry["signed"]])
+        clob.cancel_market(market=entry["condition_id"])
+        clob.post_signed(entry["signed"])
         self.last_latency_ms = (time.perf_counter() - t0) * 1000
         self.presign.current_count = new_count
         log.info("HOT PATH fired count=%d in %.1f ms", new_count, self.last_latency_ms)

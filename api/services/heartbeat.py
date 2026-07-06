@@ -1,12 +1,12 @@
-"""Heartbeat daemon (BUILD_SPEC E4) - mandatory whenever real orders rest.
+"""Heartbeat daemon (BUILD_SPEC E4) - DORMANT pending SDK verification.
 
-The CLOB cancels ALL open orders if no valid heartbeat arrives within 10s
-(+5s buffer). We send every 2.5s from an isolated lightweight thread so a
-busy engine loop can never starve it. That aggressive cadence leaves ~4
-consecutive misses of headroom instead of one.
-
-This is also our dead-man switch: if this process dies, the exchange
-flattens our resting quotes for us.
+The heartbeat-or-cancel feature is OPT-IN: the exchange only cancels all
+orders when heartbeats were STARTED and then stop (old SDK docstring).
+The archived py_clob_client exposed POST /heartbeat; the new unified
+polymarket-client SDK has no such method (its heartbeats are WS ping/pong).
+Until the endpoint story is verified against current docs, DO NOT start
+this daemon - accidentally starting-then-missing heartbeats would cancel
+the whole book. Not sending any is the safe default. Revisit at Step 7.
 """
 import logging
 import threading
@@ -39,22 +39,11 @@ class HeartbeatDaemon:
         log.info("Heartbeat daemon stopped")
 
     def _run(self):
-        import time
-        from api.services.clob import get_clob_client
-        client = get_clob_client()
-        while not self._stop.wait(INTERVAL_S):
-            try:
-                resp = client.post_heartbeat(self._heartbeat_id)
-                if isinstance(resp, dict) and resp.get("heartbeat_id"):
-                    self._heartbeat_id = resp["heartbeat_id"]
-                self.last_ok_ts = time.time()
-                self.consecutive_failures = 0
-            except Exception as e:
-                # Do NOT reset _heartbeat_id on failure - the server may still
-                # consider the old id valid. Keep firing; a 15s gap means the
-                # exchange already cancelled everything (fail-closed for us).
-                self.consecutive_failures += 1
-                log.error("Heartbeat failed (%d in a row): %s", self.consecutive_failures, e)
+        # DORMANT: the unified polymarket-client SDK exposes no exchange
+        # heartbeat method. Once heartbeats START, missing one cancels ALL
+        # orders, so never start them half-supported. See module docstring.
+        log.warning("Heartbeat daemon is dormant (no SDK endpoint) - not sending heartbeats")
+        self._stop.wait()
 
 
 heartbeat_daemon = HeartbeatDaemon()

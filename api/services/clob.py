@@ -1,29 +1,29 @@
-"""CLOB V2 client wrapper (BUILD_SPEC E1-E3, J4).
+"""CLOB client wrapper (BUILD_SPEC E1-E3, J4) on the official polymarket-client
+SDK (Polymarket py-sdk).
 
-Every order in this codebase goes through place_post_only(): post-only limit
-orders, GTC/GTD only. The bot is a MAKER, never a taker. There is no code
-path that submits a marketable/FOK/FAK order.
+IMPORTANT (discovered 2026-07-06 on the Dublin box): py_clob_client is
+ARCHIVED and can no longer place orders - every order it signs is rejected
+with 'invalid order version'. The replacement is the unified SDK
+`polymarket-client` (github.com/Polymarket/py-sdk), which signs current-
+version orders, auto-detects wallet type, resolves tick size/neg-risk per
+token, and derives L2 credentials from the private key.
 
-V2 notes (verified 2026-07-01/03):
-- py_clob_client >= 0.34 signs V2 (exchange domain "2", ms timestamp, no nonce).
-- post_only=True: would-cross -> rejected INVALID_POST_ONLY_ORDER (never takes).
-- HTTP 425 = matching-engine restart: back off, pause new entries; cancels
-  still accepted and the engine runs post-only for ~2 min (favors us).
-- Use typed dataclasses (OrderArgs, ApiCreds); dicts crash later in the SDK.
+Every order in this codebase goes through place_post_only(): post-only
+limit orders only. The bot is a MAKER, never a taker - there is no code
+path that submits a market/FAK order.
 """
 import logging
 import math
 import time
 
 from api.config import get_settings
-from api.services.polymarket_proxy import clob_host
 
 log = logging.getLogger(__name__)
 
-CHAIN_ID = 137  # Polygon
-DEFAULT_TICK = 0.01  # standard markets; 0.001 on neg-risk markets
+DEFAULT_TICK = 0.01  # standard markets; 0.001 on neg-risk (SDK re-validates)
 MIN_SHARES = 5.0
 MIN_NOTIONAL = 1.0  # dollars
+GTD_MIN_HORIZON_S = 180  # SDK: expiration must be >= 3 min out
 
 _client = None
 
@@ -33,25 +33,18 @@ class OrderValidationError(ValueError):
 
 
 def get_clob_client():
-    """Singleton py_clob_client. Raises when credentials are missing -
-    callers must not fall back to an unauthenticated client silently."""
+    """Singleton SecureClient. Credentials are DERIVED from the private key
+    (no separate api key/secret/passphrase needed). Raises when the key is
+    missing - never falls back to an unauthenticated client."""
     global _client
     if _client is None:
         s = get_settings()
-        if not all([s.polymarket_api_key, s.polymarket_secret,
-                    s.polymarket_passphrase, s.polymarket_private_key]):
-            raise RuntimeError("Missing Polymarket credentials (POLYMARKET_* env)")
-        from py_clob_client.client import ClobClient
-        from py_clob_client.clob_types import ApiCreds
-        _client = ClobClient(
-            host=clob_host(),
-            key=s.polymarket_private_key,
-            chain_id=CHAIN_ID,
-            creds=ApiCreds(
-                api_key=s.polymarket_api_key,
-                api_secret=s.polymarket_secret,
-                api_passphrase=s.polymarket_passphrase,
-            ),
+        if not s.polymarket_private_key:
+            raise RuntimeError("Missing POLYMARKET_PRIVATE_KEY")
+        from polymarket import SecureClient
+        _client = SecureClient.create(
+            private_key=s.polymarket_private_key,
+            wallet=s.polymarket_wallet_address or None,
         )
     return _client
 
@@ -65,9 +58,8 @@ def snap_price(price: float, tick: float = DEFAULT_TICK) -> float:
 
 
 def validate_order(price: float, size: float, tick: float = DEFAULT_TICK) -> tuple[float, float]:
-    """Enforce the three CLOB minimums at build time (E3):
-    price on tick, >= 5 shares, >= $1 notional. Returns (price, size)
-    with size rounded to whole shares. Raises OrderValidationError."""
+    """Enforce the CLOB minimums at build time (E3): price on tick,
+    >= 5 shares, >= $1 notional. Returns (price, whole-share size)."""
     price = snap_price(price, tick)
     size = float(math.floor(size))
     if size < MIN_SHARES:
@@ -86,86 +78,108 @@ def _with_backoff(fn, *args, attempts: int = 4, **kwargs):
         try:
             return fn(*args, **kwargs)
         except Exception as e:
-            status = getattr(e, "status_code", None)
+            status = getattr(e, "status_code", None) or getattr(e, "status", None)
             retryable = status in (425, 500, 502, 503, 504) or "425" in str(e)
             if not retryable or i == attempts - 1:
                 raise
-            log.warning("CLOB %s retryable (%s), backoff %.1fs", fn.__name__, e, delay)
+            log.warning("CLOB %s retryable (%s), backoff %.1fs",
+                        getattr(fn, "__name__", fn), e, delay)
             time.sleep(delay)
             delay *= 2
     return None
 
 
+def _dump(model) -> dict:
+    if model is None:
+        return {}
+    if isinstance(model, dict):
+        return model
+    try:
+        return model.model_dump(mode="json", by_alias=False)
+    except Exception:
+        return {"repr": repr(model)}
+
+
 def place_post_only(token_id: str, side: str, price: float, size: float,
                     tick: float = DEFAULT_TICK, expires_in_s: int | None = None) -> dict:
-    """Place a post-only limit order. side: 'BUY' | 'SELL'.
-    expires_in_s -> GTD with expiration = now + 60 + N (60s safety threshold,
-    E2); None -> GTC. Returns the raw CLOB response dict (contains orderID).
-    The response is an ACK, not a fill (B1)."""
-    from py_clob_client.clob_types import OrderArgs, OrderType
-    from py_clob_client.order_builder.constants import BUY, SELL
-
+    """Place a post-only limit order. side: 'BUY' | 'SELL'. expires_in_s
+    -> GTD with expiration >= now + 3 min (SDK minimum); None -> GTC.
+    Returns {'orderID', 'success', ...}. The response is an ACK, not a
+    fill (B1)."""
     price, size = validate_order(price, size, tick)
-    args = OrderArgs(
-        token_id=token_id,
-        price=price,
-        size=size,
-        side=BUY if side.upper() == "BUY" else SELL,
-    )
+    kwargs: dict = {}
     if expires_in_s is not None:
-        args.expiration = str(int(time.time()) + 60 + int(expires_in_s))
-        order_type = OrderType.GTD
-    else:
-        order_type = OrderType.GTC
+        kwargs["expiration"] = int(time.time()) + max(int(expires_in_s), 0) + GTD_MIN_HORIZON_S
     client = get_clob_client()
-    signed = client.create_order(args)
-    resp = _with_backoff(client.post_order, signed, orderType=order_type, post_only=True)
+    resp = _with_backoff(
+        client.place_limit_order, token_id=token_id, price=price, size=size,
+        side=side.upper(), post_only=True, **kwargs)
+    out = _dump(resp)
+    out.setdefault("orderID", getattr(resp, "order_id", None))
     log.info("post_only %s %s %.4f x %.0f -> %s", side, token_id[:16], price, size,
-             (resp or {}).get("orderID") or resp)
-    return resp
+             out.get("orderID"))
+    return out
+
+
+def create_signed_post_only(token_id: str, side: str, price: float, size: float,
+                            tick: float = DEFAULT_TICK):
+    """Sign WITHOUT posting - the pre-sign loop's builder (E7)."""
+    price, size = validate_order(price, size, tick)
+    return get_clob_client().create_limit_order(
+        token_id=token_id, price=price, size=size, side=side.upper(),
+        post_only=True)
+
+
+def post_signed(signed_orders: list) -> list[dict]:
+    """Fire pre-signed orders (hot path step 2)."""
+    resp = get_clob_client().post_orders(signed_orders)
+    return [_dump(r) for r in (resp or [])]
 
 
 def cancel_order(order_id: str) -> dict:
-    return _with_backoff(get_clob_client().cancel, order_id)
+    return _dump(_with_backoff(get_clob_client().cancel_order, order_id=order_id))
 
 
 def cancel_orders(order_ids: list[str]) -> dict:
-    return _with_backoff(get_clob_client().cancel_orders, order_ids)
+    return _dump(_with_backoff(get_clob_client().cancel_orders, order_ids=order_ids))
 
 
 def cancel_market(asset_id: str = "", market: str = "") -> dict:
     """Batch-cancel all our resting orders in one market - the hot path's
     single cancel call (E7)."""
-    return _with_backoff(get_clob_client().cancel_market_orders,
-                         market=market, asset_id=asset_id)
+    return _dump(_with_backoff(get_clob_client().cancel_market_orders,
+                               market=market or None, token_id=asset_id or None))
 
 
 def cancel_all() -> dict:
-    return _with_backoff(get_clob_client().cancel_all)
+    return _dump(_with_backoff(get_clob_client().cancel_all))
 
 
 def get_open_orders(asset_id: str | None = None) -> list[dict]:
-    from py_clob_client.clob_types import OpenOrderParams
-    params = OpenOrderParams(asset_id=asset_id) if asset_id else None
-    resp = _with_backoff(get_clob_client().get_orders, params)
-    return resp or []
+    kwargs = {"token_id": asset_id} if asset_id else {}
+    try:
+        resp = _with_backoff(get_clob_client().list_open_orders, **kwargs)
+    except TypeError:
+        resp = _with_backoff(get_clob_client().list_open_orders)
+    items = list(resp or [])
+    return [_dump(o) for o in items]
 
 
 def get_order(order_id: str) -> dict:
-    return _with_backoff(get_clob_client().get_order, order_id)
+    return _dump(_with_backoff(get_clob_client().get_order, order_id=order_id))
 
 
 def get_trades(**kwargs) -> list[dict]:
-    from py_clob_client.clob_types import TradeParams
-    params = TradeParams(**kwargs) if kwargs else None
-    resp = _with_backoff(get_clob_client().get_trades, params)
-    return resp or []
+    resp = _with_backoff(get_clob_client().list_trades, **kwargs)
+    return [_dump(t) for t in (resp or [])]
 
 
 def get_collateral_balance() -> dict:
-    """Read the wallet's collateral (pUSD) balance/allowance at the CLOB."""
-    from py_clob_client.clob_types import BalanceAllowanceParams, AssetType
-    return _with_backoff(
-        get_clob_client().get_balance_allowance,
-        BalanceAllowanceParams(asset_type=AssetType.COLLATERAL),
-    )
+    """Wallet collateral balance/allowances at the CLOB (base units)."""
+    client = get_clob_client()
+    try:
+        resp = client.get_balance_allowance(asset_type="COLLATERAL")
+    except Exception:
+        from polymarket.types import AssetType  # enum fallback
+        resp = client.get_balance_allowance(asset_type=AssetType.COLLATERAL)
+    return _dump(resp)

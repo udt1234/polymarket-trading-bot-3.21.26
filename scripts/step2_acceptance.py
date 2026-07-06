@@ -43,22 +43,15 @@ def use_manual_wallet() -> None:
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k, v.strip().strip('"'))
     # shared.env was loaded after the import-time patch call - re-arm it so
-    # the proxy vars just placed in os.environ actually take effect.
+    # any proxy vars just placed in os.environ take effect (reads only).
     from api.services import polymarket_proxy
     polymarket_proxy._PATCHED = False
     polymarket_proxy.install_httpx_proxy_patch()
-    from py_clob_client.client import ClobClient
-    from py_clob_client.clob_types import ApiCreds, BalanceAllowanceParams, AssetType
-    from api.services.polymarket_proxy import clob_host
-    client = ClobClient(
-        host=clob_host(), key=os.environ["POLY_MANUAL_PRIVATE_KEY"], chain_id=137,
-        creds=ApiCreds(api_key=os.environ["POLY_MANUAL_API_KEY"],
-                       api_secret=os.environ["POLY_MANUAL_SECRET"],
-                       api_passphrase=os.environ["POLY_MANUAL_PASSPHRASE"]),
-        signature_type=1, funder=os.environ["POLY_MANUAL_WALLET_ADDRESS"])
+    from polymarket import SecureClient
+    client = SecureClient.create(
+        private_key=os.environ["POLY_MANUAL_PRIVATE_KEY"],
+        wallet=os.environ["POLY_MANUAL_WALLET_ADDRESS"])
     clob._client = client
-    clob.get_collateral_balance = lambda: client.get_balance_allowance(
-        BalanceAllowanceParams(asset_type=AssetType.COLLATERAL, signature_type=1))
     WS_AUTH = {"apiKey": os.environ["POLY_MANUAL_API_KEY"],
                "secret": os.environ["POLY_MANUAL_SECRET"],
                "passphrase": os.environ["POLY_MANUAL_PASSPHRASE"]}

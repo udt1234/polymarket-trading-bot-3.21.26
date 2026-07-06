@@ -6,4 +6,4 @@ supabase>=2.11.0
 apscheduler>=3.10.4
 httpx[http2]>=0.28.0
 websockets>=14.0
-py-clob-client>=0.34.4
+polymarket-client==0.1.0b13
