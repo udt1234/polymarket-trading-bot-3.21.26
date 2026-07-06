@@ -1,32 +1,34 @@
-import type { Config } from "tailwindcss"
+import type { Config } from "tailwindcss";
 
 const config: Config = {
-  darkMode: "class",
-  content: [
-    "./app/**/*.{ts,tsx}",
-    "./components/**/*.{ts,tsx}",
-  ],
+  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        card: { DEFAULT: "hsl(var(--card))", foreground: "hsl(var(--card-foreground))" },
-        primary: { DEFAULT: "hsl(var(--primary))", foreground: "hsl(var(--primary-foreground))" },
-        muted: { DEFAULT: "hsl(var(--muted))", foreground: "hsl(var(--muted-foreground))" },
-        accent: { DEFAULT: "hsl(var(--accent))", foreground: "hsl(var(--accent-foreground))" },
-        destructive: { DEFAULT: "hsl(var(--destructive))", foreground: "hsl(var(--destructive-foreground))" },
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        success: "#16A34A",
+        term: {
+          bg: "#0a0e14",
+          panel: "#10151d",
+          border: "#1c2432",
+          text: "#c9d4e3",
+          muted: "#5c6b82",
+          green: "#22c55e",
+          red: "#ef4444",
+          amber: "#f59e0b",
+          accent: "#38bdf8",
+        },
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        mono: [
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "Consolas",
+          "monospace",
+        ],
       },
     },
   },
   plugins: [],
-}
+};
 
-export default config
+export default config;
