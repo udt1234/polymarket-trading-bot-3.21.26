@@ -86,3 +86,4 @@ NEW_BOT_CREDENTIALS.md
 # analysis log backups (data, local only)
 *.csv.bak
 _DataMetricPulls/pacing_backtest/audit_out/
+*.env.local.bak*
