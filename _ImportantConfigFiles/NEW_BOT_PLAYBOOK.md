@@ -17,7 +17,7 @@ Master build-notes Google Doc (single working reference, includes recommended AN
 
 ### Verified Polymarket CLOB V2 execution specs (confirmed vs official docs 2026-07-01)
 - CLOB V2 live 2026-04-28. EIP-712 EXCHANGE domain version = "2"; AUTH ClobAuthDomain stays "1". Nonce removed -> millisecond timestamp for uniqueness. Sign V1 -> order_version_mismatch (hard reject).
-- Collateral = pUSD (Polygon ERC-20, 1:1 USDC); wrap USDC.e via the Collateral Onramp. V2 Exchange = 0xE111180000d2663C0091e4f400237545B87B996B; V2 Neg-Risk = 0xe2222d279d744050d28e00520010520000310F59 (one-time approve both for pUSD + ERC-1155).
+- Collateral = pUSD (Polygon ERC-20, 1:1 USDC); wrap USDC.e via the Collateral Onramp. Verified addresses (PolygonScan + docs.polymarket.com 2026-07-03): V2 CTF Exchange = 0xE111180000d2663C0091e4f400237545B87B996B; V2 Neg-Risk = 0xe2222d279d744050d28e00520010520000310F59; pUSD = 0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB; CTF = 0x4D97DCd97eC945f40cF65F87097ACe5EA0476045 (one-time approve both exchanges for pUSD + ERC-1155). WARNING: the KOL "Quant Analysis" report's CTF address 0x4D97Df0726... is WRONG; verify every address on PolygonScan before wiring - a wrong one loses funds.
 - post_only boolean: would-cross -> INVALID_POST_ONLY_ORDER (never takes); with FOK/FAK -> INVALID_POST_ONLY_ORDER_TYPE; GTC/GTD only. Native mode for us.
 - Heartbeat: send every 5s (field heartbeat_id, empty on first); no valid heartbeat within 10s (+5s buffer) = ALL open orders cancelled. Mandatory (whole book rests).
 - 250ms taker delay: ONLY selected crypto/finance up-down markets (since 2026-06-05), NOT tweet markets, and irrelevant to us (never take). GTD expiration = now + 60 + N seconds.
@@ -51,6 +51,34 @@ Master build-notes Google Doc (single working reference, includes recommended AN
 
 ### Open questions before build
 - Pre-signed order staleness (V2 bakes a ms timestamp at signing; confirm the stale-reject window; may need just-in-time signing). Real maker fill-rate in thin books. Capital funding of concurrent resting quotes (pUSD wrap + Polygon gas). VPS key security. Geoblock-bypass ToS call.
+
+## Session 2026-07-03 - external KOL playbooks reviewed (3 X posts)
+
+Context: all evaluated FOR OUR BOT = Elon tweets. Posts 1 (@0xSurferX) + 3 (@0x_Punisher) optimize CRYPTO 5-min BTC/ETH/SOL/XRP Up-Down markets (a different game, both part KOL Telegram funnel); Post 2 (@Gustafssonkotte) is a rigorous negative result on the same crypto market and is the most credible. Split execution discipline (transfers) from crypto-market machinery (does not).
+
+### ADOPT (execution discipline, transfers to Elon)
+- LEAN HOT PATH: zero JSON/serialize/logging/string-format/branching on the hot path; clone the pre-built request and send, nothing else. Extends [[lesson-presign-hotpath]].
+- GAS OPS: keep Polygon gas (POL) funded or a winning redemption FAILS on-chain and looks like a loss; an unpaid win is NOT a loss (reconcile before counting a loss).
+- FEED HYGIENE: warmup/quality gate (require N fresh ticks + no huge jump before trusting a window, else skip), stale-tick guard, drop the first (cached) tick, stagger socket starts. Cheap defense for the recorder + live book.
+- COPYTRADER: IGNORE NegRisk 0c / 100%-win wallets (Polymarket's own infra, PnL=0); never copy them.
+- EFFICIENT-MARKET WALL reaffirmed by Post 2's negative result: 76% WR still lost because break-even needs WR >= entry price; the 5-min BTC book is efficient and losses at the strike are an irreducible coin flip. VALIDATES our thesis: don't chase prediction/win-rate; edge = maker rebates + being right + being first + a LESS efficient market. "Buy limit is a CEILING not a floor" - maker-only + post-only already neutralizes this slippage-floor bug.
+
+### DO NOT BUILD for the tweet bot (kept for QA; relevant ONLY if S5 crypto-style sweeping ever goes live and must win a microsecond FIFO race)
+- CPU core pinning (HFT-grade, premature, meaningless for sub-second tweet reaction).
+- The 100-300 parallel "god-tier" socket FARM that spawns/kills to race for the first unique tick (a microsecond crypto-sweep race; we are maker-only, sub-second, and TwitterAPI.io is our single leading signal).
+- Chainlink/Binance CVD + OBI order-flow fusion (crypto-only; our Elon analog = TwitterAPI.io already leads the CLOB reprice).
+- Drawdown price-point panic maps (crypto price-behavior specific; does not transfer to tweet-count brackets).
+- EV-scan across BTC/ETH/SOL/XRP (we already compute EV across Elon BRACKETS + size by edge; same idea, our market).
+
+### Already in our design (validated by the posts, no change)
+- On-chain is truth / never mark filled on submission; adverse selection = #1 maker risk; record own L2 ticks; realistic backtests (latency/depth/fills/slippage); late entry more legible; maker+ladder bots dominate profits, directional least profitable; cross-check fishy 1c resolutions (oracle lag); sweeper mechanics = our S5.
+
+### External AI QA of the Full Build Spec (2026-07-03) - triaged
+- ADOPTED: (1) absolute cent-based copy-trade drift 2c NOT 10% (shares are 0-1 bounded); (2) S2 salvage exit - post-only sell a dead bracket (<0.03 fair value) to recycle collateral vs locking it to resolution; (3) matching-engine restart handling VERIFIED (CLOB returns HTTP 425 during restart then runs POST-ONLY for ~2min; announced ~2d ahead, NOT a fixed Tuesday schedule - the 2-min post-only window FAVORS us) + tighter 2-3s heartbeat in an isolated thread; (4) pre-sign horizon ~30s (auth clock-drift limit) - sign JIT, keep VPS clock UTC/NTP-synced; (5) TCP_NODELAY on the exec socket.
+- FLAGGED FOR SIR'S DECISION: copytrader adverse-selection paradox (a passive post-only mirror of a whale is adversely selected - fills only when the market moves against the whale = catches losers, misses winners). Resolve BEFORE building copytrader live: either (a) narrow taker exception to lock the same entry, or (b) reframe as replicating a market-maker's two-sided quoting (maker-native) rather than mirroring fills. A pure passive mirror of a directional whale is NOT recommended.
+- REJECTED (already decided): Rust hot-path rewrite (15-40ms Python overhead real but not decisive for sub-second tweet markets - not a microsecond FIFO race; keep Python + optimize hot path; revisit only for microsecond crypto sweep). UDS/SHM local IPC (premise wrong: recorder writes PARQUET not Supabase so no DB-pool pressure; hot path is ONE in-memory process so nothing to pass between processes; use Supabase POOLER for the slow path + scale tier).
+- N/A: dynamic taker fee (maker-only = zero fee; only for an S4 taker exception, pull via GET /clob-markets/{conditionId}); struct asymmetry (remove nonce/feeRateBps/taker/expiration from signed struct, taker+expiration in outer JSON) - already in spec.
+- All folded into Full Build Spec doc Part K: https://docs.google.com/document/d/1TG4tdWR07Ob-vm4MD9dJpomoFwoIR8e5CUka3OvkLfM/edit
 
 ## Session 2026-06-29 (latest) - newest findings (supersede older bullets on conflict)
 

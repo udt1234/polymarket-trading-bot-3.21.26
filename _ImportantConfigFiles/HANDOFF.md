@@ -1,5 +1,19 @@
 # PolyMarket Bot — Handoff
 
+## 🏗️ CURRENT: New maker-only bot build spec (2026-07-03)
+
+Full self-contained build spec (hand to a dev): https://docs.google.com/document/d/1TG4tdWR07Ob-vm4MD9dJpomoFwoIR8e5CUka3OvkLfM/edit (Parts A-O). Plain-English: 1yEkXd7xQe3-frnntb_Oh4617kQ5lb_0JRmY41wB9oKo. Diagram + everything else in memory `new_bot_master_build_2026_07_01` and `NEW_BOT_PLAYBOOK.md`.
+
+**Locked decisions:** MAKER-ONLY, post-only limit orders, never takes. Ship first (paper): S2 Basket-Hold + Copytrader. Copytrader = OPTION B (2026-07-03): a MAKER-QUOTING module using a proven MM whale only as a market/bracket SELECTOR, quoting its own two-sided post-only limits (NOT a passive fill-mirror, which is adversely selected). Cut Spike. Gated behind ~July-9 L2 backtest: S4 finish-line, S1, S3, speed/overreaction. S5 sweeper ON HOLD.
+
+**Hosting:** now = Railway EU-West (Amsterdam) + Cloudflare Worker proxy for the geoblock (good enough for sub-second maker). Dublin VPS (AWS eu-west-1) is GATED, only for the microsecond crypto sweep.
+
+**DEFERRED - Rust hot path for the crypto sweep:** if/when we test the 3-second sweep on crypto Up/Down (BTC/ETH), it slots in as a new module but needs (a) its own crypto price feed + resolution clock and (b) the microsecond speed stack: port ONLY the hot-path execution worker to Rust (polymarket_client_sdk_v2 or polyfill-rs) on the Dublin VPS. Python loses a FIFO queue race by 15-40ms. Build only after the July-9 backtest justifies it. Everything else stays Python + maker-only.
+
+**Dashboard:** upgrade the read-only Next.js dashboard to a TradingView-style live terminal (lightweight-charts): per-bracket charts, live book depth with OUR resting orders overlaid, positions + P&L, fills tape, per-module health + start/stop toggles. Behind a login.
+
+**Pre-build gaps closed 2026-07-03:** paper/prod Supabase isolation; on-chain redemption/claim flow + gas reserve; API rate-limit backoff; capital/funding plan; concurrent-auction handling; VPS key security. External-AI QA of the spec triaged in Part K.
+
 ## 🧭 NEXT STEPS / PARKED (2026-07-02) — cross-market expansion (do AFTER Elon is shipped)
 
 The reconstruction engine (brackets -> implied fair value) is validated and market-agnostic, and Elon is efficient, so the real upside is OTHER markets. Parked, focus is Elon right now:
