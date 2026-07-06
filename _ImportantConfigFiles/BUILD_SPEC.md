@@ -169,18 +169,18 @@ Estimate fair value: for each bracket, its probability of being the winner given
 - One-time on-chain: approve the V2 CTF Exchange + V2 Negative Risk Exchange for pUSD + ERC-1155 conditional tokens (addresses in the appendix).
 - Optional sub-wallets (one per live strategy) for risk isolation. Do NOT build nonce-sequencing (V2 removed the nonce).
 
-## E2. Signing orders (CLOB V2)
-- CLOB V2 live 2026-04-28. EIP-712 typed data. EXCHANGE domain version = "2"; AUTH ClobAuthDomain stays "1" (crossing them = immediate auth failure).
-- NO nonce field. Uniqueness = a millisecond timestamp in the signed struct. Signing V1 -> `order_version_mismatch` (hard reject).
-- Use py_clob_client. Typed dataclasses: `OrderArgs(token_id, price, size, side)`, `ApiCreds(api_key, api_secret, api_passphrase)`. Dicts crash later with AttributeError.
-- Struct asymmetry: nonce, feeRateBps, taker, expiration are REMOVED from the signed struct; taker + expiration must still be passed in the outer JSON body of POST /order.
-- GTD expiration = `now + 60 + N` seconds (60s minimum safety threshold).
+## E2. Signing orders (CORRECTED 2026-07-06 - verified live from Dublin)
+- **py_clob_client is ARCHIVED and NON-FUNCTIONAL for orders**: every version (incl. latest 0.34.6) signs an order the CLOB rejects with `invalid order version`. Verified with a real signed order 2026-07-06.
+- **Use the official unified SDK `polymarket-client` (github.com/Polymarket/py-sdk, beta)**: `SecureClient.create(private_key=..., wallet=<deposit wallet>)` derives L2 credentials automatically, auto-detects wallet type (EOA/proxy/safe), and resolves tick size + neg-risk per token. `create_limit_order(..., post_only=True)` signs without posting (the pre-sign loop); `place_limit_order(...)` signs + posts; `post_orders([...])` fires a pre-signed batch; `cancel_market_orders(market=...)` is the hot-path batch cancel.
+- GTD expiration must be a Unix timestamp >= 3 MINUTES in the future (SDK-enforced), not the old 60s rule.
+- Acceptance PASS 2026-07-06 from the Dublin box: post-only rest -> user-WS PLACEMENT -> cancel -> CANCELLATION, orders row lifecycle correct.
 
 ## E3. Post-only limit orders (our only order type)
 - Set `post_only = true` on every order. Would-cross -> rejected `INVALID_POST_ONLY_ORDER` (never takes). With FOK/FAK -> `INVALID_POST_ONLY_ORDER_TYPE`. Works only with GTC/GTD.
 - Validate all three CLOB minimums at build time: >=5 shares, >=$1 notional, price on the tick (1c standard; 0.001 neg-risk). `shares = round(notional / price)`. Snap price to tick.
 
-## E4. Heartbeat (mandatory)
+## E4. Heartbeat (CORRECTED 2026-07-06: OPT-IN, currently dormant)
+- The cancel-on-missed-heartbeat only applies once heartbeats are STARTED (old SDK docstring). The unified polymarket-client SDK exposes NO exchange heartbeat method, so the bot does NOT send heartbeats (daemon dormant) - starting then missing them would cancel the whole book. Re-verify at Step 7; original spec below for when it returns.
 - Send a heartbeat every 2 to 3 seconds (field heartbeat_id, empty on first), in an isolated lightweight thread. No valid heartbeat within 10s (+5s buffer) -> ALL open orders cancelled (5s leaves only a one-miss buffer; 2-3s is safer).
 - MATCHING-ENGINE RESTARTS (verified): during a restart the CLOB returns HTTP 425 (Too Early), then runs POST-ONLY for ~2 minutes (cancels accepted, non-post-only rejected with 503). Announced ~2 days ahead via Discord/Telegram; no fixed public schedule. Handle 425 with exponential-backoff retry and pause new entries. The 2-min post-only window FAVORS us (we are already post-only while takers are locked out).
 

@@ -147,7 +147,7 @@ def reconcile_open_orders() -> int:
     from api.services import clob
     sb = get_supabase()
     res = (sb.table("orders").select("clob_order_id,status,size")
-           .eq("post_only", True)
+           .eq("post_only", True).neq("executor", "paper")
            .in_("status", ["submitted", "open", "partially_filled", "filled"])
            .not_.is_("clob_order_id", "null").execute())
     rows = res.data or []
