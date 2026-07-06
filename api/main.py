@@ -34,7 +34,12 @@ async def lifespan(app: FastAPI):
         len(registry.all_modules()),
         ", ".join(m.name for m in registry.all_modules()) or "(none)",
     )
+    from api.services.engine import Engine
+    engine = Engine(registry)
+    app.state.engine = engine
+    engine.start()
     yield
+    engine.stop()
 
 
 app = FastAPI(title="Polymarket Maker Bot", lifespan=lifespan)

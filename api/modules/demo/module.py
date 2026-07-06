@@ -19,5 +19,5 @@ class DemoModule(BaseModule):
     def save_config(self, module_id: str, config: dict) -> None:
         pass
 
-    async def _evaluate_async(self) -> list:
+    async def _evaluate_async(self, module_id: str) -> list:
         return []

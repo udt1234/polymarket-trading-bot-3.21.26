@@ -18,25 +18,26 @@ class BaseModule(ABC):
     name: str = "base"
     enabled: bool = True
 
-    def evaluate(self) -> list:
-        """Sync entry point used by the engine cycle. Wraps the module's
-        async impl (_evaluate_async) for use from synchronous scheduler
-        callbacks. Override only for a fully-sync strategy."""
+    def evaluate(self, module_id: str) -> list:
+        """Sync entry point used by the engine cycle. module_id is ALWAYS
+        threaded down from the engine's Supabase modules row - modules must
+        never resolve their own row by display name. Wraps the async impl
+        for use from synchronous scheduler callbacks."""
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as pool:
                     return pool.submit(
-                        lambda: asyncio.run(self._evaluate_async())
-                    ).result(timeout=60)
-            return loop.run_until_complete(self._evaluate_async())
+                        lambda: asyncio.run(self._evaluate_async(module_id))
+                    ).result(timeout=120)
+            return loop.run_until_complete(self._evaluate_async(module_id))
         except RuntimeError:
-            return asyncio.run(self._evaluate_async())
+            return asyncio.run(self._evaluate_async(module_id))
 
-    async def _evaluate_async(self) -> list:
-        """Async strategy implementation. Returns a list of Signal objects
-        (defined with the risk gate, build Step 4). Override per module."""
+    async def _evaluate_async(self, module_id: str) -> list:
+        """Async strategy implementation. Returns a list of
+        risk_manager.Signal. Override per module."""
         return []
 
     def get_status(self) -> dict:
