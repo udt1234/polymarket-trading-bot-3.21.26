@@ -1,5 +1,11 @@
 # PolyMarket Bot — Handoff
 
+## 🚧 BUILD PROGRESS (PART J of BUILD_SPEC.md)
+- **Step 1 Skeleton: DONE 2026-07-06** on branch `feat/newbot-step1-skeleton`. Fresh `api/` (main, config, health router, BaseModule, auto-discovery registry, demo module); old bot code removed from the branch (kept: `api/modules/shared/`, `api/services/polymarket_proxy.py`; all old code lives on master). Acceptance passed: boot clean, registry discovers `demo`, GET /api/healthz = 200 unauth.
+- Supabase schema: all PART H1 tables already exist on `xdonwowgqvmtrduikaon` via migrations 001-021 (schema kept at teardown). No new migration needed for Step 1; Step 2+ adds deltas forward-only.
+- Pending Sir: starting bankroll + gas reserve (Step 4 sizing); paper-Supabase isolation choice (Part N).
+- **Next: Step 2 Execution core** (CLOB V2 signer, post-only placement, heartbeat daemon, fill poller).
+
 ## 🏗️ CURRENT: New maker-only bot build spec (2026-07-03)
 
 Full self-contained build spec (hand to a dev): https://docs.google.com/document/d/1TG4tdWR07Ob-vm4MD9dJpomoFwoIR8e5CUka3OvkLfM/edit (Parts A-O). Plain-English: 1yEkXd7xQe3-frnntb_Oh4617kQ5lb_0JRmY41wB9oKo. Diagram + everything else in memory `new_bot_master_build_2026_07_01` and `NEW_BOT_PLAYBOOK.md`.
