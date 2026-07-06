@@ -68,6 +68,12 @@ def apply_sell_fill(position_id: str, sell_price: float, sold_size: float) -> di
         patch["status"] = "open"  # partial exit re-opens the remainder
     sb.table("positions").update(patch).eq("id", row["id"]).execute()
     row.update(patch)
+    if patch.get("status") == "closed":
+        try:
+            from api.services.breaker import record_trade_result
+            record_trade_result(float(row["realized_pnl"]))
+        except Exception:
+            log.exception("breaker update failed on close")
     return row
 
 

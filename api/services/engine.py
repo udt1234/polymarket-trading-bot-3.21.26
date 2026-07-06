@@ -34,6 +34,11 @@ class Engine:
             "coalesce": True, "max_instances": 1, "misfire_grace_time": 60})
         self._scheduler.add_job(self.cycle, "interval",
                                 seconds=s.default_interval, id="engine-cycle")
+        from api.services.notifications import daily_heartbeat
+        self._scheduler.add_job(lambda: daily_heartbeat(self), "cron",
+                                hour="9,17", minute=0,
+                                timezone="America/New_York",
+                                id="daily-heartbeat")
         self._scheduler.start()
         log.info("engine scheduler started (every %ss)", s.default_interval)
 
@@ -121,19 +126,8 @@ class Engine:
         return quotes
 
     def _breaker_tripped(self, sb) -> bool:
-        """Circuit-breaker state persisted in settings (G2). Fail closed:
-        an unreadable breaker BLOCKS new entries."""
         s = get_settings()
         if not s.circuit_breaker_enabled:
             return False
-        try:
-            res = (sb.table("settings").select("value")
-                   .eq("key", "circuit_breaker").limit(1).execute())
-            if not res.data:
-                return False  # never tripped yet - absence is a real state
-            v = res.data[0].get("value") or {}
-            until = v.get("cooldown_until") or ""
-            return bool(until) and until > datetime.now(timezone.utc).isoformat()
-        except Exception:
-            log.exception("breaker read failed - failing CLOSED")
-            return True
+        from api.services.breaker import is_tripped
+        return is_tripped()
