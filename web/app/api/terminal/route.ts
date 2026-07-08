@@ -47,6 +47,31 @@ export async function GET() {
           .maybeSingle(),
       ]);
 
+    // Engine liveness + per-module trade activity come from Supabase, not
+    // HTTP: the bot API lives on a firewalled box (SSH-only), so the
+    // dashboard and bot communicate ONLY through the database (BUILD_SPEC B5).
+    const since24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const [lastCycle, recentTrades] = await Promise.all([
+      db
+        .from("logs")
+        .select("message, created_at")
+        .eq("log_type", "system")
+        .ilike("message", "Cycle:%")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from("trades")
+        .select("module_id")
+        .gte("executed_at", since24h),
+    ]);
+
+    const tradesByModule: Record<string, number> = {};
+    for (const t of recentTrades.data ?? []) {
+      const id = (t as { module_id: string | null }).module_id ?? "";
+      if (id) tradesByModule[id] = (tradesByModule[id] ?? 0) + 1;
+    }
+
     const firstError =
       modules.error ??
       openPositions.error ??
@@ -65,6 +90,9 @@ export async function GET() {
       orders: orders.data ?? [],
       signals: signals.data ?? [],
       circuit_breaker: breaker.data?.value ?? null,
+      last_cycle_at: lastCycle.data?.created_at ?? null,
+      last_cycle_message: lastCycle.data?.message ?? null,
+      trades_by_module: tradesByModule,
       fetched_at: new Date().toISOString(),
     });
   } catch (e) {

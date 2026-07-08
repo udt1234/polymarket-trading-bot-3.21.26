@@ -64,6 +64,9 @@ export interface TerminalData {
   orders: Order[];
   signals: Signal[];
   circuit_breaker: CircuitBreaker | null;
+  last_cycle_at: string | null;
+  last_cycle_message: string | null;
+  trades_by_module: Record<string, number>;
   fetched_at: string;
 }
 

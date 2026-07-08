@@ -8,30 +8,48 @@ import OrdersTable from "@/components/orders-table";
 import SignalsFeed from "@/components/signals-feed";
 import BreakerBanner from "@/components/breaker-banner";
 import PricePanel from "@/components/price-panel";
-import { SnapshotData, TerminalData } from "@/lib/types";
+import { Module, SnapshotData, TerminalData } from "@/lib/types";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const POLL_MS = 15_000;
 
-async function fetchHealth(moduleId: string): Promise<string> {
-  try {
-    const res = await fetch(
-      `${API_URL}/api/engine/health?module_id=${encodeURIComponent(moduleId)}`,
-      { cache: "no-store" }
-    );
-    if (!res.ok) return "OFFLINE";
-    const body = await res.json();
-    const state = body.state ?? body.status ?? body.health;
-    return typeof state === "string" ? state.toUpperCase() : "OFFLINE";
-  } catch {
-    return "OFFLINE";
-  }
+// Per-module health derived from Supabase (the bot API is firewalled, so we
+// never HTTP it). TRADING = a trade in 24h; CYCLING = engine fresh + module
+// not inactive; STUCK = module active/paper but engine stale; OFFLINE =
+// inactive module.
+function deriveHealth(
+  data: TerminalData | null,
+  m: Module,
+  engineFresh: boolean
+): string {
+  if (m.status === "inactive") return "OFFLINE";
+  if ((data?.trades_by_module?.[m.id] ?? 0) > 0) return "TRADING";
+  return engineFresh ? "CYCLING" : "STUCK";
+}
+
+function engineIsFresh(lastCycleAt: string | null | undefined): boolean {
+  if (!lastCycleAt) return false;
+  return (Date.now() - new Date(lastCycleAt).getTime()) / 60_000 <= 12;
+}
+
+function engineBadge(lastCycleAt: string | null | undefined): {
+  label: string;
+  cls: string;
+} {
+  if (!lastCycleAt) return { label: "ENGINE: NO CYCLES", cls: "text-term-red" };
+  const ageMin = (Date.now() - new Date(lastCycleAt).getTime()) / 60_000;
+  if (ageMin <= 12)
+    return {
+      label: `ENGINE: CYCLING (${Math.max(0, Math.round(ageMin))}m ago)`,
+      cls: "text-term-green",
+    };
+  return {
+    label: `ENGINE: STALE (${Math.round(ageMin)}m ago)`,
+    cls: "text-term-red",
+  };
 }
 
 export default function Terminal() {
   const [data, setData] = useState<TerminalData | null>(null);
-  const [health, setHealth] = useState<Record<string, string>>({});
   const [snapshots, setSnapshots] = useState<SnapshotData | null>(null);
   const [bracket, setBracket] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,14 +61,6 @@ export default function Terminal() {
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       setData(body);
       setError(null);
-
-      const entries = await Promise.all(
-        (body.modules ?? []).map(async (m: { id: string }) => [
-          m.id,
-          await fetchHealth(m.id),
-        ])
-      );
-      setHealth(Object.fromEntries(entries));
     } catch (e) {
       setError(e instanceof Error ? e.message : "fetch failed");
     }
@@ -69,6 +79,11 @@ export default function Terminal() {
     return () => clearInterval(id);
   }, [refresh]);
 
+  const engineFresh = engineIsFresh(data?.last_cycle_at);
+  const health = Object.fromEntries(
+    (data?.modules ?? []).map((m) => [m.id, deriveHealth(data, m, engineFresh)])
+  );
+
   return (
     <main className="mx-auto max-w-7xl space-y-4 p-4">
       <header className="flex items-baseline justify-between">
@@ -76,7 +91,10 @@ export default function Terminal() {
           Polymarket Maker Terminal
         </h1>
         <span className="text-xs text-term-muted">
-          read-only · polls 15s
+          <span className={engineBadge(data?.last_cycle_at).cls}>
+            {engineBadge(data?.last_cycle_at).label}
+          </span>
+          {" · read-only · polls 15s"}
           {data ? ` · updated ${new Date(data.fetched_at).toLocaleTimeString()}` : ""}
         </span>
       </header>
