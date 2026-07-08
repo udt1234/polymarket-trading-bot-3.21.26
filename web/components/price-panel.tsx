@@ -130,7 +130,7 @@ export default function PricePanel({
         <div ref={containerRef} className="w-full" />
       ) : (
         <p className="py-8 text-center text-term-muted">
-          snapshots accruing — chart appears once price_snapshots has data
+          snapshots accruing: chart appears once price_snapshots has data
         </p>
       )}
     </div>

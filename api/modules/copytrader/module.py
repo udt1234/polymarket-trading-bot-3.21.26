@@ -52,10 +52,22 @@ class CopytraderModule(BaseModule):
         trades = data.whale_trades(cfg["whale_wallet"], cfg["lookback_hours"])
         active_conditions = {t.get("conditionId") for t in trades if t.get("conditionId")}
         if not active_conditions:
+            log.info("copytrader: whale healthy (ROI=%.1f%%) but no recent trades",
+                     roi * 100)
             return []
 
-        # Which LIVE Elon tweet brackets is the whale active in?
+        # Which LIVE Elon tweet brackets is the whale active in? (Option B is
+        # tweet-scoped - the validated market. When this proven generalist MM
+        # is trading sports/politics instead, there is no overlap and we
+        # correctly stay idle rather than quoting markets we have no model for.)
         auctions = discovery.fetch_tweet_auctions(slug_contains="elon-musk-of-tweets")
+        overlap = {c for a in auctions for b in a["brackets"]
+                   if (c := b["condition_id"]) in active_conditions}
+        if not overlap:
+            log.info("copytrader: whale healthy (ROI=%.1f%%), active in %d markets, "
+                     "but none are live Elon tweet brackets - idle by design",
+                     roi * 100, len(active_conditions))
+            return []
         signals: list[Signal] = []
         bankroll = module_bankroll(module_id)
         sb = get_supabase()

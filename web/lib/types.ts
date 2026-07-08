@@ -51,6 +51,18 @@ export interface Signal {
   created_at: string;
 }
 
+export interface Trade {
+  id: string;
+  module_id: string | null;
+  market_id: string | null;
+  bracket: string | null;
+  side: string;
+  size: number;
+  price: number;
+  executor: string;
+  executed_at: string;
+}
+
 export interface CircuitBreaker {
   trips?: number;
   cooldown_until?: string;
@@ -63,6 +75,7 @@ export interface TerminalData {
   closed_positions: Position[];
   orders: Order[];
   signals: Signal[];
+  trades: Trade[];
   circuit_breaker: CircuitBreaker | null;
   last_cycle_at: string | null;
   last_cycle_message: string | null;

@@ -3,7 +3,7 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 let client: SupabaseClient | null = null;
 
 // Server-only Supabase client using the service key. Never import from
-// client components — route handlers only.
+// client components (route handlers only).
 export function supabaseServer(): SupabaseClient {
   if (!client) {
     const url = process.env.SUPABASE_URL;

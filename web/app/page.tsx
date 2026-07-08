@@ -8,6 +8,7 @@ import OrdersTable from "@/components/orders-table";
 import SignalsFeed from "@/components/signals-feed";
 import BreakerBanner from "@/components/breaker-banner";
 import PricePanel from "@/components/price-panel";
+import FillsTape from "@/components/fills-tape";
 import { Module, SnapshotData, TerminalData } from "@/lib/types";
 
 const POLL_MS = 15_000;
@@ -108,6 +109,13 @@ export default function Terminal() {
       <BreakerBanner breaker={data?.circuit_breaker ?? null} />
 
       <ModuleCards modules={data?.modules ?? []} health={health} />
+
+      <Panel title="Fills Tape: trades in / out">
+        <FillsTape
+          trades={data?.trades ?? []}
+          modules={data?.modules ?? []}
+        />
+      </Panel>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Panel title="Open Positions + Recent Closed">

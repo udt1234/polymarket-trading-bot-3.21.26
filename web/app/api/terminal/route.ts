@@ -8,8 +8,15 @@ export const revalidate = 0;
 export async function GET() {
   try {
     const db = supabaseServer();
-    const [modules, openPositions, closedPositions, orders, signals, breaker] =
-      await Promise.all([
+    const [
+      modules,
+      openPositions,
+      closedPositions,
+      orders,
+      signals,
+      breaker,
+      trades,
+    ] = await Promise.all([
         db
           .from("modules")
           .select(
@@ -47,6 +54,13 @@ export async function GET() {
           .select("value")
           .eq("key", "circuit_breaker")
           .maybeSingle(),
+        db
+          .from("trades")
+          .select(
+            "id, module_id, market_id, bracket, side, size, price, executor, executed_at"
+          )
+          .order("executed_at", { ascending: false })
+          .limit(60),
       ]);
 
     // Engine liveness + per-module trade activity come from Supabase, not
@@ -80,7 +94,8 @@ export async function GET() {
       closedPositions.error ??
       orders.error ??
       signals.error ??
-      breaker.error;
+      breaker.error ??
+      trades.error;
     if (firstError) {
       return NextResponse.json({ error: firstError.message }, { status: 500 });
     }
@@ -91,6 +106,7 @@ export async function GET() {
       closed_positions: closedPositions.data ?? [],
       orders: orders.data ?? [],
       signals: signals.data ?? [],
+      trades: trades.data ?? [],
       circuit_breaker: breaker.data?.value ?? null,
       last_cycle_at: lastCycle.data?.created_at ?? null,
       last_cycle_message: lastCycle.data?.message ?? null,

@@ -19,21 +19,31 @@ def whale_trades(wallet: str, lookback_hours: float, limit: int = 200) -> list[d
 
 
 def whale_recent_roi(wallet: str, last_n: int = 10) -> float | None:
-    """Whale-performance gate input: ROI across the most recent closed
-    positions (realized pnl / cost). None when unavailable (gate then
-    SKIPS the whale - fail closed, F3)."""
+    """Whale-performance gate input (F3): capital-weighted return across the
+    whale's CURRENT book.
+
+    Fix 2026-07-08: the old version filtered /positions for size==0 (closed
+    trades), but that endpoint only ever returns OPEN holdings (size>0), so
+    it found nothing and returned None every cycle -> the gate benched the
+    whale forever. /positions carries per-position realizedPnl + currentValue
+    + initialValue, so we score the whale's live book instead: total P&L
+    (realized + unrealized) over deployed capital. None only when the whale
+    genuinely holds nothing (gate then benches, fail-closed)."""
     try:
         r = httpx.get(f"{DATA_API}/positions",
                       params={"user": wallet, "limit": 100}, timeout=30)
         r.raise_for_status()
-        closed = [p for p in (r.json() or []) if float(p.get("size") or 0) == 0
-                  and p.get("realizedPnl") is not None]
-        closed = closed[:last_n]
-        if not closed:
+        positions = [p for p in (r.json() or [])
+                     if float(p.get("initialValue") or 0) > 0]
+        if not positions:
             return None
-        pnl = sum(float(p["realizedPnl"]) for p in closed)
-        cost = sum(abs(float(p.get("totalBought") or 0) * float(p.get("avgPrice") or 0))
-                   for p in closed)
+        cost = sum(float(p["initialValue"]) for p in positions)
+        pnl = sum(
+            float(p.get("realizedPnl") or 0)
+            + float(p.get("currentValue") or 0)
+            - float(p.get("initialValue") or 0)
+            for p in positions
+        )
         return pnl / cost if cost > 0 else None
     except Exception:
         log.exception("whale ROI fetch failed")
