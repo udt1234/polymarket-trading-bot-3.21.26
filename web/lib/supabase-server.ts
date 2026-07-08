@@ -13,6 +13,15 @@ export function supabaseServer(): SupabaseClient {
     }
     client = createClient(url, key, {
       auth: { persistSession: false, autoRefreshToken: false },
+      // Next.js App Router caches server-side fetch() by default, which froze
+      // every Supabase query at the first response (the "engine stale" false
+      // alarm). Force no-store on the client's own fetch so live data always
+      // re-reads. `dynamic = "force-dynamic"` alone does NOT cover the
+      // Supabase client's internal fetches.
+      global: {
+        fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+          fetch(input, { ...init, cache: "no-store" }),
+      },
     });
   }
   return client;
