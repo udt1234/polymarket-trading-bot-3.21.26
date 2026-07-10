@@ -69,3 +69,36 @@ for ~2 weeks, then run the banded backtest on clean data (backtest-first).
 
 Scripts: `phase1_efficiency.py`, `phase2_maker_fills.py`, `phase3_ask_sweep.py`,
 `phase4_endgame_sweep.py`, `phase4b_sports_endgame.py` (durable, re-runnable).
+
+## Update 2026-07-10 — MLB garbage-time sweep CONFIRMED +EV (real trades + fees)
+
+`phase5_mlb_slate.py` (multi-day), `phase6_realistic_fills.py` (real executed
+trades + real sizes + real fee + maker/taker split).
+
+**Fee (verified vs Polymarket docs):** sports taker fee = `shares * 0.05 * p * (1-p)`,
+takers only, makers $0. Tiny at the extremes we trade (~$0.05-0.19 per 100 shares).
+
+**Realistic backtest (buy REAL cheap trades on decided favorites, bid>=0.95):**
+- 2 dates: +2.35% ROI net of fees ($11,246 vol, fees only 0.16%), 28/29 games
+  profitable, but one collapse game = -$36.55 (the fat tail is real).
+- 1 date (07-08): TAKER +3.05% ($6,023 vol), 15/15 games profitable.
+- Band pattern holds: deep discount (0.95-0.98) is where the edge lives; buying
+  the 0.99 "sure thing" is break-even/negative (fat-tail collapses).
+
+**EV = win_rate - price.** Decided MLB favorite truly wins ~98%; buy at 0.96 =>
++2%, buy at 0.99 => -1%. That is the whole edge.
+
+**MAKER vs TAKER (Sir's question):** rest a post-only bid vs lift the ask.
+- MAKER (seller crosses into our bid, $0 fee): +3.49% ROI, but only ~24% of the
+  volume (only taker-SELL flow is maker-capturable; 76% of cheap fills were
+  takers lifting asks, which a resting bid can't catch).
+- TAKER (lift cheap asks, pay tiny fee): +3.05% ROI, full volume.
+- Both +EV. Maker fits our maker-only design + is fee-free but captures ~4x less.
+
+**Fat tail:** a "decided" favorite (bid 0.95) still collapses ~3% of games; one
+loss ~-0.96 erases ~30-50 small wins. Size for it; prefer deeper "decided"
+threshold (bid>=0.97) to cut collapses.
+
+**Logger LIVE:** `infra/mlb-recorder/` deployed on Railway EU
+(polybot-mlb-recorder, volume /data) capturing tonight's slate tick L2
+(~6k events/30s) to our own parquet - forward clean data for OOS confirmation.
