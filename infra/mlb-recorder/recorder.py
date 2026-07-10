@@ -28,8 +28,9 @@ from pathlib import Path
 import httpx
 import pandas as pd
 
-# base game moneyline slug, e.g. mlb-col-lad-2026-07-08 (no -first-five/-run-line suffix)
-BASE_GAME_RE = re.compile(r"^[a-z]+-[a-z0-9]+-[a-z0-9]+-\d{4}-\d{2}-\d{2}$")
+# base game moneyline slug, e.g. mlb-col-lad-2026-07-08 (captures the GAME date;
+# note: event startDate is the LISTING date ~6d earlier, so we filter on the slug date)
+BASE_GAME_RE = re.compile(r"^[a-z]+-[a-z0-9]+-[a-z0-9]+-(\d{4}-\d{2}-\d{2})$")
 
 GAMMA = os.getenv("GAMMA_BASE", "https://gamma-api.polymarket.com")
 CLOB_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
@@ -64,16 +65,18 @@ async def discover() -> dict[str, dict]:
                 evs = r.json() if r.status_code == 200 else []
             except Exception as e:
                 log("discover error", sid, e); continue
+            today = now.date()
             for e in evs:
                 slug = e.get("slug") or ""
-                if not BASE_GAME_RE.match(slug):
+                m = BASE_GAME_RE.match(slug)
+                if not m:
                     continue  # skip props / sub-markets, keep the moneyline
-                sd = e.get("startDate")
                 try:
-                    start = datetime.fromisoformat(sd.replace("Z", "+00:00")) if sd else None
-                except (TypeError, ValueError):
-                    start = None
-                if start and not (now - timedelta(hours=8) <= start <= now + timedelta(hours=28)):
+                    gdate = datetime.strptime(m.group(1), "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+                # keep yesterday (late/west-coast games settling) through tomorrow
+                if not (today - timedelta(days=1) <= gdate <= today + timedelta(days=1)):
                     continue
                 for mk in (e.get("markets") or []):
                     if mk.get("closed"):
