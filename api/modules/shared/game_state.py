@@ -13,7 +13,8 @@ MLB only for now (StatsAPI is MLB). NBA/NHL/NFL would use ESPN's feed - same
 shape, add later.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -95,6 +96,13 @@ def evaluate_game(slug: str, fav_outcome: str,
     st = states.get((away, home))
     if not st:
         return out
+    # the market slug carries the ET game date (mlb-<away>-<home>-YYYY-MM-DD);
+    # only apply state whose officialDate matches, so tomorrow's pre-game market
+    # never inherits tonight's live game (same teams, wrong day).
+    slug_date = "-".join(parts[3:6]) if len(parts) >= 6 else None
+    if slug_date and st.get("date") and slug_date != st["date"]:
+        out["reason"] = "date_mismatch"
+        return out
     if st["state"] == "Final":
         out["reason"] = "final"
         return out
@@ -119,23 +127,37 @@ def sweep_ok_by_state(slug: str, fav_outcome: str,
 
 
 def mlb_live_states() -> dict[tuple[str, str], dict]:
-    """(away_abbr, home_abbr) -> live state for today's + yesterday's games."""
+    """(away_abbr, home_abbr) -> current state for games on the ET slate (today +
+    yesterday ET, so games running past UTC midnight still resolve). Stores each
+    game's officialDate so evaluate_game can match it to the market slug's date,
+    and prefers the LIVE game when the same teams play on consecutive days (a
+    series) - otherwise tomorrow's pre-game market would inherit tonight's state.
+    Must key off ET, never UTC: the canonical noon-ET rule (night games flip the
+    UTC date at 8pm ET while the slug stays on the ET date)."""
     out: dict[tuple[str, str], dict] = {}
     ab = _abbr()
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    start = (today - timedelta(days=1)).isoformat()
     try:
-        sched = httpx.get(f"{STATS}/schedule", params={"sportId": 1, "date": today}, timeout=20).json()
+        sched = httpx.get(f"{STATS}/schedule",
+                          params={"sportId": 1, "startDate": start,
+                                  "endDate": today.isoformat()}, timeout=20).json()
     except Exception:
         log.exception("schedule fetch failed")
         return out
+    rank = {"Live": 3, "Preview": 2, "Final": 1}
     for day in sched.get("dates", []):
         for g in day.get("games", []):
             a = ab.get(g["teams"]["away"]["team"]["id"])
             h = ab.get(g["teams"]["home"]["team"]["id"])
-            state = (g.get("status", {}) or {}).get("abstractGameState", "")
             if not a or not h:
                 continue
+            state = (g.get("status", {}) or {}).get("abstractGameState", "")
+            cur = out.get((a, h))
+            if cur and rank.get(cur["state"], 0) >= rank.get(state, 0):
+                continue  # keep the more-live of a two-day series
             out[(a, h)] = {"pk": g["gamePk"], "state": state,
+                           "date": g.get("officialDate") or day.get("date"),
                            "away_score": g["teams"]["away"].get("score"),
                            "home_score": g["teams"]["home"].get("score"),
                            "detail": None}

@@ -83,7 +83,7 @@ class SportsSweepModule(BaseModule):
                 from api.modules.shared import game_state
                 ev = game_state.evaluate_game(g["slug"], fav["outcome"], states)
                 if not ev["ok"]:
-                    if ev["reason"] in ("no_state", "unmatched_team", "bad_slug") and not cfg.get("require_game_state", False):
+                    if ev["reason"] in ("no_state", "unmatched_team", "bad_slug", "date_mismatch") and not cfg.get("require_game_state", False):
                         pass  # fall back to price-only (flat decided_winrate)
                     else:
                         log.info("sports_sweep skip %s: %s", g["slug"], ev["reason"])
