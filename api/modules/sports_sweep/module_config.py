@@ -39,6 +39,11 @@ DEFAULT_CONFIG: dict = {
     "use_game_state": True,
     "require_game_state": False,     # if True, skip when no live state; if False,
                                      #   fall back to price-only (e.g. non-MLB)
+    # win-probability fair value: when live state exists, price the ladder off the
+    # continuous win_prob (edge = p_true - price) instead of the flat
+    # decided_winrate. The elite upgrade - turns the feed into an edge, not just a
+    # filter. Falls back to decided_winrate when no state / disabled.
+    "use_win_prob": True,
 }
 
 

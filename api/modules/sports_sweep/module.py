@@ -76,18 +76,23 @@ class SportsSweepModule(BaseModule):
             fav = data.decided_favorite(g, cfg["decided_bid_threshold"])
             if not fav or fav["best_ask"] is None:
                 continue
-            # game-state gate: only sweep truly-decided, low-leverage spots
+            # game-state gate: only sweep truly-decided, low-leverage spots, and
+            # price the ladder off the live win probability (fair_override).
+            fair_override = None
             if cfg.get("use_game_state", True) and g["slug"].startswith("mlb-"):
                 from api.modules.shared import game_state
-                ok, reason = game_state.sweep_ok_by_state(g["slug"], fav["outcome"], states)
-                if not ok:
-                    if reason in ("no_state", "unmatched_team", "bad_slug") and not cfg.get("require_game_state", False):
-                        pass  # fall back to price-only
+                ev = game_state.evaluate_game(g["slug"], fav["outcome"], states)
+                if not ev["ok"]:
+                    if ev["reason"] in ("no_state", "unmatched_team", "bad_slug") and not cfg.get("require_game_state", False):
+                        pass  # fall back to price-only (flat decided_winrate)
                     else:
-                        log.info("sports_sweep skip %s: %s", g["slug"], reason)
+                        log.info("sports_sweep skip %s: %s", g["slug"], ev["reason"])
                         continue
+                elif cfg.get("use_win_prob", True):
+                    fair_override = ev["p_true"]
             new = decision.build_entry_bids(module_id, g, fav, cfg,
-                                            resting_tokens, held_tokens)
+                                            resting_tokens, held_tokens,
+                                            fair_override=fair_override)
             if new:
                 signals += new
                 active_games += 1

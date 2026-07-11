@@ -19,9 +19,13 @@ log = logging.getLogger(__name__)
 
 
 def build_entry_bids(module_id: str, game: dict, fav: dict, cfg: dict,
-                     resting_tokens: set[str], held_tokens: set[str]) -> list[Signal]:
+                     resting_tokens: set[str], held_tokens: set[str],
+                     fair_override: float | None = None) -> list[Signal]:
     """Rest a deep-discount post-only BUY ladder on the decided favorite,
-    if we are not already quoting/holding it."""
+    if we are not already quoting/holding it. When fair_override is given (the
+    live game-state win probability), it replaces the flat decided_winrate as the
+    fair value, so edge = p_true - price is priced off the actual game, not a
+    constant. Missing/None override falls back to the config constant."""
     tok = fav["token"]
     if tok in resting_tokens or tok in held_tokens:
         return []
@@ -32,7 +36,7 @@ def build_entry_bids(module_id: str, game: dict, fav: dict, cfg: dict,
     if not levels:
         return []
     per_level = cfg["per_game_max_usd"] / len(levels)
-    win = cfg["decided_winrate"]
+    win = fair_override if fair_override is not None else cfg["decided_winrate"]
     signals = []
     for price in levels:
         price = snap_price(price, tick)
