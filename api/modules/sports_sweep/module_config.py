@@ -33,6 +33,12 @@ DEFAULT_CONFIG: dict = {
     "take_to_resolution": True,
     "min_edge": 0.015,               # require price below true win-rate estimate
     "decided_winrate": 0.985,        # empirical: a bid>=0.97 favorite wins ~98.5%
+    # game-state gate (MLB): only sweep when the real score/inning confirms a
+    # SAFE lead AND we are not in a high-leverage spot (bases loaded, slugger up
+    # - Sir's example). Price alone can't see that. MLB only for now.
+    "use_game_state": True,
+    "require_game_state": False,     # if True, skip when no live state; if False,
+                                     #   fall back to price-only (e.g. non-MLB)
 }
 
 

@@ -61,12 +61,31 @@ class SportsSweepModule(BaseModule):
         active_games = len({p.get("market_id") for p in held} |
                            {game_by_token[t]["condition_id"] for t in resting_tokens
                             if t in game_by_token})
+        # live game state (MLB) - fetched once per cycle, reused per game
+        states = None
+        if cfg.get("use_game_state", True):
+            try:
+                from api.modules.shared import game_state
+                states = game_state.mlb_live_states()
+            except Exception:
+                log.exception("game_state fetch failed")
+
         for g in games:
             if active_games >= cfg["max_concurrent_games"]:
                 break
             fav = data.decided_favorite(g, cfg["decided_bid_threshold"])
             if not fav or fav["best_ask"] is None:
                 continue
+            # game-state gate: only sweep truly-decided, low-leverage spots
+            if cfg.get("use_game_state", True) and g["slug"].startswith("mlb-"):
+                from api.modules.shared import game_state
+                ok, reason = game_state.sweep_ok_by_state(g["slug"], fav["outcome"], states)
+                if not ok:
+                    if reason in ("no_state", "unmatched_team", "bad_slug") and not cfg.get("require_game_state", False):
+                        pass  # fall back to price-only
+                    else:
+                        log.info("sports_sweep skip %s: %s", g["slug"], reason)
+                        continue
             new = decision.build_entry_bids(module_id, g, fav, cfg,
                                             resting_tokens, held_tokens)
             if new:
