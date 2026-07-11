@@ -16,10 +16,18 @@ DEFAULT_CONFIG: dict = {
     "bid_ladder": [0.97, 0.96, 0.95],
     "per_game_max_usd": 25.0,        # cap exposure per game (fat-tail control)
     "max_concurrent_games": 8,
-    # exit: cut the loss if the favorite fades (comebacks are gradual, sellable).
-    "stop_loss_bid": 0.85,           # sell out if the favorite's bid falls below
-    "stop_loss_is_taker": True,      # cross to the bid to guarantee the exit
-    "take_to_resolution": True,      # else hold winners to $1
+    # exit: HOLD TO RESOLUTION. Counterintuitive backtest result 2026-07-10:
+    #   a price stop-loss makes the strategy MUCH worse (+$290 hold -> -$6,791
+    #   with a bid<0.90 stop over 3 MLB dates). Baseball favorites dip below any
+    #   fixed level constantly on scares that fizzle, so a price stop sells
+    #   eventual WINNERS at the dip - death by a thousand cuts, far bigger than
+    #   the rare full collapse. The fat-tail control is the HIGH decided
+    #   threshold (0.97 skips weakly-decided collapses) + small per-game size,
+    #   NOT a stop-loss. A future game-STATE-aware exit (score/inning) may help.
+    "stop_loss_enabled": False,      # keep OFF - price stops bleed winners
+    "stop_loss_bid": 0.50,           # (only used if enabled; deep catastrophe backstop)
+    "stop_loss_is_taker": True,
+    "take_to_resolution": True,
     "min_edge": 0.015,               # require price below true win-rate estimate
     "decided_winrate": 0.985,        # empirical: a bid>=0.97 favorite wins ~98.5%
 }

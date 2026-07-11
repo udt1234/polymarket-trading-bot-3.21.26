@@ -102,3 +102,24 @@ threshold (bid>=0.97) to cut collapses.
 **Logger LIVE:** `infra/mlb-recorder/` deployed on Railway EU
 (polybot-mlb-recorder, volume /data) capturing tonight's slate tick L2
 (~6k events/30s) to our own parquet - forward clean data for OOS confirmation.
+
+## Fat-tail: a price STOP-LOSS BACKFIRES; hold to resolution (phase7, 2026-07-10)
+
+Counterintuitive and important. Over 3 MLB dates:
+- HOLD to resolution: **+$290** net.
+- STOP-LOSS sell if fav bid<0.90: **-$6,791** (delta -$7,081). bid<0.85: -$9,517.
+The stop-loss makes it MUCH worse. Only 1 true collapse in 3 dates
+(mlb-kc-nym-2026-07-07: NY Mets 95% fav -> lost, -$63 held).
+
+Why: reconstructed the collapse - the Mets bid did NOT fade cleanly, it
+WHIPSAWED (0.94 -> 0.53 -> back to 0.71 -> 0.39 -> 0.57 ...) for ~45 min while
+the game stayed close, then crashed to 0. Baseball favorites dip below any fixed
+level constantly on scares that FIZZLE. A price stop can't tell a temporary
+scare from a real collapse in real time, so it sells the many eventual-WINNERS
+at the dip - death by a thousand cuts, far bigger than the rare full collapse.
+
+**Fat-tail control = high decided threshold + small size + HOLD, NOT a stop.**
+The one collapse peaked at bid 0.95; a 0.97 threshold would have SKIPPED it.
+sports_sweep module: stop_loss_enabled=False, decided_bid_threshold=0.97,
+per_game_max_usd=25, hold to resolution. A future game-STATE (score/inning)
+exit could help where price alone cannot.

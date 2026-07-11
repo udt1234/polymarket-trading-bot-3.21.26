@@ -56,6 +56,8 @@ def build_stop_exits(module_id: str, positions: list[dict],
     """Sell out a held favorite whose current best_bid fell below the stop.
     Taker exit (marketable) to guarantee we get out of a fading game."""
     out = []
+    if not cfg.get("stop_loss_enabled", False):
+        return out  # HOLD to resolution - price stops bleed winners (backtest 2026-07-10)
     stop = cfg["stop_loss_bid"]
     for p in positions:
         tok = p.get("token_id")
