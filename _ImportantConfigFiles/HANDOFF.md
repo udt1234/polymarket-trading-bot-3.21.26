@@ -29,6 +29,18 @@ Full self-contained build spec (hand to a dev): https://docs.google.com/document
 
 **Pre-build gaps closed 2026-07-03:** paper/prod Supabase isolation; on-chain redemption/claim flow + gas reserve; API rate-limit backoff; capital/funding plan; concurrent-auction handling; VPS key security. External-AI QA of the spec triaged in Part K.
 
+## 🎯 SPORTS SWEEP + BACKLOG (2026-07-11)
+
+Sports garbage-time sweep validated (5-day OOS, +2-3% ROI real fills+fees, MLB). Modules live in PAPER: `sports_sweep` (deep-discount maker bids on decided favorites, HOLD to resolution - a price stop-loss BACKFIRES, +$290 hold vs -$6,791 stopped; game-state gate via free MLB StatsAPI to skip high-leverage spots) + `arb_scanner` (complete-set arb detector, paper). Recorder `polybot-mlb-recorder` on Railway EU banking all 4 US sports.
+
+**Backlog (Sir-requested, prioritized):**
+1. **Portfolio sizing / cross-strategy Kelly (#4)** — size each strategy's bets by edge/variance with correlation (sweep games correlated within a night; Elon vs sports uncorrelated). Add a portfolio allocator: per-strategy budgets (modules.budget) + fractional Kelly within each + a portfolio-level exposure cap. Design before code.
+2. **Position-sizing experiments (#9)** — backtest different buy-in schemes (fixed-$, fixed-%, Kelly, ladder) on the sweep to maximize risk-adjusted return / minimize drawdown. Build a sizing-sweep harness over the phase6 data.
+3. **Live game-state for NBA/NHL/NFL** — extend game_state.py to ESPN's feed (StatsAPI is MLB-only) so the sweep's leverage gate works for all sports.
+4. **Redundancy / hot-standby** — a second execution box in another allowed region that takes over if Dublin dies (so we never miss a sweep window or get stuck in a position). Watchdog already alerts; add failover.
+5. **Maker LP-reward layer** — a market-making posture (tight two-sided quotes NEAR mid on liquid markets) to harvest Polymarket's Liquidity Rewards (paid daily for resting near mid, fill-or-not). Distinct from our current far-from-mid sweeps. New strategy.
+6. **Fund the BOT wallet** — $ landed in the MANUAL wallet (0x2eEF3A...8eAca, ~$1232 pUSD), NOT the BOT wallet (0xD0f99f...d400, still $0). Move pUSD + POL gas to the BOT wallet (or decide to run the bot on the manual wallet - NOT recommended, mixes with personal positions).
+
 ## 🧭 NEXT STEPS / PARKED (2026-07-02) — cross-market expansion (do AFTER Elon is shipped)
 
 The reconstruction engine (brackets -> implied fair value) is validated and market-agnostic, and Elon is efficient, so the real upside is OTHER markets. Parked, focus is Elon right now:
