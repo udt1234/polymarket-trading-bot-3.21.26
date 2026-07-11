@@ -50,6 +50,12 @@ Dublin (AWS eu-west-1) → Polymarket, reads + signing (no orders placed):
 - **Order SIGNING (create_signed, not posted): ~43ms p50, spikes to ~990ms** when the SDK fetches market metadata/tick over the network.
 Interpretation: hot-path fire (cancel + post pre-signed) ≈ **2×26 ≈ ~52ms network**, signing kept OFF the timed path. The ~43ms-to-1s signing jitter VALIDATES the pre-sign design (never sign in-path). Our latency foundation is solid (ref desk showed 344ms; we're ~26ms/leg). Re-run harness: reads/sign timing block (keep in `scripts/`), never place real orders in a benchmark.
 
+### 🧭 DECISIONS (Sir 2026-07-11)
+- **TwitterAPI.io / tweet strategies: ON HOLD** — no tweet strategy has survived backtests yet. Do NOT buy the key or build the tweet stream until a tweet edge is proven. Tweet-specific speed lane (warm pool, pre-signed ladder wiring, hot-path activation) is parked with it.
+- **BUT build the NON-tweet speed/quality hardening NOW** (applies to the sports sweep + arb + any maker strategy): adverse-selection modeling in backtests, TCP_NODELAY on the CLOB transport, the `feed_guard` price-validation util. These don't need TwitterAPI.
+- **Win-prob model: sharpen** (calibrate vs recorded MLB finals). **Dashboard: add live-latency logging + realtime**, and DEPLOY the redesign to Railway `polybot-dashboard`.
+- **Backtest session (`polymarket // backtestsrun`): under independent QA** — Sir doesn't trust its verdicts; auditing for look-ahead / fills / fees / bars / overfit before acting on any REJECTED conclusion.
+
 ### 📋 TWEET-HARDENING → folded into Step 5 (Speed lane) (2026-07-11)
 From @0xSurferX's 6-failure-pattern thread. Scorecard: we COVER backtest-realism, win-rate-vs-entry (edge=p_true-price), simplicity, break-even discipline. The 2 partials + extras below are INCLUDED in Step 5 (not built now - the 5-min sweep doesn't stream, so streaming-validation would be speculative until the speed lane exists):
 1. **Feed-validation layer** (Part 1): warm connections ~15s before a window opens; run N parallel connections and take the first clean deduped tick; DROP the first (cached) tick per connection (already in `tweet_stream.py`); reject any tick >~15c delta from last-known-good; stagger connection startups across ~1s. Build as `api/modules/shared/feed_guard.py`, consumed by tweet_stream + recorder + speed lane.
