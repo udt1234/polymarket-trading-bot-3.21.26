@@ -79,13 +79,17 @@ export default function PricePanel({
 
   useEffect(() => {
     if (!hasPoints || !seriesRef.current || !data) return;
+    // lightweight-charts requires strictly ascending, unique times. Dedupe by
+    // second (keep the last price) and sort, or it throws an assertion.
+    const bySec = new Map<number, number>();
+    for (const p of data.points) {
+      const t = Math.floor(new Date(p.snapshot_hour).getTime() / 1000);
+      if (Number.isFinite(t)) bySec.set(t, p.price);
+    }
     seriesRef.current.setData(
-      data.points.map((p) => ({
-        time: Math.floor(
-          new Date(p.snapshot_hour).getTime() / 1000
-        ) as UTCTimestamp,
-        value: p.price,
-      }))
+      Array.from(bySec.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([time, value]) => ({ time: time as UTCTimestamp, value }))
     );
     chartRef.current?.timeScale().fitContent();
   }, [data, hasPoints]);

@@ -69,6 +69,23 @@ export interface CircuitBreaker {
   consecutive_losses?: number;
 }
 
+export interface PnlPoint {
+  t: string; // ISO closed_at
+  d: number; // realized pnl DELTA for this close (client cumulates)
+  module_id: string;
+}
+
+export interface Metrics {
+  realized_total: number;
+  unrealized_total: number;
+  closed_24h: number;
+  avg_edge: number | null;
+  fill_rate: number | null;
+  fills_24h: number;
+  open_orders: number;
+  breaker_trips: number;
+}
+
 export interface TerminalData {
   modules: Module[];
   positions: Position[];
@@ -80,6 +97,8 @@ export interface TerminalData {
   last_cycle_at: string | null;
   last_cycle_message: string | null;
   trades_by_module: Record<string, number>;
+  pnl_series: PnlPoint[];
+  metrics: Metrics;
   fetched_at: string;
 }
 

@@ -15,6 +15,7 @@ const config: Config = {
           red: "#ef4444",
           amber: "#f59e0b",
           accent: "#38bdf8",
+          gold: "#e0b341",
         },
       },
       fontFamily: {
