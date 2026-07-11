@@ -5,7 +5,10 @@ from api.modules.shared.config_store import save_module_config as _save
 # real fills+fees). Buy a DECIDED favorite's CHEAP shares as retail dumps the
 # lost side, hold to resolution, cut the ~1-3% collapse games with a stop-loss.
 DEFAULT_CONFIG: dict = {
-    "series_ids": [3],               # 3=MLB (2=NBA,4=NHL,1=NFL when in season)
+    # 2-outcome US sports (no draws): 1=NFL 2=NBA 3=MLB 4=NHL. Only whichever is
+    # in season returns live games. NOTE: only MLB is backtest-validated so far;
+    # the others use the same mechanic but need their own OOS check before live $.
+    "series_ids": [1, 2, 3, 4],
     # entry: only sweep when the favorite is truly decided, and only buy cheap.
     "decided_bid_threshold": 0.97,   # favorite bid must be >= this (raised from
                                      #   0.95 to dodge collapses; backtest shows

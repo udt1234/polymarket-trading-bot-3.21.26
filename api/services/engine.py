@@ -127,8 +127,9 @@ class Engine:
 
     # ---- helpers ----
     def _live_quotes(self) -> dict[str, dict]:
-        """token_id -> {best_bid, best_ask} for every live tweet bracket
-        (Gamma, C2). Used by the paper fill simulator."""
+        """token_id -> {best_bid, best_ask} for every live market the active
+        modules trade (tweet brackets + sports game sides), so the paper fill
+        simulator can fill any module's resting orders (C2)."""
         from api.modules.shared import discovery
         quotes: dict[str, dict] = {}
         try:
@@ -137,8 +138,37 @@ class Engine:
                     quotes[b["yes_token"]] = {"best_bid": b["best_bid"],
                                               "best_ask": b["best_ask"]}
         except Exception:
-            log.exception("live quote fetch failed")
+            log.exception("tweet quote fetch failed")
+        # sports game sides (union of every active sports_sweep module's series)
+        try:
+            series = self._active_sports_series()
+            if series:
+                from api.modules.sports_sweep import data as sports_data
+                for g in sports_data.live_games(series):
+                    for s in g["sides"]:
+                        quotes[s["token"]] = {"best_bid": s["best_bid"],
+                                              "best_ask": s["best_ask"]}
+        except Exception:
+            log.exception("sports quote fetch failed")
         return quotes
+
+    def _active_sports_series(self) -> list[int]:
+        """Union of series_ids configured on any non-inactive sports_sweep
+        module row (so paper fills cover exactly what it trades)."""
+        mod = self.registry.get("sports_sweep")
+        if mod is None:
+            return []
+        sb = get_supabase()
+        rows = (sb.table("modules").select("id,status").eq("strategy", "sports_sweep")
+                .neq("status", "inactive").execute().data) or []
+        series: set[int] = set()
+        for r in rows:
+            try:
+                cfg = mod.get_config(r["id"])
+                series.update(int(s) for s in cfg.get("series_ids", []))
+            except Exception:
+                pass
+        return sorted(series)
 
     def _write_price_snapshots(self) -> None:
         """One mid-price row per live bracket per hour (upsert on the
