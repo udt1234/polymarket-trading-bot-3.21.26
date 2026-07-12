@@ -52,5 +52,9 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Let the favicon/app-icon assets load without auth so the browser tab icon
+  // shows even on the login screen (otherwise the gate 401s them).
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|icons/).*)",
+  ],
 };
