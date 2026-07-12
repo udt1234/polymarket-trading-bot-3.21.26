@@ -7,8 +7,10 @@ routed through the Cloudflare Worker when POLYMARKET_PROXY_URL is set.
 import logging
 
 from api.services.polymarket_proxy import install_httpx_proxy_patch
+from api.services.net_tuning import enable_tcp_nodelay
 
 install_httpx_proxy_patch()
+enable_tcp_nodelay()
 
 from contextlib import asynccontextmanager
 
