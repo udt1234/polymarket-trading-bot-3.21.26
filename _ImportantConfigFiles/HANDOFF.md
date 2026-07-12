@@ -54,7 +54,16 @@ Interpretation: hot-path fire (cancel + post pre-signed) ≈ **2×26 ≈ ~52ms n
 - **TwitterAPI.io / tweet strategies: ON HOLD** — no tweet strategy has survived backtests yet. Do NOT buy the key or build the tweet stream until a tweet edge is proven. Tweet-specific speed lane (warm pool, pre-signed ladder wiring, hot-path activation) is parked with it.
 - **BUT build the NON-tweet speed/quality hardening NOW** (applies to the sports sweep + arb + any maker strategy): adverse-selection modeling in backtests, TCP_NODELAY on the CLOB transport, the `feed_guard` price-validation util. These don't need TwitterAPI.
 - **Win-prob model: sharpen** (calibrate vs recorded MLB finals). **Dashboard: add live-latency logging + realtime**, and DEPLOY the redesign to Railway `polybot-dashboard`.
-- **Backtest session (`polymarket // backtestsrun`): under independent QA** — Sir doesn't trust its verdicts; auditing for look-ahead / fills / fees / bars / overfit before acting on any REJECTED conclusion.
+- **Backtest session (`polymarket // backtestsrun`): QA DONE 2026-07-11.** Independent audit results:
+  - ✅ **TRUST the REJECTED verdicts** — seesaw (sweep_grid walk-forward, bracket-hit ≈61% for every projection model), arb (arb_july6, YES+NO≈1), Elon books -EV (backtest_books) are CLEAN and correctly rejected. Don't re-litigate.
+  - ⚠️ **DO NOT TRUST two positive claims:** (1) **MLB sports-sweep "+2.35% CONFIRMED +EV"** is OVERSTATED — it's a per-FILL band ROI (pseudo-replication); honest unit is per-GAME (n≈29, 1 collapse), fat tail (-96%) wider than the edge, 95% CI spans zero, and phase5 (fee=0) vs phase6 (real fee) disagree. → **sports_sweep stays PAPER-ONLY until re-validated per-game on forward OOS data with a bootstrap CI (lower bound must be > 0).** (2) **Tweet-reaction "speed Test B viable / first non-efficient edge"** RETRACTED — top-of-book full-clip fill artifact (depth sim loses on both auctions); the +2.9c is forward-conditioned. Memories [[crypto-sweep-backtest]] + [[tweet-reaction-speed-test]] corrected.
+  - KNOWN FIX PENDING: reconcile phase5_mlb_slate fee (=0) with phase6 (real sports taker fee); phase6 is correct.
+
+### 🤖 AUTONOMOUS SESSION 2026-07-11 (Sir away 2h) — shipped
+- ✅ **Dashboard redesign LIVE** at **https://polybot.xagency.com** (custom domain; `railway up` from web/). Overview + per-module tabs + Latency. Favicon fixed (was behind the auth gate → 401'd; now icon.svg + favicon.ico serve publicly, verified 200).
+- ✅ **Speed hardening** built + deployed to Dublin: `net_tuning.enable_tcp_nodelay()` (Nagle off, all sockets, at boot) + `FeedGuard` util (drop-first/dedup/stale/delta-reject) for the recorder + speed lane.
+- ✅ **Backtest QA** (above) + memory corrections.
+- ⏳ Still queued: win-prob calibration (needs OOS game-outcome data; deferred to avoid a rushed bad calibration), live-latency logging + realtime dashboard, per-game sweep OOS rerun (phase6 pmxt pulls too slow this session).
 
 ### 📋 TWEET-HARDENING → folded into Step 5 (Speed lane) (2026-07-11)
 From @0xSurferX's 6-failure-pattern thread. Scorecard: we COVER backtest-realism, win-rate-vs-entry (edge=p_true-price), simplicity, break-even discipline. The 2 partials + extras below are INCLUDED in Step 5 (not built now - the 5-min sweep doesn't stream, so streaming-validation would be speculative until the speed lane exists):
