@@ -118,6 +118,23 @@ export default function Terminal() {
   const badge = engineBadge(data?.last_cycle_at);
   const metrics = data?.metrics ?? EMPTY_METRICS;
   const activeModule = modules.find((m) => m.id === tab) ?? null;
+  const liveModules = modules.filter((m) => m.status === "active");
+  const mode =
+    liveModules.length > 0
+      ? {
+          label: `⚠ LIVE MONEY — ${liveModules.length} module(s) trading real funds`,
+          cls: "border-term-red bg-term-red/15 text-term-red",
+        }
+      : {
+          label: "PAPER MODE · all modules simulated · no real money at risk",
+          cls: "border-term-amber bg-term-amber/15 text-term-amber",
+        };
+  const statusChip = (s: string) =>
+    s === "active"
+      ? "border-term-red/50 bg-term-red/15 text-term-red"
+      : s === "paper"
+        ? "border-term-amber/50 bg-term-amber/15 text-term-amber"
+        : "border-term-muted/40 bg-term-muted/15 text-term-muted";
 
   return (
     <main className="mx-auto max-w-7xl space-y-4 p-4">
@@ -141,6 +158,14 @@ export default function Terminal() {
       )}
 
       <BreakerBanner breaker={data?.circuit_breaker ?? null} />
+
+      {data && modules.length > 0 && (
+        <div
+          className={`rounded border px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-widest ${mode.cls}`}
+        >
+          {mode.label}
+        </div>
+      )}
 
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
@@ -190,6 +215,20 @@ export default function Terminal() {
       {/* PER-MODULE */}
       {activeModule && data && (
         <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold uppercase tracking-wider text-term-text">
+              {activeModule.name}
+            </span>
+            <span
+              className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${statusChip(activeModule.status)}`}
+            >
+              {activeModule.status === "paper"
+                ? "PAPER"
+                : activeModule.status === "active"
+                  ? "LIVE $"
+                  : activeModule.status}
+            </span>
+          </div>
           <ErrorBoundary label="pnl chart">
             <PnlHero
               series={data.pnl_series.filter(
