@@ -259,3 +259,21 @@ def win_prob(detail: dict, leading_is_home: bool) -> float:
 def edge(p_true: float, price: float) -> float:
     """Trading edge on a BUY: fair value minus the price we pay."""
     return p_true - price
+
+
+def team_win_prob(team_name: str,
+                  states: dict[tuple[str, str], dict] | None = None) -> float | None:
+    """Find the LIVE game a team is in and return THAT team's current win
+    probability (not the favorite's). Used by the game-state EXIT: a held
+    favorite whose win_prob has collapsed is losing - sell before the full
+    resolution loss. Returns None if the team has no live (non-Final) game."""
+    if states is None:
+        states = mlb_live_states()
+    ab = abbr_for_name(team_name)
+    if not ab:
+        return None
+    for (away, home), st in states.items():
+        if ab in (away, home) and st.get("state") != "Final":
+            detail = game_detail(st["pk"])
+            return win_prob(detail, leading_is_home=(ab == home))
+    return None

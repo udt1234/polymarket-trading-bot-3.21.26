@@ -83,46 +83,64 @@ class PaperExecutor:
                  signal.price, signal.size, signal.auction_slug)
         return {"status": "open", "clob_order_id": row["clob_order_id"]}
 
+    # A resting maker rarely wins 100% of the crossing flow in one shot (queue
+    # position + limited depth), so ENTRIES fill PARTIALLY per cycle instead of
+    # an instant full-size lift. Makes paper P&L accrue like a real resting
+    # order. True fill realism (real prints, depth, adverse selection) is
+    # measured in the recorder-backed backtest, not this 5-min snapshot loop.
+    QUEUE_FILL_FRAC = 0.5
+
     def check_fills(self, book_prices: dict[str, dict]) -> int:
         """Fill resting paper orders against live top-of-book. book_prices:
-        token_id -> {best_bid, best_ask}. A maker BUY fills when best_ask
-        <= limit; a maker SELL fills when best_bid >= limit. Returns fills."""
+        token_id -> {best_bid, best_ask}. A maker BUY fills when best_ask <=
+        limit (partially, over cycles); a maker SELL/EXIT fills fully when
+        best_bid >= limit. Returns fill events."""
         sb = get_supabase()
         rows = (sb.table("orders").select("*").eq("executor", "paper")
-                .eq("status", "open").execute().data) or []
+                .in_("status", ["open", "partially_filled"]).execute().data) or []
         fills = 0
         for o in rows:
             quote = book_prices.get(o.get("token_id") or "")
             if not quote:
                 continue
-            price = float(o["price"]); size = float(o["size"])
-            side = o["side"]
+            price = float(o["price"]); size = float(o["size"]); side = o["side"]
+            already = float(o.get("size_filled") or 0)
+            remaining = size - already
+            if remaining <= 0:
+                continue
             crossed = (side == "BUY" and quote.get("best_ask") is not None
                        and quote["best_ask"] <= price) or \
                       (side == "SELL" and quote.get("best_bid") is not None
                        and quote["best_bid"] >= price)
             if not crossed:
                 continue
-            sb.table("orders").update({
-                "status": "filled", "size_filled": size,
-                "filled_at": datetime.now(timezone.utc).isoformat(),
-            }).eq("id", o["id"]).execute()
+            # entries fill partially (queue/depth); exits complete in one pass
+            chunk = (min(remaining, max(1.0, int(size * self.QUEUE_FILL_FRAC)))
+                     if side == "BUY" else remaining)
+            new_filled = already + chunk
+            done = new_filled >= size - 1e-9
+            patch = {"size_filled": new_filled,
+                     "status": "filled" if done else "partially_filled"}
+            if done:
+                patch["filled_at"] = datetime.now(timezone.utc).isoformat()
+            sb.table("orders").update(patch).eq("id", o["id"]).execute()
             sb.table("trades").insert({
                 "module_id": o.get("module_id"), "market_id": o.get("market_id"),
-                "bracket": o.get("bracket"), "side": side, "size": size,
+                "bracket": o.get("bracket"), "side": side, "size": chunk,
                 "price": price,
             }).execute()
             if side == "BUY":
                 position_manager.apply_buy_fill(
                     module_id=o.get("module_id"), market_id=o.get("market_id") or "",
                     bracket=o.get("bracket") or "", token_id=o.get("token_id") or "",
-                    price=price, size=size)
+                    price=price, size=chunk)
             else:
                 pos_id = (o.get("metadata") or {}).get("position_id")
                 if pos_id:
-                    position_manager.apply_sell_fill(pos_id, price, size)
+                    position_manager.apply_sell_fill(pos_id, price, chunk)
             fills += 1
-            log.info("PAPER FILL %s %s %.4f x %.0f", side, o.get("bracket"), price, size)
+            log.info("PAPER %s %s %.4f x %.0f/%.0f", "FILL" if done else "PARTIAL",
+                     o.get("bracket"), price, chunk, size)
         return fills
 
 

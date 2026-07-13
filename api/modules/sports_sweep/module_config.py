@@ -39,6 +39,12 @@ DEFAULT_CONFIG: dict = {
     "use_game_state": True,
     "require_game_state": False,     # if True, skip when no live state; if False,
                                      #   fall back to price-only (e.g. non-MLB)
+    # game-state EXIT (the fat-tail cut the price stop-loss couldn't do): sell a
+    # held favorite the moment its LIVE win probability falls below this. Fires
+    # on real score/inning, not price noise, so it dodges the whipsaw that made
+    # the price stop-loss backfire. 0.40 = sell once we're clearly losing.
+    "gamestate_exit_enabled": True,
+    "exit_win_prob": 0.40,
     # win-probability fair value: when live state exists, price the ladder off the
     # continuous win_prob (edge = p_true - price) instead of the flat
     # decided_winrate. The elite upgrade - turns the feed into an edge, not just a

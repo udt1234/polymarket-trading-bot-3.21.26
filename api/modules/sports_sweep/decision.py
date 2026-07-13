@@ -55,6 +55,39 @@ def build_entry_bids(module_id: str, game: dict, fav: dict, cfg: dict,
     return signals
 
 
+def build_gamestate_exits(module_id: str, positions: list[dict],
+                          win_probs: dict[str, float],
+                          game_by_token: dict[str, dict], cfg: dict) -> list[Signal]:
+    """Sell a held favorite whose LIVE win probability has collapsed below
+    exit_win_prob. Unlike the price stop-loss (which backfired on price noise),
+    this fires on the actual game state (score/inning), so it cuts the real
+    fat-tail collapse without selling winners on a dip that fizzles."""
+    if not cfg.get("gamestate_exit_enabled", True):
+        return []
+    thr = cfg.get("exit_win_prob", 0.40)
+    out = []
+    for p in positions:
+        tok = p.get("token_id")
+        wp = win_probs.get(tok)
+        if wp is None or wp >= thr:
+            continue
+        g = game_by_token.get(tok)
+        if not g:
+            continue
+        side = next((s for s in g["sides"] if s["token"] == tok), None)
+        if not side or side["best_bid"] is None:
+            continue
+        price = max(snap_price(side["best_bid"], side["tick"]), side["tick"])
+        out.append(Signal(
+            module_id=module_id, market_id=p["market_id"], bracket=p.get("bracket") or "",
+            side="SELL", price=price, size=float(p["size"]), token_id=tok,
+            is_exit=True, auction_slug=g["slug"], spread=side["spread"],
+            best_bid=side["best_bid"], best_ask=side["best_ask"],
+            metadata={"position_id": p["id"], "gamestate_exit": True,
+                      "win_prob_at_exit": round(wp, 3)}))
+    return out
+
+
 def build_stop_exits(module_id: str, positions: list[dict],
                      game_by_token: dict[str, dict], cfg: dict) -> list[Signal]:
     """Sell out a held favorite whose current best_bid fell below the stop.

@@ -53,22 +53,39 @@ class SportsSweepModule(BaseModule):
                    .in_("status", ["submitted", "open"]).execute().data) or []
         resting_tokens = {r["token_id"] for r in resting}
 
-        signals = []
-        # exits FIRST (E8): stop-loss the fading games
-        signals += decision.build_stop_exits(module_id, held, game_by_token, cfg)
-
-        # entries: cap concurrent games
-        active_games = len({p.get("market_id") for p in held} |
-                           {game_by_token[t]["condition_id"] for t in resting_tokens
-                            if t in game_by_token})
-        # live game state (MLB) - fetched once per cycle, reused per game
+        # live game state (MLB) - fetched once per cycle, reused for exits + entries
         states = None
+        game_state = None
         if cfg.get("use_game_state", True):
             try:
                 from api.modules.shared import game_state
                 states = game_state.mlb_live_states()
             except Exception:
                 log.exception("game_state fetch failed")
+
+        signals = []
+        # exits FIRST (E8). Game-state exit: sell a held favorite whose live
+        # win prob collapsed (cuts the fat-tail without price-noise whipsaw).
+        if states and game_state and cfg.get("gamestate_exit_enabled", True):
+            win_probs: dict[str, float] = {}
+            for p in held:
+                if not p.get("bracket"):
+                    continue
+                try:
+                    wp = game_state.team_win_prob(p["bracket"], states)
+                except Exception:
+                    wp = None
+                if wp is not None:
+                    win_probs[p.get("token_id")] = wp
+            signals += decision.build_gamestate_exits(module_id, held, win_probs,
+                                                      game_by_token, cfg)
+        # legacy price stop-loss (default OFF - backfires on price noise)
+        signals += decision.build_stop_exits(module_id, held, game_by_token, cfg)
+
+        # entries: cap concurrent games
+        active_games = len({p.get("market_id") for p in held} |
+                           {game_by_token[t]["condition_id"] for t in resting_tokens
+                            if t in game_by_token})
 
         for g in games:
             if active_games >= cfg["max_concurrent_games"]:
