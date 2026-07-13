@@ -1,0 +1,9 @@
+[Unit]
+Description=Polybot module watchdog (self-heal): ensure engine cycling + modules running
+After=polybot.service
+
+[Service]
+Type=oneshot
+User=polybot
+WorkingDirectory=/home/polybot/bot
+ExecStart=/home/polybot/venv/bin/python /home/polybot/bot/scripts/watchdog.py
