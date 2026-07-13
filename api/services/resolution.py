@@ -1,9 +1,13 @@
 """Resolution tracker (BUILD_SPEC B6: every 30 min; Part N: per market_id).
 
-Groups open positions by market_id (condition id) and settles each against
-Gamma's resolved outcome: winning bracket YES -> 1.00, losers -> 0.00.
-Resolution is per-MARKET, never per-module (rolling auctions have no
-module-level resolution date - the old bot's realized P&L stayed $0)."""
+Settles every open/closing position against Gamma's resolved outcome. Two
+lookups, because resolved SPORTS game-markets get dropped from Gamma's
+`condition_ids` index within hours of resolving (tweet markets stay):
+  1. /markets?condition_ids=<cid>   - works for tweet-bracket markets.
+  2. closed /events by series        - recovers churned sports game-markets.
+Settlement is PER TOKEN: the position's own token_id is matched to the market's
+outcome index, so a favorite that is outcome[1] settles correctly (the old code
+always read outcome[0] and would mis-settle the away side)."""
 import json
 import logging
 
@@ -15,59 +19,107 @@ from api.services import position_manager
 log = logging.getLogger(__name__)
 
 GAMMA = "https://gamma-api.polymarket.com"
+SPORTS_SERIES = [1, 2, 3, 4]  # NFL/NBA/MLB/NHL - churn out of the condition index
 
 
-def _resolved_price(condition_id: str) -> float | None:
-    """1.0 / 0.0 for a resolved market's YES side, None while unresolved."""
+def _is_resolved(m: dict) -> bool:
+    if not m or not m.get("closed"):
+        return False
+    if (m.get("umaResolutionStatus") or "").lower() not in ("resolved", ""):
+        return False
+    return bool(m.get("outcomePrices"))
+
+
+def _token_outcome(m: dict, token_id: str | None) -> float | None:
+    """Our token's settled price: 1.0 won / 0.0 lost / None if unclear. Falls
+    back to outcome[0] only when the token can't be located (legacy YES rows)."""
+    try:
+        toks = m.get("clobTokenIds")
+        if isinstance(toks, str):
+            toks = json.loads(toks)
+        prices = m.get("outcomePrices")
+        if isinstance(prices, str):
+            prices = json.loads(prices)
+    except (TypeError, ValueError):
+        return None
+    if not prices:
+        return None
+    idx = 0
+    if token_id and toks and token_id in toks and len(toks) == len(prices):
+        idx = toks.index(token_id)
+    try:
+        p = float(prices[idx])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if p >= 0.999:
+        return 1.0
+    if p <= 0.001:
+        return 0.0
+    return None  # ambiguous - do not settle
+
+
+def _fetch_by_condition(condition_id: str) -> dict | None:
     try:
         r = httpx.get(f"{GAMMA}/markets", params={"condition_ids": condition_id},
                       timeout=20)
         r.raise_for_status()
-        markets = r.json() or []
-        if not markets:
-            return None
-        m = markets[0]
-        if not m.get("closed"):
-            return None
-        if (m.get("umaResolutionStatus") or "").lower() not in ("resolved", ""):
-            return None
-        prices = m.get("outcomePrices")
-        if isinstance(prices, str):
-            prices = json.loads(prices)
-        if not prices:
-            return None
-        yes = float(prices[0])
-        if yes >= 0.999:
-            return 1.0
-        if yes <= 0.001:
-            return 0.0
-        return None  # ambiguous - do not settle
+        mk = r.json() or []
+        if mk and _is_resolved(mk[0]):
+            return mk[0]
     except Exception:
-        log.exception("resolution check failed for %s", condition_id[:16])
-        return None
+        log.exception("condition_ids lookup failed for %s", condition_id[:16])
+    return None
+
+
+def _sports_resolved_map(series_ids: list[int]) -> dict[str, dict]:
+    """conditionId -> resolved market, from recent CLOSED sports events (the
+    lookup that survives a resolved game-market being dropped from the index)."""
+    out: dict[str, dict] = {}
+    for sid in series_ids:
+        try:
+            r = httpx.get(f"{GAMMA}/events", params={
+                "series_id": str(sid), "closed": "true", "limit": 300,
+                "order": "endDate", "ascending": "false"}, timeout=30)
+            r.raise_for_status()
+            for ev in (r.json() or []):
+                for m in (ev.get("markets") or []):
+                    cid = m.get("conditionId")
+                    if cid and _is_resolved(m):
+                        out[cid] = m
+        except Exception:
+            log.exception("sports resolved-map failed for series %s", sid)
+    return out
 
 
 def run_resolution_sweep() -> int:
-    """Settle every open/closing position whose market has resolved.
-    Returns positions settled."""
+    """Settle every open/closing position whose market has resolved. Returns
+    positions settled."""
     sb = get_supabase()
-    rows = (sb.table("positions").select("id,market_id,bracket")
+    rows = (sb.table("positions").select("id,market_id,bracket,token_id")
             .in_("status", ["open", "closing"]).execute().data) or []
-    by_market: dict[str, list[dict]] = {}
-    for r in rows:
-        by_market.setdefault(r.get("market_id") or "", []).append(r)
     settled = 0
-    for market_id, positions in by_market.items():
-        if not market_id:
+    market_cache: dict[str, dict | None] = {}
+    sports_map: dict[str, dict] | None = None
+    for p in rows:
+        mid = p.get("market_id") or ""
+        if not mid:
             continue
-        price = _resolved_price(market_id)
+        if mid not in market_cache:
+            market_cache[mid] = _fetch_by_condition(mid)
+        m = market_cache[mid]
+        if m is None:  # churned sports market - use the closed-events map
+            if sports_map is None:
+                sports_map = _sports_resolved_map(SPORTS_SERIES)
+            m = sports_map.get(mid)
+        if not m:
+            continue
+        price = _token_outcome(m, p.get("token_id"))
         if price is None:
             continue
-        for p in positions:
-            res = position_manager.resolve_at(p["id"], price)
-            if res:
-                settled += 1
-                log.info("RESOLVED %s %s at %.2f -> realized %.4f",
-                         p["bracket"], market_id[:12], price,
-                         float(res.get("realized_pnl") or 0))
+        res = position_manager.resolve_at(p["id"], price)
+        if res:
+            settled += 1
+            log.info("RESOLVED %s %s at %.2f -> realized %.4f",
+                     p.get("bracket"), mid[:12], price,
+                     float(res.get("realized_pnl") or 0))
     return settled
