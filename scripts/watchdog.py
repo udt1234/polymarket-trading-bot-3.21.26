@@ -69,6 +69,13 @@ def main() -> None:
         }).execute()
     except Exception:
         pass
+    # Telegram ping ONLY when we actually had to fix something (no spam on healthy).
+    if actions:
+        try:
+            from api.services.notifications import notify
+            notify("🐕 Polybot watchdog fixed:\n- " + "\n- ".join(actions))
+        except Exception:
+            pass
     print(msg)
 
 
