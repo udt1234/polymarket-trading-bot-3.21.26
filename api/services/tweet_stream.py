@@ -34,11 +34,15 @@ class TweetStream:
 
     async def run(self):
         import websockets
+        from api.config import get_settings
+        s = get_settings()
+        # read the key from settings (loads .env) with an os.environ fallback -
+        # pydantic reads .env into the Settings object, not os.environ.
         url = os.getenv("TWITTERAPI_WS_URL",
                         "wss://ws.twitterapi.io/twitter/tweet/websocket")
-        key = os.getenv("TWITTERAPI_IO_KEY", "")
+        key = s.twitterapi_io_key or os.getenv("TWITTERAPI_IO_KEY", "")
         if not key:
-            log.warning("TweetStream dormant: TWITTERAPI_IO_KEY unset")
+            log.warning("TweetStream dormant: twitterapi_io_key unset")
             return
         backoff = 1
         first_after_connect = True
