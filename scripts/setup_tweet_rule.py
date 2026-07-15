@@ -23,7 +23,7 @@ def main() -> None:
         r = httpx.post(f"{BASE}/add_rule", headers=headers, json={
             "tag": "elon_tweets_hotpath",
             "value": "from:elonmusk",
-            "interval_seconds": 0,
+            "interval_seconds": 0.1,   # min allowed 0.05; 100ms is noise vs the ~300-500ms X floor
         }, timeout=30)
         print(r.status_code, r.text[:400])
     r = httpx.get(f"{BASE}/get_rules", headers=headers, timeout=30)
