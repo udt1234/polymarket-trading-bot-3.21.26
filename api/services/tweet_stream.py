@@ -119,14 +119,18 @@ class TweetStream:
 
     @staticmethod
     def _insert_latency(tweet_id, meta, handler_ms):
+        # log_type must be one of ('decision','execution','system','risk') per the
+        # logs check constraint - use 'system' + a metadata "kind" discriminator so
+        # the diagnostic is queryable without a schema migration.
         try:
             from api.dependencies import get_supabase
             get_supabase().table("logs").insert({
-                "log_type": "tweet_latency",
+                "log_type": "system",
                 "severity": "info" if meta.get("fast_enough") else "warning",
-                "message": (f"tweet {tweet_id} detection={meta['detection_ms']}ms "
+                "message": (f"tweet_latency {tweet_id} detection={meta['detection_ms']}ms "
                             f"fire={meta.get('fast_enough')} ({meta.get('gate_reason')})"),
-                "metadata": {**meta, "tweet_id": tweet_id, "handler_ms": round(handler_ms, 1)},
+                "metadata": {**meta, "kind": "tweet_latency", "tweet_id": tweet_id,
+                             "handler_ms": round(handler_ms, 1)},
             }).execute()
         except Exception:
             log.exception("tweet_latency log write failed")
