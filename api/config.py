@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     # Feeds / proxy
     twitterapi_io_key: str = ""
+    enable_tweet_collector: bool = True   # listen-only tweet-latency diagnostic
     polymarket_proxy_url: str = ""
     polymarket_proxy_key: str = ""
     polygon_rpc_url: str = ""

@@ -40,7 +40,10 @@ async def lifespan(app: FastAPI):
     engine = Engine(registry)
     app.state.engine = engine
     engine.start()
+    from api.services import tweet_collector
+    tweet_collector.start()
     yield
+    tweet_collector.stop()
     engine.stop()
 
 
