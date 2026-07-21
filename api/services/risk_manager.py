@@ -44,6 +44,17 @@ class RiskVerdict:
     reason: str = ""
 
 
+def _meta_float(signal: "Signal", key: str, default: float) -> float:
+    """Read a numeric per-strategy gate override from signal.metadata; fall back
+    to the global default when absent or malformed (fail safe = the stricter
+    global value)."""
+    try:
+        v = (signal.metadata or {}).get(key)
+        return float(v) if v is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
 def _open_exposure(sb, module_id: str | None = None) -> tuple[float, dict[str, float]]:
     """(total notional, per-market notional) across open positions PLUS
     resting/unconfirmed BUY orders - a submitted order commits collateral
@@ -94,15 +105,24 @@ def check(signal: Signal, breaker_tripped: bool = False) -> RiskVerdict:
     if breaker_tripped:
         return RiskVerdict(False, "circuit_breaker")
 
+    # Per-strategy gate overrides (G1): maker/income strategies do not earn a
+    # directional EDGE (LP rewards = rebates; mirror = copying a whale), so the
+    # 2% directional-edge floor is the wrong test for them. A module opts in by
+    # setting metadata["min_edge"] / metadata["spread_tol"]; everything else uses
+    # the global defaults. Overrides may only LOOSEN toward 0 for these income
+    # strategies, never tighten silently - they are explicit per-module knobs.
+    min_edge = _meta_float(signal, "min_edge", s.min_edge_threshold)
+    spread_tol = _meta_float(signal, "spread_tol", s.slippage_tolerance)
+
     # Spread check: reject when spread > tolerance OR no data (fail closed).
     if signal.spread is None or signal.best_ask is None:
         return RiskVerdict(False, "no_spread_data")
-    if signal.spread > s.slippage_tolerance:
-        return RiskVerdict(False, f"spread_{signal.spread:.3f}>tol_{s.slippage_tolerance}")
+    if signal.spread > spread_tol:
+        return RiskVerdict(False, f"spread_{signal.spread:.3f}>tol_{spread_tol}")
 
     # Edge floor.
-    if signal.edge is None or signal.edge < s.min_edge_threshold:
-        return RiskVerdict(False, f"edge_{signal.edge}<min_{s.min_edge_threshold}")
+    if signal.edge is None or signal.edge < min_edge:
+        return RiskVerdict(False, f"edge_{signal.edge}<min_{min_edge}")
 
     # Kelly stake floor: skip dust bids (D4, ~0.1% of bankroll).
     if signal.notional < 0.001 * s.bankroll:

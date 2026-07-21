@@ -17,6 +17,10 @@ DEFAULT_CONFIG: dict = {
     "max_markets": 10,             # cap concurrent mirrored positions
     "max_price": 0.90,             # don't chase near-resolved favorites
     "min_notional": 1.0,
+    # risk-gate overrides (copy strategy, not directional edge - see module.py).
+    # whale_perf_gate_roi above is the real gate; this just removes the wrong one.
+    "gate_min_edge": 0.0,          # following a green whale is the thesis, not edge
+    "gate_spread_tol": 0.15,       # copy across arbitrary (sometimes wide) markets
 }
 
 

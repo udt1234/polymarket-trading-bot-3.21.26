@@ -87,7 +87,13 @@ class LpRewardsModule(BaseModule):
                     best_bid=tbid, best_ask=task,
                     metadata={"strategy": "lp_rewards", "daily_rate": round(m["daily_rate"], 2),
                               "reward_band_cents": m["rewards_max_spread"],
-                              "min_size": m["rewards_min_size"]}))
+                              "min_size": m["rewards_min_size"],
+                              # income is from rebates, not directional edge: the
+                              # 2% edge floor never applies here. Reward markets
+                              # are intentionally wide, so widen the spread gate to
+                              # the reward band we are being paid to quote inside.
+                              "min_edge": cfg.get("gate_min_edge", 0.0),
+                              "spread_tol": cfg.get("gate_spread_tol", 0.30)}))
                 emitted = True
             if emitted:
                 used += 1

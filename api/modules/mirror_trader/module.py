@@ -104,7 +104,14 @@ class MirrorTraderModule(BaseModule):
                 best_bid=book["best_bid"], best_ask=book["best_ask"],
                 metadata={"strategy": "mirror_trader", "whale": info["whale"][:10],
                           "whale_roi": round(info["roi"], 4),
-                          "whale_price": info["price"]}))
+                          "whale_price": info["price"],
+                          # the "edge" here is following a proven-green whale, not
+                          # a modeled mispricing, so the 2% directional-edge floor
+                          # does not apply. The whale_perf_gate_roi is the real
+                          # gate (enforced in the module). Allow a wider spread
+                          # since we copy across arbitrary markets.
+                          "min_edge": cfg.get("gate_min_edge", 0.0),
+                          "spread_tol": cfg.get("gate_spread_tol", 0.15)}))
         log.info("mirror_trader: %d whale(s) green, %d fresh picks -> %d signal(s)",
                  len(active), len(picks), len(signals))
         return signals

@@ -20,7 +20,9 @@ import httpx  # noqa: E402
 
 from api.dependencies import get_supabase  # noqa: E402
 
-STALE_MIN = 15  # an engine cycle older than this = the scheduler stalled
+STALE_MIN = 15         # an engine cycle older than this = the scheduler stalled
+STARVE_HOURS = 6       # signals arriving but ZERO approved for this long = a gate is eating everything
+NO_ORDER_HOURS = 24    # no order placed by any paper/active module this long = bench is dead
 
 
 def _last_cycle_age_min() -> float | None:
@@ -39,9 +41,31 @@ def _last_cycle_age_min() -> float | None:
     return (datetime.now(timezone.utc) - dt).total_seconds() / 60.0
 
 
+def _signal_approval_stats(sb, hours: int) -> tuple[int, int]:
+    """(signals, approved) in the last `hours` from the signals table."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    rows = (sb.table("signals").select("approved")
+            .gte("created_at", since).limit(20000).execute().data) or []
+    return len(rows), sum(1 for r in rows if r.get("approved"))
+
+
+def _hours_since_last_order(sb) -> float | None:
+    """Hours since ANY order was placed, or None if never/unreadable."""
+    r = (sb.table("orders").select("created_at")
+         .order("created_at", desc=True).limit(1).execute().data) or []
+    if not r:
+        return None
+    try:
+        dt = datetime.fromisoformat(r[0]["created_at"].replace("Z", "+00:00"))
+    except (ValueError, KeyError):
+        return None
+    return (datetime.now(timezone.utc) - dt).total_seconds() / 3600.0
+
+
 def main() -> None:
     sb = get_supabase()
     actions: list[str] = []
+    alerts: list[str] = []  # things it CANNOT auto-fix but MUST surface (no silent "healthy")
 
     # 1. Engine cycling? Restart the service if the scheduler stalled (or the
     #    API is unreachable / has never cycled).
@@ -49,6 +73,25 @@ def main() -> None:
     if age is None or age > STALE_MIN:
         actions.append(f"engine not cycling (age={age}m) -> systemctl restart polybot.service")
         subprocess.run(["sudo", "systemctl", "restart", "polybot.service"], check=False)
+
+    # 1b. THE BLIND SPOT that hid a 6-day stall: engine healthy + signals flowing
+    #     but a gate rejecting 100% of them. Detect signals>0 & approved==0, and
+    #     a total order drought. Cannot auto-fix (it's a config/logic call), so
+    #     ALERT loudly instead of reporting "healthy".
+    try:
+        sigs, approved = _signal_approval_stats(sb, STARVE_HOURS)
+        if sigs > 0 and approved == 0:
+            alerts.append(f"SIGNAL STARVATION: {sigs} signals in {STARVE_HOURS}h, "
+                          f"0 approved - a risk gate is rejecting everything")
+    except Exception as e:
+        alerts.append(f"signal-stats check failed: {type(e).__name__}")
+    try:
+        oh = _hours_since_last_order(sb)
+        if oh is None or oh > NO_ORDER_HOURS:
+            alerts.append(f"ORDER DROUGHT: no order placed in "
+                          f"{'ever' if oh is None else f'{oh:.0f}h'} - bench is not trading")
+    except Exception as e:
+        alerts.append(f"order-drought check failed: {type(e).__name__}")
 
     # 2. Any expected module wrongly paused? Re-activate to PAPER (safe - never
     #    to 'active'). Skip intentionally decommissioned modules.
@@ -61,19 +104,37 @@ def main() -> None:
             .eq("id", m["id"]).execute()
         actions.append(f"re-activated '{m['name']}' -> paper (was inactive: {m.get('inactive_reason')})")
 
-    msg = "watchdog: all healthy" if not actions else "watchdog fixed: " + "; ".join(actions)
+    if actions and alerts:
+        msg = "watchdog fixed: " + "; ".join(actions) + " | ALERTS: " + "; ".join(alerts)
+        sev = "error"
+    elif alerts:
+        msg = "watchdog ALERTS (needs a human): " + "; ".join(alerts)
+        sev = "error"
+    elif actions:
+        msg = "watchdog fixed: " + "; ".join(actions)
+        sev = "warning"
+    else:
+        msg = "watchdog: all healthy"
+        sev = "info"
     try:
         sb.table("logs").insert({
-            "log_type": "system", "severity": "warning" if actions else "info",
-            "message": msg, "metadata": {"actions": actions, "engine_age_min": age},
+            "log_type": "system", "severity": sev,
+            "message": msg,
+            "metadata": {"actions": actions, "alerts": alerts, "engine_age_min": age},
         }).execute()
     except Exception:
         pass
-    # Telegram ping ONLY when we actually had to fix something (no spam on healthy).
-    if actions:
+    # Telegram ping when we FIXED something OR when there's an unfixable ALERT
+    # (silence must never again mean "assumed fine").
+    if actions or alerts:
         try:
             from api.services.notifications import notify
-            notify("🐕 Polybot watchdog fixed:\n- " + "\n- ".join(actions))
+            parts = []
+            if actions:
+                parts.append("🐕 Polybot watchdog fixed:\n- " + "\n- ".join(actions))
+            if alerts:
+                parts.append("🚨 Polybot watchdog ALERT (needs you):\n- " + "\n- ".join(alerts))
+            notify("\n\n".join(parts))
         except Exception:
             pass
     print(msg)

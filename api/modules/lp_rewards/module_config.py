@@ -14,6 +14,9 @@ DEFAULT_CONFIG: dict = {
     "quote_frac_of_band": 0.5,     # rest this fraction of rewardsMaxSpread inside mid
     "min_price": 0.05,
     "max_price": 0.95,
+    # risk-gate overrides (income strategy, not directional edge - see module.py)
+    "gate_min_edge": 0.0,          # no directional-edge floor; reward is the income
+    "gate_spread_tol": 0.30,       # reward markets are wide; we're paid to quote them
 }
 
 
