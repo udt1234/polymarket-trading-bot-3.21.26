@@ -90,6 +90,27 @@ class HotPath:
         self.last_latency_ms: float | None = None
 
     def fire(self, new_count: int) -> bool:
+        # SAFETY GATE (risk-audit 2026-07-22): the hot path posts PRE-SIGNED orders
+        # with NO per-order risk_manager.check() anywhere in the lane, and
+        # PreSignLoop currently signs whatever build_ladder() returns without a risk
+        # pass. Until that gap is closed this lane must never fire live. Two backstops
+        # here: (a) the dual live guard, (b) the circuit breaker.
+        # ⚠️ BEFORE WIRING THIS LANE LIVE: add risk_manager.check() (or a fast
+        #    exposure/duplicate/breaker snapshot) inside PreSignLoop._run before
+        #    create_signed_post_only, so only risk-approved ladders ever get signed.
+        #    This gate alone does NOT enforce exposure/loss/duplicate/depth limits.
+        from api.config import get_settings
+        s = get_settings()
+        live = s.environment == "production" and not s.paper_mode and s.allow_live_trading
+        if not live:
+            log.warning("HOT PATH suppressed: dual live guard not satisfied "
+                        "(paper/dev) - refusing to post pre-signed orders")
+            return False
+        from api.services.breaker import is_tripped
+        if is_tripped():
+            log.warning("HOT PATH suppressed: circuit breaker tripped")
+            return False
+
         from api.services import clob
         entry = self.presign.pool.take(new_count)
         if entry is None:

@@ -86,6 +86,30 @@ def _open_exposure(sb, module_id: str | None = None) -> tuple[float, dict[str, f
     return total, per_market
 
 
+def _correlated_exposure(sb, corr_key: str) -> float:
+    """Open + resting-BUY notional in one correlated bucket. The bucket key is the
+    auction slug when a signal carries one, else the market_id/condition_id. Since
+    every bracket of one auction shares that condition_id, matching on market_id ==
+    corr_key captures the whole correlated set for tweet markets; slug-tagged rows
+    (metadata.auction_slug) are also matched so cross-market correlated groups work.
+    Raises on DB error -> caller fails closed."""
+    if not corr_key:
+        return 0.0
+    total = 0.0
+    pos = (sb.table("positions").select("market_id,size,avg_price,metadata")
+           .in_("status", ["open", "closing"]).execute().data) or []
+    for r in pos:
+        if r.get("market_id") == corr_key or (r.get("metadata") or {}).get("auction_slug") == corr_key:
+            total += float(r.get("size") or 0) * float(r.get("avg_price") or 0)
+    orders = (sb.table("orders").select("market_id,size,price,metadata")
+              .eq("side", "BUY")
+              .in_("status", ["submitted", "open", "partially_filled"]).execute().data) or []
+    for o in orders:
+        if o.get("market_id") == corr_key or (o.get("metadata") or {}).get("auction_slug") == corr_key:
+            total += float(o.get("size") or 0) * float(o.get("price") or 0)
+    return total
+
+
 def _realized_pnl_since(sb, since: datetime) -> float | None:
     rows = (sb.table("positions").select("realized_pnl,closed_at")
             .eq("status", "closed").gte("closed_at", since.isoformat())
@@ -151,6 +175,17 @@ def check(signal: Signal, breaker_tripped: bool = False) -> RiskVerdict:
         total, per_market = _open_exposure(sb)
         if signal.notional + per_market.get(signal.market_id, 0.0) > s.max_single_market_exposure * s.bankroll:
             return RiskVerdict(False, "single_market_cap")
+        # Correlated-bucket cap (stated non-negotiable, was declared but unenforced,
+        # risk-audit 2026-07-22). All brackets of ONE auction are perfectly
+        # correlated - exactly one wins - so exposure to a single auction (keyed by
+        # slug, falling back to market_id/condition_id) is bounded separately and
+        # tighter than the whole portfolio. For a tweet market this equals the
+        # single-market cap; it additionally bounds any strategy that could stack
+        # correlated brackets across the same underlying event.
+        corr_key = signal.auction_slug or signal.market_id
+        corr_now = _correlated_exposure(sb, corr_key)
+        if signal.notional + corr_now > s.max_correlated_exposure * s.bankroll:
+            return RiskVerdict(False, "correlated_cap")
         if signal.notional + total > s.max_portfolio_exposure * s.bankroll:
             return RiskVerdict(False, "portfolio_cap")
 
