@@ -96,11 +96,13 @@ def _correlated_exposure(sb, corr_key: str) -> float:
     if not corr_key:
         return 0.0
     total = 0.0
-    pos = (sb.table("positions").select("market_id,size,avg_price,metadata")
-           .in_("status", ["open", "closing"]).execute().data) or []
+    # positions has NO metadata column - match on market_id (condition_id), which
+    # for a tweet auction already groups every bracket of that auction together.
+    pos = (sb.table("positions").select("market_id,size,avg_price")
+           .in_("status", ["open", "closing"]).eq("market_id", corr_key).execute().data) or []
     for r in pos:
-        if r.get("market_id") == corr_key or (r.get("metadata") or {}).get("auction_slug") == corr_key:
-            total += float(r.get("size") or 0) * float(r.get("avg_price") or 0)
+        total += float(r.get("size") or 0) * float(r.get("avg_price") or 0)
+    # orders carry metadata.auction_slug too, so match either the condition_id or slug.
     orders = (sb.table("orders").select("market_id,size,price,metadata")
               .eq("side", "BUY")
               .in_("status", ["submitted", "open", "partially_filled"]).execute().data) or []
