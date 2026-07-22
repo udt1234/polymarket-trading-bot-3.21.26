@@ -47,10 +47,17 @@ class RiskVerdict:
 def _meta_float(signal: "Signal", key: str, default: float) -> float:
     """Read a numeric per-strategy gate override from signal.metadata; fall back
     to the global default when absent or malformed (fail safe = the stricter
-    global value)."""
+    global value).
+
+    Overrides may only LOOSEN toward 0 (income/copy strategies opt out of the
+    directional-edge floor), never negative and never tighter than the global.
+    Clamped to [0, default] so a careless/hostile module cannot set a negative
+    floor or an absurd tolerance to bypass the intended gate."""
     try:
         v = (signal.metadata or {}).get(key)
-        return float(v) if v is not None else default
+        if v is None:
+            return default
+        return max(0.0, min(float(v), default))
     except (TypeError, ValueError):
         return default
 
