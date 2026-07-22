@@ -94,12 +94,15 @@ class CopytraderModule(BaseModule):
             if count is None:
                 continue
             elapsed = windows.elapsed_fraction(auction["window_start"], auction["window_end"])
+            from datetime import datetime
+            remaining_h = max(0.0, (auction["window_end"]
+                                    - datetime.now(windows.ET)).total_seconds() / 3600.0)
             prior_mean, prior_std = fair_value.VALIDATED_PRIORS.get(
                 auction["duration_type"], fair_value.VALIDATED_PRIORS["2-day"])
             projection = fair_value.gamma_poisson_projection(count, elapsed,
                                                              prior_mean, prior_std)
             dist = fair_value.bracket_distribution(
-                projection, count, [b["label"] for b in auction["brackets"]])
+                projection, count, [b["label"] for b in auction["brackets"]], remaining_h)
             for b in targets:
                 if (b["condition_id"], b["label"]) in resting_keys | held_keys:
                     continue

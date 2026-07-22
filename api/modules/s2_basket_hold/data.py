@@ -25,4 +25,9 @@ def live_auction_snapshot(duration: str) -> dict | None:
     auction["count"] = count
     auction["elapsed"] = windows.elapsed_fraction(auction["window_start"],
                                                   auction["window_end"])
+    # remaining hours in the window - feeds the LOCKED calibrated sigma
+    from datetime import datetime
+    now = datetime.now(windows.ET)
+    auction["remaining_hours"] = max(
+        0.0, (auction["window_end"] - now).total_seconds() / 3600.0)
     return auction

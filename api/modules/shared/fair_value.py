@@ -7,6 +7,8 @@ monthly median ~923; 2-day derives from the ~30/day market-counted rate.
 import math
 import re
 
+from api.modules.shared import locked_pace
+
 VALIDATED_PRIORS = {  # duration_type -> (prior_mean, prior_std)
     "2-day": (60.0, 25.0),
     "7-day": (207.0, 55.0),
@@ -54,20 +56,23 @@ def _norm_cdf(x: float, mean: float, std: float) -> float:
 
 
 def bracket_distribution(projection: float, posts_so_far: int,
-                         labels: list[str]) -> dict[str, float]:
+                         labels: list[str], remaining_hours: float | None = None) -> dict[str, float]:
     """Fair win probability per bracket (D3).
 
-    - Final count ~ Normal(projection, sigma) with the validated
-      remaining-uncertainty sigma: sqrt(max(projection - posts_so_far, 1))
-      * 1.5. This single formula was the fix that took near-close Brier
-      from 0.41 to 0.13; it already shrinks as the window ends because
-      projection - posts_so_far shrinks, so no extra time-shrink factor
-      is applied on top (double-shrinking underweights the tails).
+    - Final count ~ Normal(projection, sigma). sigma is the LOCKED calibrated
+      remaining-uncertainty (locked_pace.calib_sigma(remaining_hours), the
+      62-auction forecast-error table + SIGMA_MAX=100, LOCKED 2026-07-11). This
+      replaced the old flat sqrt(remaining)*1.5 that made odds ~2x too confident
+      (84% at 24h, 100% at 4h). If remaining_hours is unknown (legacy callers),
+      fall back to the old formula so behavior is unchanged for them.
     - Any bracket whose upper bound < posts_so_far is IMPOSSIBLE (count
       only rises) -> exactly 0.
     - Renormalized to sum 1.
     """
-    sigma = math.sqrt(max(projection - posts_so_far, 1.0)) * 1.5
+    if remaining_hours is not None:
+        sigma = locked_pace.calib_sigma(remaining_hours)
+    else:
+        sigma = math.sqrt(max(projection - posts_so_far, 1.0)) * 1.5
     probs: dict[str, float] = {}
     for label in labels:
         rng = parse_bracket_range(label)

@@ -19,7 +19,8 @@ def build_entry_signals(module_id: str, auction: dict, cfg: dict,
     projection = fair_value.gamma_poisson_projection(
         auction["count"], auction["elapsed"], prior_mean, prior_std)
     labels = [b["label"] for b in auction["brackets"]]
-    dist = fair_value.bracket_distribution(projection, auction["count"], labels)
+    dist = fair_value.bracket_distribution(projection, auction["count"], labels,
+                                           auction.get("remaining_hours"))
 
     by_label = {b["label"]: b for b in auction["brackets"]}
     held_by_bracket = {p["bracket"] for p in held}
@@ -75,7 +76,8 @@ def build_salvage_exits(module_id: str, auction: dict, cfg: dict,
     projection = fair_value.gamma_poisson_projection(
         auction["count"], auction["elapsed"], prior_mean, prior_std)
     labels = [b["label"] for b in auction["brackets"]]
-    dist = fair_value.bracket_distribution(projection, auction["count"], labels)
+    dist = fair_value.bracket_distribution(projection, auction["count"], labels,
+                                           auction.get("remaining_hours"))
     by_label = {b["label"]: b for b in auction["brackets"]}
     out: list[Signal] = []
     for p in held:
