@@ -39,6 +39,9 @@ class Settings(BaseSettings):
 
     # Engine cadence (seconds) - slow path (BUILD_SPEC B6)
     default_interval: int = 300
+    # unfilled resting BUY orders older than this are cancelled each cycle so
+    # they stop eating the exposure cap forever (froze the bench 6d, 2026-07)
+    stale_order_hours: int = 6
 
     # Risk defaults (BUILD_SPEC G1/D4)
     bankroll: float = 1000.0

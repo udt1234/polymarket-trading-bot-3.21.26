@@ -6,7 +6,7 @@ Supabase; one module failing never blocks another (per-module try/except).
 Hot path (Step 5) lives beside this, not inside it.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from api.config import get_settings
 from api.dependencies import get_supabase
@@ -79,6 +79,16 @@ class Engine:
         except Exception:
             log.exception("stuck-closing sweep failed")
 
+        # 2a. Expire stale resting BUY orders. Maker quotes are re-quoted fresh
+        #     each cycle, so an unfilled BUY older than STALE_ORDER_HOURS is a
+        #     ghost that keeps eating the portfolio-exposure cap forever (it froze
+        #     the whole bench for 6 days, 2026-07). Cancel paper ghosts here; a
+        #     live GTD order self-expires on the exchange, so only sweep paper.
+        try:
+            self._expire_stale_orders(sb)
+        except Exception:
+            log.exception("stale-order sweep failed")
+
         # 2b. Hourly price snapshots (dashboard charts + model history).
         try:
             self._write_price_snapshots()
@@ -126,6 +136,29 @@ class Engine:
         return summary
 
     # ---- helpers ----
+    def _expire_stale_orders(self, sb) -> int:
+        """Cancel unfilled resting BUY orders older than STALE_ORDER_HOURS so
+        they stop counting toward the exposure cap forever. Paper only: live GTD
+        orders self-expire on the exchange. Returns the count cancelled."""
+        s = get_settings()
+        cutoff = (datetime.now(timezone.utc)
+                  - timedelta(hours=s.stale_order_hours)).isoformat()
+        rows = (sb.table("orders").select("id")
+                .eq("side", "BUY").eq("executor", "paper")
+                .in_("status", ["submitted", "open", "partially_filled"])
+                .lt("created_at", cutoff).execute().data) or []
+        if not rows:
+            return 0
+        ids = [r["id"] for r in rows]
+        for i in range(0, len(ids), 50):
+            (sb.table("orders")
+             .update({"status": "cancelled",
+                      "metadata": {"cancel_reason": "stale_ttl"}})
+             .in_("id", ids[i:i + 50]).execute())
+        log.info("expired %d stale paper order(s) older than %dh",
+                 len(ids), s.stale_order_hours)
+        return len(ids)
+
     def _live_quotes(self) -> dict[str, dict]:
         """token_id -> {best_bid, best_ask} for every live market the active
         modules trade (tweet brackets + sports game sides), so the paper fill
