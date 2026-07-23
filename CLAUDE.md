@@ -182,6 +182,7 @@ See `_ImportantConfigFiles/MODULE_ARCHITECTURE.md` for the full guide. Quick rul
 - `@strategy-reviewer` — before committing signal/pacing/projection changes
 - `@risk-auditor` — before going live, audit all money-touching code
 - `@verify-bot` — end-to-end paper trading verification (NOT a backtester)
+- `@backtest-builder` — **writes Polymarket-native backtests that pass the auditor BY CONSTRUCTION** (canonical data, noon-ET window, event-driven, real-L2 maker fills, taker-fee truth, THE WALL, imports `locked_pace`, emits RUN_META). The auditor's twin: builder proposes, auditor disposes. Hands off to `@backtest-auditor` for the verdict; never certifies its own result. Use for any "backtest this / simulate / what if".
 - `@backtest-auditor` — **catches WRONG backtests before you trust the number.** Invoke after writing/changing any backtest, before quoting a P&L/ROI/win-rate, or before locking a model/param. 4 adversarial passes (A data-integrity / B metric-validity / C instruction-compliance / D statistical-honesty), re-runs the headline number to reproduce it, BLOCKS on fatal, writes an audit log to `_DataMetricPulls/pacing_backtest/audits/`. In the /pre-commit chain when backtest files change. It returns a verdict, it does NOT certify a strategy works.
 
 **Periodic deep sweeps (NOT per-PR — invoke on demand):**
