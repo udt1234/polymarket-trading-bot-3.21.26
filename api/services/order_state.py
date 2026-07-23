@@ -106,7 +106,15 @@ def _apply_position_effects(sb, order_row_id: str) -> None:
             if pos_id:
                 position_manager.apply_sell_fill(pos_id, price, size)
             else:
-                log.error("confirmed SELL %s has no position_id metadata - "
-                          "position table now stale, reconcile manually", o["id"])
+                # No position_id (reconciled/external SELL): reconcile by
+                # (market_id, bracket, token_id) instead of leaving the position
+                # stale + never feeding the breaker (risk-audit F3, 2026-07-22).
+                recon = position_manager.apply_sell_fill_by_market(
+                    market_id=o.get("market_id") or "", bracket=o.get("bracket") or "",
+                    token_id=o.get("token_id") or "", module_id=o.get("module_id"),
+                    sell_price=price, sold_size=size)
+                if recon is None:
+                    log.error("confirmed SELL %s has no position_id and no matching "
+                              "open position - reconcile manually", o["id"])
     except Exception:
         log.exception("position effects failed for order %s", o["id"])

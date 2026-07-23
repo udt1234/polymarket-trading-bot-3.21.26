@@ -96,6 +96,15 @@ class Engine:
             log.exception("price snapshot write failed")
 
         breaker = self._breaker_tripped(sb)
+        # Global manual halt: block ALL new entries (exits still run so positions
+        # can close). Same shape as the breaker - it pauses entries, never exits.
+        try:
+            from api.services.halt import is_halted
+            if is_halted():
+                breaker = True
+        except Exception:
+            log.exception("halt check failed - treating as halted (fail safe)")
+            breaker = True
 
         # 3. Per-module evaluate -> risk -> executor. Exits run within each
         #    module's signal batch FIRST (E8) and bypass entry gates.

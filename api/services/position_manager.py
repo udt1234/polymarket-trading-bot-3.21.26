@@ -77,6 +77,27 @@ def apply_sell_fill(position_id: str, sell_price: float, sold_size: float) -> di
     return row
 
 
+def apply_sell_fill_by_market(*, market_id: str, bracket: str, token_id: str,
+                              module_id: str | None, sell_price: float,
+                              sold_size: float) -> dict | None:
+    """Fallback for a confirmed SELL that lost its metadata.position_id (e.g. a
+    reconciled/external order): find the matching OPEN/closing position by
+    (market_id, bracket, token_id[, module_id]) and apply the fill so P&L and the
+    breaker still update instead of the position going stale (risk-audit F3, 2026-07-22)."""
+    sb = get_supabase()
+    q = (sb.table("positions").select("id")
+         .eq("market_id", market_id).eq("bracket", bracket)
+         .eq("token_id", token_id).in_("status", ["open", "closing"]))
+    if module_id is not None:
+        q = q.eq("module_id", module_id)
+    row = (q.limit(1).execute().data or [None])[0]
+    if not row:
+        log.error("apply_sell_fill_by_market: no open position for %s/%s/%s",
+                  market_id, bracket, token_id[:12])
+        return None
+    return apply_sell_fill(row["id"], sell_price, sold_size)
+
+
 def resolve_at(position_id: str, settle_price: float) -> dict | None:
     """Resolution settlement: winning bracket -> 1.00, losers -> 0.00.
     Uses the same atomic claim as exits - if another exit is in flight

@@ -91,7 +91,14 @@ def build_gamestate_exits(module_id: str, positions: list[dict],
 def build_stop_exits(module_id: str, positions: list[dict],
                      game_by_token: dict[str, dict], cfg: dict) -> list[Signal]:
     """Sell out a held favorite whose current best_bid fell below the stop.
-    Taker exit (marketable) to guarantee we get out of a fading game."""
+
+    MAKER-ONLY reality (risk-audit F4, 2026-07-22): a post-only SELL priced AT the
+    bid would CROSS and be rejected by the exchange, so a "taker/marketable" stop is
+    impossible on this bot. We rest the exit AT the current best_bid (a post-only
+    SELL there does not cross - it joins the top of the ask queue one level above,
+    at bid, which rests). It is NOT guaranteed to fill instantly; if the game keeps
+    fading it re-quotes lower each cycle chasing the bid down. This is an honest
+    maker stop, not a taker guarantee."""
     out = []
     if not cfg.get("stop_loss_enabled", False):
         return out  # HOLD to resolution - price stops bleed winners (backtest 2026-07-10)
@@ -105,7 +112,7 @@ def build_stop_exits(module_id: str, positions: list[dict],
         if not side or side["best_bid"] is None:
             continue
         if side["best_bid"] < stop:
-            # sell at (or just into) the current bid to exit now
+            # rest the exit at the current bid (post-only maker; will not cross)
             price = max(snap_price(side["best_bid"], side["tick"]), side["tick"])
             out.append(Signal(
                 module_id=module_id, market_id=p["market_id"], bracket=p.get("bracket") or "",
@@ -113,5 +120,5 @@ def build_stop_exits(module_id: str, positions: list[dict],
                 is_exit=True, auction_slug=g["slug"], spread=side["spread"],
                 best_bid=side["best_bid"], best_ask=side["best_ask"],
                 metadata={"position_id": p["id"], "stop_loss": True,
-                          "taker_exit": cfg.get("stop_loss_is_taker", True)}))
+                          "maker_rest_exit": True}))  # not a taker guarantee (F4)
     return out

@@ -2,7 +2,7 @@
 stay unauthenticated: auth on it makes Railway keep stale code 'Online'."""
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 
 router = APIRouter()
 
@@ -10,6 +10,20 @@ router = APIRouter()
 @router.get("/api/healthz")
 def healthz():
     return {"status": "ok", "running": True}
+
+
+@router.post("/api/engine/halt")
+def engine_halt(halted: bool = True, reason: str = "manual",
+                x_admin_token: str | None = Header(default=None)):
+    """Manual kill switch (risk-audit F5): STOP new order placement + cancel all
+    resting orders. Does NOT liquidate positions (they settle normally). Token-gated
+    via ADMIN_TOKEN. POST {halted:true} to engage, {halted:false} to release."""
+    from api.config import get_settings
+    from api.services.halt import set_halt
+    token = get_settings().admin_token
+    if not token or x_admin_token != token:
+        raise HTTPException(status_code=403, detail="invalid or missing X-Admin-Token")
+    return set_halt(halted, reason)
 
 
 @router.get("/api/engine/health")

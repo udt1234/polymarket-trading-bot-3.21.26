@@ -21,6 +21,7 @@ import httpx  # noqa: E402
 from api.dependencies import get_supabase  # noqa: E402
 
 STALE_MIN = 15         # an engine cycle older than this = the scheduler stalled
+RESTART_COOLDOWN_MIN = 8  # don't restart again within this window of a prior watchdog restart
 STARVE_HOURS = 6       # signals arriving but ZERO approved for this long = a gate is eating everything
 NO_ORDER_HOURS = 24    # no order placed by any paper/active module this long = bench is dead
 
@@ -62,17 +63,39 @@ def _hours_since_last_order(sb) -> float | None:
     return (datetime.now(timezone.utc) - dt).total_seconds() / 3600.0
 
 
+def _recent_watchdog_restart(sb, within_min: int) -> bool:
+    """True if this watchdog logged a service restart within the last `within_min`
+    minutes (its own restart actions are logged to Supabase with 'systemctl restart'
+    in the message). Prevents restart-looping while a fresh boot is still warming up."""
+    try:
+        since = (datetime.now(timezone.utc) - timedelta(minutes=within_min)).isoformat()
+        rows = (sb.table("logs").select("id")
+                .eq("log_type", "system").gte("created_at", since)
+                .like("message", "%systemctl restart polybot%")
+                .limit(1).execute().data) or []
+        return bool(rows)
+    except Exception:
+        return False  # fail toward allowing the restart (availability over churn-guard)
+
+
 def main() -> None:
     sb = get_supabase()
     actions: list[str] = []
     alerts: list[str] = []  # things it CANNOT auto-fix but MUST surface (no silent "healthy")
 
     # 1. Engine cycling? Restart the service if the scheduler stalled (or the
-    #    API is unreachable / has never cycled).
+    #    API is unreachable / has never cycled). COOLDOWN: a fresh restart takes up
+    #    to one cycle interval (300s) to log its first last_cycle_at, so if WE
+    #    restarted within RESTART_COOLDOWN_MIN, skip - restarting again would reset
+    #    the first-cycle timer and cause a restart loop (qa-bug-hunter, 2026-07-22).
     age = _last_cycle_age_min()
     if age is None or age > STALE_MIN:
-        actions.append(f"engine not cycling (age={age}m) -> systemctl restart polybot.service")
-        subprocess.run(["sudo", "systemctl", "restart", "polybot.service"], check=False)
+        if _recent_watchdog_restart(sb, RESTART_COOLDOWN_MIN):
+            alerts.append(f"engine not cycling (age={age}m) but a watchdog restart "
+                          f"fired <{RESTART_COOLDOWN_MIN}m ago - waiting for it to settle")
+        else:
+            actions.append(f"engine not cycling (age={age}m) -> systemctl restart polybot.service")
+            subprocess.run(["sudo", "systemctl", "restart", "polybot.service"], check=False)
 
     # 1b. THE BLIND SPOT that hid a 6-day stall: engine healthy + signals flowing
     #     but a gate rejecting 100% of them. Detect signals>0 & approved==0, and

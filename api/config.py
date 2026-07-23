@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     polymarket_proxy_key: str = ""
     polygon_rpc_url: str = ""
 
+    # Admin (manual kill switch endpoint auth). Empty = endpoint refuses all calls.
+    admin_token: str = ""
+
     # Alerts
     slack_webhook_url: str = ""
     telegram_bot_token: str = ""
