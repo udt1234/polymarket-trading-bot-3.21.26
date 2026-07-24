@@ -192,7 +192,45 @@ class Engine:
                                               "best_ask": s["best_ask"]}
         except Exception:
             log.exception("sports quote fetch failed")
+        # GENERIC coverage (2026-07-24): any resting paper order whose token is NOT
+        # already covered above - NO-token fades (elon_reversion), complement-pair
+        # legs (elon_late_arb), arbitrary market tokens (copytrader/mirror). Without
+        # this the paper fill sim has NO price for those orders and they can NEVER
+        # fill. Fetch the live CLOB book per uncovered token so EVERY module's orders
+        # can actually fill. The engine stays module-agnostic - it fills whatever is
+        # resting, not a hardcoded token list.
+        try:
+            sb = get_supabase()
+            rows = (sb.table("orders").select("token_id").eq("executor", "paper")
+                    .in_("status", ["open", "partially_filled"]).execute().data) or []
+            need = {r["token_id"] for r in rows
+                    if r.get("token_id") and r["token_id"] not in quotes}
+            for tok in need:
+                top = self._clob_top(tok)
+                if top:
+                    quotes[tok] = top
+        except Exception:
+            log.exception("open-order quote fetch failed")
         return quotes
+
+    @staticmethod
+    def _clob_top(token_id: str) -> dict | None:
+        """Live top-of-book {best_bid, best_ask} for one token from the CLOB."""
+        import httpx
+        from api.services.polymarket_proxy import clob_base, proxy_headers
+        try:
+            r = httpx.get(f"{clob_base()}/book", params={"token_id": token_id},
+                          headers=proxy_headers(), timeout=10)
+            r.raise_for_status()
+            b = r.json() or {}
+            bids = b.get("bids") or []; asks = b.get("asks") or []
+            bb = max((float(x["price"]) for x in bids), default=None)
+            ba = min((float(x["price"]) for x in asks), default=None)
+            if bb is None and ba is None:
+                return None
+            return {"best_bid": bb, "best_ask": ba}
+        except Exception:
+            return None
 
     def _active_sports_series(self) -> list[int]:
         """Union of series_ids configured on any non-inactive sports_sweep
