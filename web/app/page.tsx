@@ -64,6 +64,43 @@ function moduleMetrics(d: TerminalData, mid: string): Metrics {
   };
 }
 
+// Per-tab description + when it's expected to fire, so paper activity reads
+// correctly (a quiet module isn't broken - it just hasn't met its trigger).
+const MODULE_INFO: Record<string, { what: string; fires: string }> = {
+  overview: {
+    what: "Aggregate of every module — combined realized P/L, the live resting orders, and fills across all strategies.",
+    fires: "Always on; each module runs every ~5-min engine cycle.",
+  },
+  arb_scanner: {
+    what: "Complete-set arbitrage — buy every outcome of one event for a combined price < $1 (riskless, since exactly one pays $1).",
+    fires: "Only when a mispriced set actually appears — RARE on an efficient market, so 0 orders is normal/correct, not broken.",
+  },
+  copytrader: {
+    what: "Whale-informed tweet quoter — a proven whale picks which live ELON tweet brackets to quote; we rest our OWN fair-value bid there.",
+    fires: "Only when that whale is trading live Elon tweet brackets; idle by design otherwise (Elon markets are efficient, so it's thin).",
+  },
+  lp_rewards: {
+    what: "Liquidity-reward farming — rests post-only bids near mid on reward-eligible markets to earn Polymarket LP rewards (income that doesn't need a directional edge).",
+    fires: "Every cycle on markets with a reward pool. Orders REST to earn rewards and rarely fill — so 'no positions' is EXPECTED; a position only appears if a bid gets crossed.",
+  },
+  mirror_trader: {
+    what: "Copytrader (Option A) — follows proven whales' BUYS as a resting maker, sized down, across ANY market (0xd218 +103%, pada +92%).",
+    fires: "Every cycle when a currently-winning whale has recent buys. We rest at/BELOW the whale's price, so it fills only when the market comes to us (often it won't = no position).",
+  },
+  s2_basket_hold: {
+    what: "Buys Elon tweet-count brackets at our pace-model fair value and HOLDS to resolution. The most active strategy.",
+    fires: "On every live Elon tweet auction — fills + positions accrue here (162 fills, 6 open / 7 closed so far).",
+  },
+  sports_sweep: {
+    what: "Rests deep-discount bids on a DECIDED sports favorite (garbage-time) and holds to resolution. Backtest = paper-only (edge dies with realism).",
+    fires: "Only when a live game has a near-certain favorite (bid ≥ 97%) — mostly late innings of blowouts, so it's quiet most of the day.",
+  },
+  latency: {
+    what: "Measured Dublin → Polymarket round-trip latency baseline (reads + signing).",
+    fires: "Static reference; re-measured on demand.",
+  },
+};
+
 const LATENCY_ROWS = [
   ["CLOB round-trip (one order-post leg)", "~26ms p50", "31-40ms p95"],
   ["Order signing (kept off the hot path)", "~43ms p50", "spikes ~990ms cold"],
@@ -169,6 +206,20 @@ export default function Terminal() {
 
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
+      {(() => {
+        const key =
+          tab === "overview" || tab === "latency"
+            ? tab
+            : activeModule?.strategy ?? "";
+        const info = MODULE_INFO[key];
+        return info ? (
+          <div className="rounded border border-term-border bg-term-panel/60 px-3 py-2 text-xs leading-relaxed">
+            <span className="text-term-text">{info.what}</span>{" "}
+            <span className="text-term-gold">· Fires: {info.fires}</span>
+          </div>
+        ) : null;
+      })()}
+
       {/* OVERVIEW */}
       {tab === "overview" && data && (
         <div className="space-y-4">
@@ -180,12 +231,13 @@ export default function Terminal() {
               <StatCards metrics={metrics} />
             </div>
             <div className="space-y-4">
-              <Panel title={`Scan Engine · ${data.signals.length} signals`}>
-                <ScanFeed signals={data.signals} modules={modules} />
-              </Panel>
-              <Panel title="Live Orders">
+              <Panel title="Live Orders · resting quotes (filled=0 means NOT a position yet)">
                 <OrdersTable orders={data.orders} modules={modules} />
               </Panel>
+              <div className="rounded border border-term-border bg-term-panel/60 px-3 py-2 text-xs text-term-muted">
+                Per-module decisions (signals: approved ✓ or why-rejected) now live in
+                each module&apos;s own tab. Pick a module above to see its decisions.
+              </div>
             </div>
           </div>
 
