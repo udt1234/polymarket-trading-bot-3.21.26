@@ -71,6 +71,41 @@ def _fetch_by_condition(condition_id: str) -> dict | None:
     return None
 
 
+def _clob_token_outcome(condition_id: str, token_id: str | None) -> float | None:
+    """LAST-RESORT settlement lookup via the CLOB (2026-07-24).
+
+    Gamma drops resolved TWEET-BRACKET markets out of /markets entirely - not just
+    sports - so `condition_ids` AND `clob_token_ids` both return 0 rows and positions
+    were stranded 'open' forever, meaning we booked every salvage LOSS but never
+    collected a single winning $1.00 payout. The CLOB keeps them: /markets/<cid>
+    returns tokens[] each with an explicit `winner` bool. Match OUR token."""
+    try:
+        r = httpx.get(f"https://clob.polymarket.com/markets/{condition_id}", timeout=20)
+        r.raise_for_status()
+        m = r.json() or {}
+    except Exception:
+        log.exception("clob resolution lookup failed for %s", condition_id[:16])
+        return None
+    if not m.get("closed"):
+        return None
+    toks = m.get("tokens") or []
+    if not toks:
+        return None
+    if token_id:
+        for t in toks:
+            if str(t.get("token_id")) == str(token_id):
+                w = t.get("winner")
+                if w is True:
+                    return 1.0
+                if w is False:
+                    return 0.0
+                return None
+        return None  # our token isn't in this market - do not guess
+    # no token_id on the row (legacy): only settle if exactly one side won
+    winners = [t for t in toks if t.get("winner") is True]
+    return None if len(winners) != 1 else None
+
+
 def _sports_resolved_map(series_ids: list[int]) -> dict[str, dict]:
     """conditionId -> resolved market, from recent CLOSED sports events (the
     lookup that survives a resolved game-market being dropped from the index)."""
@@ -111,9 +146,11 @@ def run_resolution_sweep() -> int:
             if sports_map is None:
                 sports_map = _sports_resolved_map(SPORTS_SERIES)
             m = sports_map.get(mid)
-        if not m:
-            continue
-        price = _token_outcome(m, p.get("token_id"))
+        if m:
+            price = _token_outcome(m, p.get("token_id"))
+        else:
+            # Gamma has dropped it entirely (tweet brackets churn too) - ask the CLOB.
+            price = _clob_token_outcome(mid, p.get("token_id"))
         if price is None:
             continue
         res = position_manager.resolve_at(p["id"], price)
