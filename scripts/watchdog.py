@@ -121,7 +121,10 @@ def main() -> None:
     rows = (sb.table("modules").select("id,name,status,inactive_reason")
             .eq("status", "inactive").execute().data) or []
     for m in rows:
-        if (m.get("inactive_reason") or "").lower() == "decommissioned":
+        # Never resurrect a module that was paused ON PURPOSE: decommissioned, or
+        # paused because its THESIS is dead on this market (2026-07-23). Auto-
+        # reviving a known-losing strategy is worse than leaving it off.
+        if (m.get("inactive_reason") or "").lower() in ("decommissioned", "dead_thesis"):
             continue
         sb.table("modules").update({"status": "paper", "inactive_reason": None}) \
             .eq("id", m["id"]).execute()
