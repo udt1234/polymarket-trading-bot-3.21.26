@@ -1,0 +1,11 @@
+[Unit]
+Description=Polybot daily end-to-end money-path verifier
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=polybot
+WorkingDirectory=/home/polybot/bot
+EnvironmentFile=/home/polybot/bot/.env
+ExecStart=/home/polybot/venv/bin/python scripts/daily_verify.py
