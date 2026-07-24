@@ -1,0 +1,7 @@
+[Unit]
+Description=Track whale movements hourly
+[Timer]
+OnCalendar=hourly
+Persistent=true
+[Install]
+WantedBy=timers.target
