@@ -1,8 +1,9 @@
-"""Arb scanner data: fetch events with all their outcome legs + best asks.
+"""Arb scanner data: per-market YES+NO best bid/ask across scanned events.
 
-A 'complete set' = every outcome of ONE event. For binary game markets the two
-sides are the set; for a tweet event the set is all brackets. We read best asks
-from Gamma (bestAsk), which is the price a TAKER pays to buy that leg now."""
+For a binary market the NO book is the mirror of the YES book: NO_bid = 1 - YES_ask,
+NO_ask = 1 - YES_bid. So we can price BOTH sides from Gamma's YES bestBid/bestAsk with
+ZERO extra CLOB calls - which makes scanning hundreds of markets per cycle feasible.
+"""
 import json
 import logging
 
@@ -13,45 +14,41 @@ log = logging.getLogger(__name__)
 GAMMA = "https://gamma-api.polymarket.com"
 
 
-def _legs_from_event(e: dict) -> list[dict]:
-    legs = []
+def _markets_from_event(e: dict) -> list[dict]:
+    out = []
     for mk in (e.get("markets") or []):
         if mk.get("closed") or mk.get("acceptingOrders") is False:
-            return []  # incomplete set - skip the whole event
+            continue
         try:
             toks = json.loads(mk.get("clobTokenIds") or "[]")
         except (TypeError, ValueError):
-            return []
-        ask = mk.get("bestAsk")
-        if ask is None or not toks:
-            return []  # can't price the full set - skip
-        legs.append({"token": toks[0], "ask": float(ask),
-                     "tick": float(mk.get("orderPriceMinTickSize") or 0.01),
-                     "condition_id": mk.get("conditionId"),
-                     "label": mk.get("groupItemTitle") or mk.get("question") or ""})
-    return legs
-
-
-def scan_tag_events(tag_id: int) -> list[dict]:
-    """Multi-market events under a Gamma tag (e.g. tweet brackets). Each event
-    returns its full leg set (or empty if not fully priceable)."""
-    try:
-        r = httpx.get(f"{GAMMA}/events", params={"tag_id": tag_id, "closed": "false",
-                      "limit": 100}, timeout=30)
-        r.raise_for_status()
-    except Exception:
-        log.exception("tag scan failed")
-        return []
-    out = []
-    for e in r.json():
-        legs = _legs_from_event(e)
-        if len(legs) >= 2:
-            out.append({"slug": e.get("slug"), "title": e.get("title"), "legs": legs})
+            continue
+        if len(toks) < 2:
+            continue
+        yb, ya = mk.get("bestBid"), mk.get("bestAsk")
+        out.append({
+            "yes_token": toks[0], "no_token": toks[1],
+            "yes_bid": float(yb) if yb is not None else None,
+            "yes_ask": float(ya) if ya is not None else None,
+            "tick": float(mk.get("orderPriceMinTickSize") or 0.01),
+            "condition_id": mk.get("conditionId"),
+            "label": mk.get("groupItemTitle") or mk.get("question") or ""})
     return out
 
 
-# NOTE: a single BINARY market (sports/crypto) cannot be complete-set arbed -
-# its YES_ask + NO_ask = 1 + spread >= 1 always (the market-maker spread). Real
-# complete-set arb lives on MULTI-MARKET events where each outcome is a separate
-# market (tweet brackets, neg-risk events), so buying every leg's ask can sum
-# below $1 when the set is fragmented/mispriced. Those come from scan_tag_events.
+def scan_tag_events(tag_id: int, limit: int = 100) -> list[dict]:
+    """Multi-market events under a Gamma tag. Each returns {slug, title, markets:[...]}
+    with per-market YES best bid/ask (complete-set legs come from these too)."""
+    try:
+        r = httpx.get(f"{GAMMA}/events", params={"tag_id": tag_id, "closed": "false",
+                      "limit": limit}, timeout=30)
+        r.raise_for_status()
+    except Exception:
+        log.exception("tag %s scan failed", tag_id)
+        return []
+    out = []
+    for e in r.json() or []:
+        mkts = _markets_from_event(e)
+        if mkts:
+            out.append({"slug": e.get("slug"), "title": e.get("title"), "markets": mkts})
+    return out

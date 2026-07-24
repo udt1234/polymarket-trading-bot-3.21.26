@@ -1,16 +1,15 @@
-"""Complete-set arb scanner (BUILD_SPEC F4 S4, the one riskless edge).
+"""Complete-set + complement-pair arb scanner (fixed 2026-07-24).
 
-Scans multi-outcome events for a set of outcome asks summing below $1. When
-found, exactly one leg pays $1, so buying the whole set is riskless profit. v1
-is PAPER: detect + emit BUY signals for every leg + log the opportunity. Live
-atomic execution (all legs or none) is gated separately - a partial fill leaves
-directional risk.
+Scans tag-972 events for two structural arbs: (A) complete-set taker (sum of YES asks
+< $1) and (B) complement-pair maker (rest YES-bid + NO-bid summing < $1). Both are
+locked-below-$1 structural edges, not directional bets - so they opt out of the 2%
+edge floor via the metadata gate override (the reason this module never fired before).
+See module_config.py for the thesis.
 """
 import logging
 
 from api.modules.arb_scanner import data
-from api.modules.arb_scanner.module_config import (DEFAULT_CONFIG,
-                                                   get_module_config,
+from api.modules.arb_scanner.module_config import (get_module_config,
                                                    save_module_config)
 from api.modules.base import BaseModule
 from api.services.clob import snap_price
@@ -37,38 +36,76 @@ class ArbScannerModule(BaseModule):
     def save_config(self, module_id: str, config: dict) -> None:
         save_module_config(module_id, config)
 
+    def _gate(self, cfg: dict) -> dict:
+        return {"min_edge": cfg.get("gate_min_edge", 0.0),
+                "spread_tol": cfg.get("gate_spread_tol", 0.30)}
+
     async def _evaluate_async(self, module_id: str) -> list:
         cfg = self.get_config(module_id)
-        events = data.scan_tag_events(cfg["scan_tag_id"] if "scan_tag_id" in cfg
-                                      else cfg["scan_tweet_tag"])
-        signals, found = [], 0
+        events = data.scan_tag_events(cfg["scan_tag"], cfg["scan_limit"])
+        signals: list[Signal] = []
+        gate = self._gate(cfg)
+        set_found = pair_found = 0
+
         for ev in events:
-            legs = ev["legs"]
-            if not (2 <= len(legs) <= cfg["max_legs"]):
-                continue
-            ask_sum = sum(l["ask"] for l in legs)
-            if ask_sum > 1.0 - cfg["min_profit"]:
-                continue
-            found += 1
-            profit = 1.0 - ask_sum
-            log.warning("ARB: %s legs=%d ask_sum=%.4f profit=%.4f/$1 (%s)",
-                        ev["slug"], len(legs), ask_sum, profit, ev["title"])
-            # size the set: per_arb_max_usd across the legs, equal shares
-            stake = cfg["per_arb_max_usd"]
-            for l in legs:
-                price = snap_price(l["ask"], l["tick"])
-                size = int((stake / len(legs)) / price) if price > 0 else 0
-                if size < 5 or size * price < 1.0:
+            if len(signals) >= cfg["max_signals"]:
+                break
+            mkts = ev["markets"]
+            slug = ev.get("slug") or ""
+
+            # ---- A) complete-set taker: every leg's YES ask sums below $1 ----
+            asks = [m for m in mkts if m["yes_ask"] is not None]
+            if 2 <= len(asks) <= cfg["max_legs"] and len(asks) == len(mkts):
+                ask_sum = sum(m["yes_ask"] for m in asks)
+                if ask_sum < 1.0 - cfg["set_margin"]:
+                    set_found += 1
+                    profit = 1.0 - ask_sum
+                    log.warning("COMPLETE-SET ARB %s ask_sum=%.4f profit=%.4f", slug, ask_sum, profit)
+                    stake = cfg["per_arb_max_usd"]
+                    for m in asks:
+                        price = snap_price(m["yes_ask"], m["tick"])
+                        size = int((stake / len(asks)) / price) if price > 0 else 0
+                        if size < 5 or size * price < cfg["min_notional"]:
+                            continue
+                        signals.append(Signal(
+                            module_id=module_id, market_id=m["condition_id"], bracket=m["label"],
+                            side="BUY", price=price, size=size, token_id=m["yes_token"],
+                            fair_value=1.0 / len(asks), edge=round(profit / len(asks), 4),
+                            auction_slug=slug, spread=0.0, best_bid=m["yes_bid"], best_ask=m["yes_ask"],
+                            metadata={"strategy": "arb_scanner", "arb_type": "complete_set_taker",
+                                      "ask_sum": round(ask_sum, 4), "set_profit": round(profit, 4),
+                                      "legs": len(asks), **gate}))
+
+            # ---- B) complement-pair maker: wide YES spread => rest both bids < $1 ----
+            for m in mkts:
+                if len(signals) >= cfg["max_signals"]:
+                    break
+                yb, ya, tick = m["yes_bid"], m["yes_ask"], m["tick"]
+                if yb is None or ya is None:
                     continue
-                signals.append(Signal(
-                    module_id=module_id, market_id=l["condition_id"],
-                    bracket=l["label"], side="BUY", price=price, size=size,
-                    token_id=l["token"], fair_value=1.0 / len(legs),
-                    edge=profit / len(legs), auction_slug=ev["slug"],
-                    spread=0.0, best_bid=None, best_ask=l["ask"],
-                    metadata={"strategy": "arb_scanner", "ask_sum": round(ask_sum, 4),
-                              "set_profit": round(profit, 4), "legs": len(legs),
-                              "taker_arb": True}))
-        log.info("arb_scanner: scanned %d events, %d arbs, %d leg-signals",
-                 len(events), found, len(signals))
+                # our quotes: one tick better than each side's best. NO_bid mirrors YES.
+                q_yes = snap_price(yb + tick, tick)          # bid YES
+                q_no = snap_price((1.0 - ya) + tick, tick)   # bid NO = 1 - YES_ask + tick
+                pair = q_yes + q_no
+                locked = 1.0 - pair
+                if locked < cfg["pair_margin"]:
+                    continue
+                if not (cfg["min_leg_price"] <= q_yes <= cfg["max_leg_price"] and
+                        cfg["min_leg_price"] <= q_no <= cfg["max_leg_price"]):
+                    continue
+                pair_found += 1
+                shares = int(cfg["per_arb_max_usd"] / pair) if pair > 0 else 0
+                if shares < 5 or shares * q_yes < cfg["min_notional"] or shares * q_no < cfg["min_notional"]:
+                    continue
+                for tok, px, leg in ((m["yes_token"], q_yes, "YES"), (m["no_token"], q_no, "NO")):
+                    signals.append(Signal(
+                        module_id=module_id, market_id=m["condition_id"], bracket=m["label"],
+                        side="BUY", price=px, size=shares, token_id=tok,
+                        fair_value=None, edge=round(locked / 2, 4), auction_slug=slug,
+                        spread=round(ya - yb, 4), best_bid=yb, best_ask=ya,
+                        metadata={"strategy": "arb_scanner", "arb_type": "complement_pair_maker",
+                                  "pair_leg": leg, "pair_sum": round(pair, 4),
+                                  "locked_profit": round(locked, 4), **gate}))
+        log.info("arb_scanner: %d events, %d complete-set, %d complement-pair -> %d signal(s)",
+                 len(events), set_found, pair_found, len(signals))
         return signals
