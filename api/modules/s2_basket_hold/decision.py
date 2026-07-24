@@ -16,8 +16,10 @@ def build_entry_signals(module_id: str, auction: dict, cfg: dict,
                         resting_brackets: set[str]) -> list[Signal]:
     prior_mean, prior_std = fair_value.VALIDATED_PRIORS.get(
         auction["duration_type"], fair_value.VALIDATED_PRIORS["2-day"])
-    projection = fair_value.gamma_poisson_projection(
-        auction["count"], auction["elapsed"], prior_mean, prior_std)
+    projection = fair_value.projection(
+        auction["count"], auction["elapsed"], prior_mean, prior_std,
+        duration_type=auction["duration_type"],
+        remaining_hours=auction.get("remaining_hours"))
     labels = [b["label"] for b in auction["brackets"]]
     dist = fair_value.bracket_distribution(projection, auction["count"], labels,
                                            auction.get("remaining_hours"))
@@ -73,8 +75,10 @@ def build_salvage_exits(module_id: str, auction: dict, cfg: dict,
         return []
     prior_mean, prior_std = fair_value.VALIDATED_PRIORS.get(
         auction["duration_type"], fair_value.VALIDATED_PRIORS["2-day"])
-    projection = fair_value.gamma_poisson_projection(
-        auction["count"], auction["elapsed"], prior_mean, prior_std)
+    projection = fair_value.projection(
+        auction["count"], auction["elapsed"], prior_mean, prior_std,
+        duration_type=auction["duration_type"],
+        remaining_hours=auction.get("remaining_hours"))
     labels = [b["label"] for b in auction["brackets"]]
     dist = fair_value.bracket_distribution(projection, auction["count"], labels,
                                            auction.get("remaining_hours"))

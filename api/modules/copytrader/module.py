@@ -99,8 +99,9 @@ class CopytraderModule(BaseModule):
                                     - datetime.now(windows.ET)).total_seconds() / 3600.0)
             prior_mean, prior_std = fair_value.VALIDATED_PRIORS.get(
                 auction["duration_type"], fair_value.VALIDATED_PRIORS["2-day"])
-            projection = fair_value.gamma_poisson_projection(count, elapsed,
-                                                             prior_mean, prior_std)
+            projection = fair_value.projection(
+                count, elapsed, prior_mean, prior_std,
+                duration_type=auction["duration_type"], remaining_hours=remaining_h)
             dist = fair_value.bracket_distribution(
                 projection, count, [b["label"] for b in auction["brackets"]], remaining_h)
             for b in targets:

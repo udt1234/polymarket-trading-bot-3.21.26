@@ -31,6 +31,45 @@ def gamma_poisson_projection(posts_so_far: int, elapsed_fraction: float,
             / (prior_precision + obs_precision))
 
 
+_DUR_HOURS = {"2-day": 48, "7-day": 168, "monthly": 720}
+_priors_cache: dict = {}
+
+
+def _load_priors(handle: str, dur_h: int) -> dict | None:
+    """Read stored LOCKED-model priors (fitted offline by
+    scripts/compute_locked_priors.py). Cached per process; None if absent."""
+    key = f"locked_pace_priors:{handle}:{dur_h}"
+    if key in _priors_cache:
+        return _priors_cache[key]
+    try:
+        from api.dependencies import get_supabase
+        res = (get_supabase().table("settings").select("value")
+               .eq("key", key).limit(1).execute())
+        val = res.data[0]["value"] if res.data else None
+    except Exception:
+        val = None
+    _priors_cache[key] = val
+    return val
+
+
+def projection(posts_so_far: int, elapsed_fraction: float, prior_mean: float,
+               prior_std: float, *, duration_type: str = "2-day",
+               handle: str = "elonmusk", remaining_hours: float | None = None) -> float:
+    """THE projection the bot trades on. Uses the LOCKED Ensemble+CAP1.5 model when
+    priors are available for this handle+duration, else falls back to the older
+    Gamma-Poisson blend. Locked model = Kalman early + accrual curve late, blended,
+    with the go-forward rate capped at 1.5x baseline (LOCKED 2026-07-06)."""
+    dur_h = _DUR_HOURS.get(duration_type, 48)
+    pri = _load_priors(handle, dur_h)
+    if pri:
+        elapsed_h = max(0.0, min(1.0, elapsed_fraction)) * dur_h
+        rem_h = remaining_hours if remaining_hours is not None else max(0.0, dur_h - elapsed_h)
+        got = locked_pace.project_locked(posts_so_far, elapsed_h, rem_h, pri)
+        if got is not None:
+            return got
+    return gamma_poisson_projection(posts_so_far, elapsed_fraction, prior_mean, prior_std)
+
+
 _RANGE_RE = re.compile(r"(\d+)\s*[-–]\s*(\d+)")
 _LESS_RE = re.compile(r"(?:less than|<|under)\s*(\d+)", re.I)
 _MORE_RE = re.compile(r"(\d+)\s*(?:\+|or more)", re.I)

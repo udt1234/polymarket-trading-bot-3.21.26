@@ -76,6 +76,72 @@ def cap15_projection(obs: float, elapsed_h: float, remaining_h: float,
     return obs + go_forward * remaining_h
 
 
+def build_priors(post_ts: list, before_ts: int, dur_h: float, noon_epoch: int):
+    """WALK-FORWARD priors for the locked model, from daily noon-anchored windows of
+    length dur_h that END at or before `before_ts` (never uses the future).
+
+    post_ts    = sorted unix-second timestamps of counted posts
+    before_ts  = decision time; only windows fully before this are used (THE WALL)
+    noon_epoch = unix seconds of a reference noon-ET boundary to anchor windows on
+
+    Returns (rmean tweets/hr, Kk Kalman gain, share cumulative-accrual curve) or None
+    when there is too little history (<4 usable windows). Pure stdlib so the live bot
+    (no numpy/pandas) uses the identical math as the backtests."""
+    import bisect
+    import statistics
+    if not post_ts:
+        return None
+    Dh = int(round(dur_h))
+    if Dh <= 0:
+        return None
+    dur_s = Dh * 3600
+
+    def obs(a: int, b: int) -> int:
+        return bisect.bisect_left(post_ts, b) - bisect.bisect_left(post_ts, a)
+
+    start = noon_epoch
+    while start > post_ts[0]:
+        start -= 86400
+    while start + dur_s <= post_ts[0]:
+        start += 86400
+
+    rates, curves = [], []
+    d = start
+    while d + dur_s <= before_ts:
+        f = obs(d, d + dur_s)
+        if f >= 5:
+            rates.append(f / dur_h)
+            curves.append([obs(d, d + h * 3600) / f for h in range(1, Dh + 1)])
+        d += 86400
+    if len(rates) < 4:
+        return None
+    rmean = statistics.fmean(rates)
+    Pk = (statistics.pvariance(rates) if len(rates) > 1 else 0.0) + 0.01
+    Kk = (Pk + 0.01) / (Pk + 0.01 + max(0.1, Pk * 0.5))
+    share = [min(1.0, max(1e-3, statistics.median([c[i] for c in curves])))
+             for i in range(Dh)]
+    return rmean, Kk, share
+
+
+def project_locked(obs_count: float, elapsed_h: float, remaining_h: float,
+                   priors: dict):
+    """Run the LOCKED projection from a stored priors dict {rmean, Kk, share:[...]}.
+    Returns None when priors are unusable so the caller falls back safely rather than
+    trading on a broken projection."""
+    try:
+        rmean = float(priors["rmean"]); Kk = float(priors["Kk"])
+        share = list(priors["share"])
+        if not share or rmean <= 0:
+            return None
+        total_h = elapsed_h + remaining_h
+        idx = min(len(share) - 1, max(0, int(elapsed_h) - 1))
+        cp = (elapsed_h / total_h) if total_h > 0 else 0.0
+        return cap15_projection(obs_count, elapsed_h, remaining_h,
+                                rmean, Kk, share[idx], cp)
+    except (KeyError, TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
 def bracket_fair(lo: float, hi: float, projection: float, sigma: float) -> float:
     """Fair YES probability that the final count lands in [lo, hi] under
     Normal(projection, sigma), with the +/-0.5 integer continuity correction.
