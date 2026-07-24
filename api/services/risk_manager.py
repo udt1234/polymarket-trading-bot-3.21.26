@@ -86,6 +86,26 @@ def _open_exposure(sb, module_id: str | None = None) -> tuple[float, dict[str, f
     return total, per_market
 
 
+def _module_exposure(sb, module_id: str) -> float:
+    """Open + resting-BUY notional for ONE module. Enforces the per-module budget
+    (modules.budget, editable per module) as a hard EXPOSURE cap, not just a sizing
+    input - otherwise one module can eat the whole portfolio cap and starve every
+    other strategy (LP Rewards held 65% of the book, 2026-07-22)."""
+    if not module_id:
+        return 0.0
+    total = 0.0
+    pos = (sb.table("positions").select("size,avg_price")
+           .eq("module_id", module_id).in_("status", ["open", "closing"]).execute().data) or []
+    for r in pos:
+        total += float(r.get("size") or 0) * float(r.get("avg_price") or 0)
+    orders = (sb.table("orders").select("size,price").eq("module_id", module_id)
+              .eq("side", "BUY")
+              .in_("status", ["submitted", "open", "partially_filled"]).execute().data) or []
+    for o in orders:
+        total += float(o.get("size") or 0) * float(o.get("price") or 0)
+    return total
+
+
 def _correlated_exposure(sb, corr_key: str) -> float:
     """Open + resting-BUY notional in one correlated bucket. The bucket key is the
     auction slug when a signal carries one, else the market_id/condition_id. Since
@@ -188,6 +208,14 @@ def check(signal: Signal, breaker_tripped: bool = False) -> RiskVerdict:
         corr_now = _correlated_exposure(sb, corr_key)
         if signal.notional + corr_now > s.max_correlated_exposure * s.bankroll:
             return RiskVerdict(False, "correlated_cap")
+        # Per-module budget cap: each module is bounded to its OWN modules.budget
+        # (set per module in Supabase / the dashboard) so no single strategy can
+        # monopolize the portfolio cap and starve the others.
+        from api.modules.shared.config_store import module_bankroll
+        mod_budget = module_bankroll(signal.module_id)
+        mod_now = _module_exposure(sb, signal.module_id)
+        if signal.notional + mod_now > mod_budget:
+            return RiskVerdict(False, f"module_budget_cap_{mod_budget:.0f}")
         if signal.notional + total > s.max_portfolio_exposure * s.bankroll:
             return RiskVerdict(False, "portfolio_cap")
 
