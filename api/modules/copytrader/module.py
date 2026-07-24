@@ -41,19 +41,31 @@ class CopytraderModule(BaseModule):
         from api.modules.shared.config_store import module_bankroll
         from api.services.position_manager import open_positions
 
+        from api.modules.shared import whale_registry
+
         cfg = self.get_config(module_id)
 
-        # Whale-performance gate (F3): bench on bad recent ROI or no data.
-        roi = data.whale_recent_roi(cfg["whale_wallet"])
-        if roi is None or roi < cfg["whale_perf_gate_roi"]:
-            log.info("copytrader: whale benched (recent ROI=%s)", roi)
+        # MULTIPLE whales now (2026-07-24): the configured whale PLUS every wallet the
+        # registry tags 'tweet'. Each is perf-gated on its OWN recent ROI; a bracket is
+        # "active" if ANY healthy whale is trading it. Widens the copytrader's coverage
+        # from one wallet to the full tracked tweet-whale set as the registry grows.
+        whales = list(dict.fromkeys(
+            [cfg["whale_wallet"]] + whale_registry.by_archetype("tweet")))
+        active_conditions: set = set()
+        roi = None  # best ROI among healthy whales (for downstream sizing/metadata)
+        for w in whales:
+            r = data.whale_recent_roi(w)
+            if r is None or r < cfg["whale_perf_gate_roi"]:
+                continue
+            roi = r if roi is None else max(roi, r)
+            for t in data.whale_trades(w, cfg["lookback_hours"]):
+                if t.get("conditionId"):
+                    active_conditions.add(t["conditionId"])
+        if roi is None:
+            log.info("copytrader: %d whale(s), none healthy (perf-gated)", len(whales))
             return []
-
-        trades = data.whale_trades(cfg["whale_wallet"], cfg["lookback_hours"])
-        active_conditions = {t.get("conditionId") for t in trades if t.get("conditionId")}
         if not active_conditions:
-            log.info("copytrader: whale healthy (ROI=%.1f%%) but no recent trades",
-                     roi * 100)
+            log.info("copytrader: %d whale(s) healthy but no recent trades", len(whales))
             return []
 
         # Which LIVE Elon tweet brackets is the whale active in? (Option B is
