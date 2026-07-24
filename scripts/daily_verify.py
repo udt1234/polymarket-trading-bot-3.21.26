@@ -68,14 +68,16 @@ def main() -> None:
                  .eq("status", "filled").gte("created_at", since_fill)
                  .limit(2000).execute().data) or []
         n_fill = len(fills)
-        flags = []
-        if n_sig == 0:
-            flags.append(f"NO_SIGNALS({NO_SIGNAL_H}h)")
-        elif n_ok > 0 and n_fill == 0:
-            flags.append(f"NO_FILLS({NO_FILL_H}h despite {n_ok} approved)")
-        report.append(f"{name}: sig={n_sig}/{n_ok}ok fill={n_fill} {' '.join(flags) or 'ok'}")
-        if flags:
-            problems.append(f"{name}: {', '.join(flags)}")
+        # NO_SIGNALS is report-only: a module can be legitimately idle (no live
+        # auction inside its window - reversion/late_arb only fire in the last 6h).
+        # The genuinely-BROKEN state that ALERTS = emitted approved signals but NOTHING
+        # filled (the NO-token coverage bug class). Alerts must mean something.
+        broken = n_ok > 0 and n_fill == 0
+        note = "NO_SIGNALS(idle)" if n_sig == 0 else ("NO_FILLS!" if broken else "ok")
+        report.append(f"{name}: sig={n_sig}/{n_ok}ok fill={n_fill} {note}")
+        if broken:
+            problems.append(f"{name}: {n_ok} approved signals in {NO_SIGNAL_H}h but "
+                            f"0 fills in {NO_FILL_H}h - fill path broken")
 
     # STRANDED: open positions resolved on-chain but never settled
     open_pos = (sb.table("positions").select("id,market_id,token_id,bracket")
