@@ -44,20 +44,21 @@ class RiskVerdict:
     reason: str = ""
 
 
-def _meta_float(signal: "Signal", key: str, default: float) -> float:
+def _meta_float(signal: "Signal", key: str, default: float, hi: float | None = None) -> float:
     """Read a numeric per-strategy gate override from signal.metadata; fall back
-    to the global default when absent or malformed (fail safe = the stricter
-    global value).
+    to the global default when absent or malformed (fail safe = the global value).
 
-    Overrides may only LOOSEN toward 0 (income/copy strategies opt out of the
-    directional-edge floor), never negative and never tighter than the global.
-    Clamped to [0, default] so a careless/hostile module cannot set a negative
-    floor or an absurd tolerance to bypass the intended gate."""
+    Clamped to [0, hi]. hi defaults to `default` for a FLOOR that may only loosen
+    toward 0 (e.g. min_edge - income/copy strategies opt out of the directional-edge
+    floor). For a TOLERANCE that legitimately loosens UPWARD (e.g. spread_tol - a
+    market maker or arb quotes intentionally-wide books), pass an explicit hi ceiling
+    so the override can widen past the global tolerance up to a sane bound."""
+    cap = default if hi is None else hi
     try:
         v = (signal.metadata or {}).get(key)
         if v is None:
             return default
-        return max(0.0, min(float(v), default))
+        return max(0.0, min(float(v), cap))
     except (TypeError, ValueError):
         return default
 
@@ -165,7 +166,9 @@ def check(signal: Signal, breaker_tripped: bool = False) -> RiskVerdict:
     # the global defaults. Overrides may only LOOSEN toward 0 for these income
     # strategies, never tighten silently - they are explicit per-module knobs.
     min_edge = _meta_float(signal, "min_edge", s.min_edge_threshold)
-    spread_tol = _meta_float(signal, "spread_tol", s.slippage_tolerance)
+    # spread_tol may loosen UPWARD to a 0.50 ceiling (MM/arb quote wide books);
+    # a floor like min_edge may only loosen toward 0.
+    spread_tol = _meta_float(signal, "spread_tol", s.slippage_tolerance, hi=0.50)
 
     # Spread check: reject when spread > tolerance OR no data (fail closed).
     if signal.spread is None or signal.best_ask is None:
