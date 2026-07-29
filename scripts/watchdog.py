@@ -50,6 +50,20 @@ def _signal_approval_stats(sb, hours: int) -> tuple[int, int]:
     return len(rows), sum(1 for r in rows if r.get("approved"))
 
 
+def _dominant_rejections(sb, hours: int, top: int = 4) -> str:
+    """Human-readable breakdown of WHY signals were rejected in the window, so a
+    starvation alert names the actual gate instead of 'a gate is eating everything'.
+    Returns e.g. 'stake_below_floor x32, module_budget_cap_500 x28, duplicate x9'."""
+    from collections import Counter
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    rows = (sb.table("signals").select("rejection_reason")
+            .eq("approved", False).gte("created_at", since).limit(20000).execute().data) or []
+    if not rows:
+        return "(no rejections logged)"
+    c = Counter((r.get("rejection_reason") or "unknown") for r in rows)
+    return ", ".join(f"{reason} x{n}" for reason, n in c.most_common(top))
+
+
 def _hours_since_last_order(sb) -> float | None:
     """Hours since ANY order was placed, or None if never/unreadable."""
     r = (sb.table("orders").select("created_at")
@@ -78,6 +92,64 @@ def _recent_watchdog_restart(sb, within_min: int) -> bool:
         return False  # fail toward allowing the restart (availability over churn-guard)
 
 
+DIGEST_HOUR_UTC = int(os.getenv("WATCHDOG_DIGEST_HOUR_UTC", "13"))  # ~9am ET
+
+
+def _daily_digest(sb) -> str:
+    """A once-a-day heartbeat so silence can NEVER be mistaken for 'fine' - the
+    user gets the bot's real numbers every morning without having to ask."""
+    now = datetime.now(timezone.utc)
+    age = _last_cycle_age_min()
+    eng = "cycling" if (age is not None and age <= STALE_MIN) else f"STALE ({age}m)"
+    sigs, appr = _signal_approval_stats(sb, 24)
+    since24 = (now - timedelta(hours=24)).isoformat()
+    fills = len((sb.table("orders").select("id").eq("status", "filled")
+                 .gte("created_at", since24).limit(20000).execute().data) or [])
+    pos = (sb.table("positions").select("realized_pnl,status,closed_at,size,avg_price")
+           .limit(20000).execute().data) or []
+    today = now.date().isoformat()
+    d7 = now - timedelta(days=7)
+    r_today = sum(float(p.get("realized_pnl") or 0) for p in pos
+                  if (p.get("closed_at") or "")[:10] == today)
+    r_7d = sum(float(p.get("realized_pnl") or 0) for p in pos if p.get("closed_at")
+               and datetime.fromisoformat(p["closed_at"].replace("Z", "+00:00")) >= d7)
+    open_pos = [p for p in pos if p.get("status") == "open"]
+    open_notional = sum(float(p.get("size") or 0) * float(p.get("avg_price") or 0) for p in open_pos)
+    mods = (sb.table("modules").select("name").neq("status", "inactive").execute().data) or []
+    why = _dominant_rejections(sb, 24) if (sigs > 0 and appr == 0) else ""
+    lines = [
+        "📊 Polybot daily digest",
+        f"Engine: {eng}",
+        f"Signals 24h: {sigs} | approved: {appr}" + (f"\n  gates: {why}" if why else ""),
+        f"Paper fills 24h: {fills}",
+        f"Realized P&L: today ${r_today:+.2f} | 7d ${r_7d:+.2f}",
+        f"Open: {len(open_pos)} positions | ${open_notional:.0f} notional",
+        f"Active modules ({len(mods)}): " + (", ".join(sorted(m["name"] for m in mods)) or "none"),
+    ]
+    return "\n".join(lines)
+
+
+def _maybe_send_daily_digest(sb) -> None:
+    now = datetime.now(timezone.utc)
+    if now.hour < DIGEST_HOUR_UTC:
+        return
+    today = now.date().isoformat()
+    try:
+        rows = (sb.table("settings").select("value").eq("key", "watchdog_digest")
+                .limit(1).execute().data) or []
+        if rows and (rows[0].get("value") or {}).get("last_date") == today:
+            return  # already sent today
+    except Exception:
+        pass
+    try:
+        from api.services.notifications import notify
+        notify(_daily_digest(sb))
+        sb.table("settings").upsert({"key": "watchdog_digest",
+                                     "value": {"last_date": today}}).execute()
+    except Exception as e:
+        print(f"[watchdog] digest failed: {e}", flush=True)
+
+
 def main() -> None:
     sb = get_supabase()
     actions: list[str] = []
@@ -104,8 +176,9 @@ def main() -> None:
     try:
         sigs, approved = _signal_approval_stats(sb, STARVE_HOURS)
         if sigs > 0 and approved == 0:
+            why = _dominant_rejections(sb, STARVE_HOURS)
             alerts.append(f"SIGNAL STARVATION: {sigs} signals in {STARVE_HOURS}h, "
-                          f"0 approved - a risk gate is rejecting everything")
+                          f"0 approved. Top gates: {why}")
     except Exception as e:
         alerts.append(f"signal-stats check failed: {type(e).__name__}")
     try:
@@ -163,6 +236,10 @@ def main() -> None:
             notify("\n\n".join(parts))
         except Exception:
             pass
+
+    # Guaranteed once-a-day heartbeat (independent of alerts): the user should
+    # never again "realize nothing is running" - a digest lands every morning.
+    _maybe_send_daily_digest(sb)
     print(msg)
 
 

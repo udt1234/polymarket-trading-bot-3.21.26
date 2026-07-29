@@ -180,8 +180,13 @@ def check(signal: Signal, breaker_tripped: bool = False) -> RiskVerdict:
     if signal.edge is None or signal.edge < min_edge:
         return RiskVerdict(False, f"edge_{signal.edge}<min_{min_edge}")
 
-    # Kelly stake floor: skip dust bids (D4, ~0.1% of bankroll).
-    if signal.notional < 0.001 * s.bankroll:
+    # Dust floor: reject bids below the CLOB $1 minimum. This is an ABSOLUTE
+    # floor, NOT a fraction of the global bankroll. Modules size against their
+    # own per-module budget (module_bankroll), so coupling this to a large
+    # global bankroll silently rejected every small maker/arb quote as "dust"
+    # (starvation: bankroll 10k -> $10 floor killed sub-$10 quotes, 2026-07-29).
+    # Modules already enforce their own minimum sizing (size*price >= 1, size >= 5).
+    if signal.notional < 1.0:
         return RiskVerdict(False, "stake_below_floor")
 
     try:
