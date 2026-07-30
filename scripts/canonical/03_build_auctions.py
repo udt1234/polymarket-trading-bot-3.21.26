@@ -46,9 +46,9 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[2]
-RAW_DIR = ROOT / "_DataMetricPulls" / "canonical" / "_raw_imports" / "api_trades_v2"
-OUT_DIR = ROOT / "_DataMetricPulls" / "canonical" / "auctions"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _canon import ROOT, RAW_DIR, AUCTIONS_DIR as OUT_DIR, normalize_bucket  # noqa: E402
+
 ET = ZoneInfo("America/New_York")
 
 MONTH_MAP = {
@@ -163,6 +163,10 @@ def build_auctions() -> pd.DataFrame:
         df = df.dropna(subset=["ts"]).sort_values("ts")
         if len(df) == 0:
             continue
+        # Polymarket mixes en-dash and hyphen in bracket labels; normalize at the
+        # derived layer so bucket keys join against prices without a later pass.
+        if "_bucket" in df.columns:
+            df["_bucket"] = df["_bucket"].map(normalize_bucket)
         first_utc = df["ts"].min()
         last_utc = df["ts"].max()
         first_et = first_utc.tz_convert(ET)

@@ -124,8 +124,12 @@ elon_may = pd.read_parquet(CANON/"prices/elonmusk/2026-05.parquet")
 - `scripts/canonical/01_audit_sources.py` — re-scan for source inventory (read-only)
 - `scripts/canonical/02_build_posts.py` — rebuild posts from raw parquets
 - `scripts/canonical/03_build_auctions.py` — rebuild auctions from whale_analysis
-- `scripts/canonical/04_build_prices.py` — rebuild hourly OHLC + proxies
+- `scripts/canonical/04_build_prices.py` — rebuild hourly OHLC + proxies (prints winner-coverage at the end)
 - `scripts/canonical/05_nuclear_delete.py` — clean up non-canonical sources (dry-run by default)
+- `scripts/canonical/14_repair_bracket_coverage.py` — pull brackets Gamma lists but raw is missing/truncated
+- `scripts/canonical/15_verify_winner_coverage.py` — coverage gate; exit 1 below 95%; `--demote` to exclude the rest
+
+**Order matters: anything that touches `_raw_imports/` must be followed by `04_build_prices.py`.** `prices` is derived; leaving it stale is what produced the 2026-07 winner-coverage bug.
 
 ### Canonical QA Sheet
 - [PolyMarket Canonical Data — Source Inventory](https://docs.google.com/spreadsheets/d/1bXBnXz4a1Nn44ZLORNo2cNqZx6pnqER3rcoTUZMC1Q8/edit) — sample tabs for posts/auctions/prices both handles, plus the legacy source inventory
@@ -137,6 +141,7 @@ elon_may = pd.read_parquet(CANON/"prices/elonmusk/2026-05.parquet")
 4. **Filter `confidence in ('high','medium')` on auctions** to skip unresolved/ambiguous.
 5. **Treat the underlying `trump_posts_raw.parquet` / `elon_posts_raw.parquet` as inputs, not data.** They feed the canonical builder.
 6. **`@backtest-builder` BUILDS it. `@backtest-auditor` AUDITS it. Never hand-write a backtest.** See "Backtest Agents Are The Default" below.
+7. **Never substitute a floor for a missing price — EXCLUDE the auction.** If the WINNING bracket has no price row at time T, that auction is inadmissible for any model-vs-market comparison. Defaulting it to `1e-6`/epsilon/uniform fabricates the market's log loss and inverts the result. Run `15_verify_winner_coverage.py` before quoting any model-vs-market number, and report admissible n separately from full n.
 
 ## Backtest Agents Are The Default (Non-Negotiable)
 - **`@backtest-builder` is the ONLY way a backtest gets written.** Any request meaning "backtest / simulate / what if / test this strategy / find patterns in the history / measure this model" routes to the builder FIRST. Claude does not hand-write the script.

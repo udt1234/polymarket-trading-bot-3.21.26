@@ -37,9 +37,11 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[2]
-RAW_DIR = ROOT / "_DataMetricPulls" / "canonical" / "_raw_imports" / "api_trades_v2"
-OUT_DIR = ROOT / "_DataMetricPulls" / "canonical" / "prices"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _canon import (  # noqa: E402
+    ROOT, RAW_DIR, PRICES_DIR as OUT_DIR, assert_winner_coverage, normalize_bucket,
+)
+
 ET = ZoneInfo("America/New_York")
 
 
@@ -79,6 +81,13 @@ def build_prices_chunk(handle: str) -> pd.DataFrame:
         )
         df["hour_utc"] = df["ts"].dt.floor("h")
         df["minute"] = df["ts"].dt.floor("min")
+        # Raw carries Polymarket's own labels, which mix en-dash and hyphen
+        # ('100–124' vs '100-124'). auctions.winning_bucket is hyphenated, so an
+        # un-normalized prices table fails the join on exactly the rows that
+        # matter. Normalize here, at the derived layer, so a rebuild is correct
+        # on its own and does not depend on 08_normalize_bucket_labels.py
+        # having been run afterwards.
+        df["_bucket"] = df["_bucket"].map(normalize_bucket)
 
         # PER-BUCKET identifiers (each bracket = its own Polymarket market)
         # condition_id is unique per bucket. asset (token_id) is unique per
@@ -162,6 +171,15 @@ def main() -> int:
             print(f"  unique auctions: {df['auction_slug'].nunique()}")
             print(f"  unique buckets: {df['bucket'].nunique()}")
         write_partitions(df, handle)
+
+    # A prices table that is missing the bracket that WON is worse than no
+    # prices at all: it silently inverts any model-vs-market comparison built on
+    # it (see _ImportantConfigFiles/lessons.md, 2026-07-30). Never finish a
+    # build without reporting this.
+    print("\n[prices] winner-bracket coverage check")
+    for handle in ["elonmusk", "realDonaldTrump"]:
+        assert_winner_coverage(handle)
+
     print(f"\n[prices] DONE. Output: {OUT_DIR}")
     return 0
 

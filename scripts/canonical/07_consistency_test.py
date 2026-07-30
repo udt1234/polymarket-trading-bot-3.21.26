@@ -26,8 +26,9 @@ import pandas as pd
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-ROOT = Path(__file__).resolve().parents[2]
-CANON = ROOT / "_DataMetricPulls" / "canonical"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _canon import CANON, COVERAGE_FLOOR, ROOT  # noqa: E402
+
 SPREADSHEET_ID = "1bXBnXz4a1Nn44ZLORNo2cNqZx6pnqER3rcoTUZMC1Q8"
 SA_KEY = Path.home() / ".claude" / "google-service-account.json"
 
@@ -119,25 +120,35 @@ def check_4_every_auction_has_prices(results):
 
 
 def check_5_winning_bucket_in_prices(results):
-    """For each high-conf auction, the winning_bucket must exist in prices."""
+    """For each high-conf auction, the winning_bucket must exist in prices.
+
+    This check was WARN-only until 2026-07-30 and silently sat at 45% coverage
+    for Elon while a backtest scored models against a market distribution that
+    excluded the winner. A miss here invalidates every model-vs-market number
+    downstream, so it is a FAIL, not a warning.
+    """
     for h in ["realDonaldTrump", "elonmusk"]:
         auc = load_all_auctions(h)
         prc = load_all_prices(h)
         hi = auc[auc["confidence"] == "high"]
         missing = 0
+        n = 0
         for _, a in hi.iterrows():
             wb = (a["winning_bucket"] or "").strip()
             if not wb:
                 continue
+            n += 1
             psub = prc[prc["auction_slug"] == a["auction_slug"]]
             buckets_norm = set(b.strip().lower() for b in psub["bucket"].unique())
             if wb.strip().lower() not in buckets_norm:
                 missing += 1
+        cov = (n - missing) / n if n else 1.0
         results.append({
             "check": "5. Winning bucket present in prices",
             "handle": h,
-            "verdict": "PASS" if missing == 0 else "WARN",
-            "detail": f"{missing}/{len(hi)} high-conf auctions missing winning_bucket in prices",
+            "verdict": "PASS" if cov >= COVERAGE_FLOOR else "FAIL",
+            "detail": f"{missing}/{n} high-conf auctions missing winning_bucket in prices "
+                      f"(coverage {100*cov:.1f}%, floor {100*COVERAGE_FLOOR:.0f}%)",
         })
 
 
@@ -390,6 +401,14 @@ def main():
     print("Pushed to https://docs.google.com/spreadsheets/d/" + SPREADSHEET_ID + "/edit")
     print("Tabs: Data_Consistency_Test, Data_Coverage")
 
+    failures = [r for r in results if r["verdict"] == "FAIL"]
+    if failures:
+        print()
+        for r in failures:
+            print(f"FAIL {r['handle']}: {r['check']} - {r['detail']}")
+        return 1
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
