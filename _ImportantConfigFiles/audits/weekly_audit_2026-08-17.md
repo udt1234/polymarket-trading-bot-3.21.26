@@ -96,11 +96,89 @@ The `backtest-auditor` agent (and commits `1a09866`/`fb54671`/`ee35342`) built a
 - **WebSocket exponential backoff** — confirmed correctly implemented with a stall watchdog in both `api/services/fills.py` (`UserChannelStream`, backoff capped at 60s) and `api/services/tweet_stream.py` (`TweetStream`, backoff capped at 30s).
 - **No hardcoded API keys** found in the reviewed money-path files (all credentials read via `get_settings()`/env).
 
-## What could not be checked
+## What could not be checked (at original audit time)
 
-- All 7-day LIVE metrics (approval health, P&L, module health, engine liveness, foreign-writer check) — blocked by C1.
 - Full risk-auditor / qa-architecture-quality / qa-code-quality deep sweeps — both automated retry attempts on each failed on API overload (`529`); this report substitutes a direct manual review of the same rule set but is not as exhaustive as those agents' normal file-by-file coverage (e.g. dead/orphan-code detection across the whole repo, not just the money paths reviewed here).
 - Executor/order-placement code was read for structure but not exercised — no paper/live trade was placed as part of this audit (out of scope: this is a static + DB audit, not `qa-real-trade`).
+
+---
+
+## LIVE — follow-up pass (Supabase recovered ~2026-08-17 21:20 UTC, ~7h45m outage)
+
+Supabase came back during a scheduled PR check-in. Confirmed genuine recovery (not a flapping blip — two consecutive real-table queries returned real data before proceeding). Full LIVE checklist below, run against the 7 days ending 2026-08-17 ~21:25 UTC.
+
+### C2 — NEW, and the single most important finding in this audit: evidence of a stale/zombie process from `master` still running against the production database
+Every engine cycle (confirmed at 13:29:00, 21:19:01, 21:23:59 — i.e. continuously, both before and after the outage) logs two errors in the exact same shape:
+```
+Module elon_tweets error: {'message': 'Cannot coerce the result to a single JSON object', 'code': 'PGRST116', 'hint': None, 'details': 'The result contains 0 rows'}
+Module truth_social error: {'message': 'Cannot coerce the result to a single JSON object', 'code': 'PGRST116', 'hint': None, 'details': 'The result contains 0 rows'}
+```
+PGRST116 is PostgREST's error for a `.single()` call that matched zero rows. **This branch (`feat/newbot-step1-skeleton`) has zero `.single()` calls anywhere in the repo** (`git grep -n "\.single(" .` — no hits), and zero references to `elon_tweets`/`truth_social` anywhere in `api/` (both confirmed by direct grep during this follow-up). `master`, however, has exactly this:
+- `api/modules/elon_tweets/module.py:81` — `sb.table("modules").select("*").eq("name", "Elon Tweets").single().execute()`
+- `api/modules/truth_social/module.py:134` — `sb.table("modules").select("*").eq("name", "Truth Social Posts").single().execute()`
+- `api/services/engine.py:1210` — `"message": f"Module {module_name} error: {error_msg}"` — the exact log format seen live.
+
+`master`'s last commit is `abca6d2` (2026-07-06). `feat/newbot-step1-skeleton` is 20+ commits and 3+ weeks ahead (`c762636`, 2026-07-29 — the same commit this audit verified fixed the dust-floor bug). `.github/workflows/*.yml` CI triggers on push to `master`, not the skeleton branch.
+
+At the same time, live `signals`/`positions` data (below) clearly shows real, current trading activity under the **new** module set (`arb_scanner`, `market_maker`, `copytrader`, `sports_sweep`, `s2_basket_hold`, `elon_late_arb`, `elon_reversion`) — so the deployed engine is NOT purely running old code. The most consistent explanation: **an old `master`-branch process was never fully torn down and is still alive, polling the same Supabase project, alongside the current engine** — a leftover deployment rather than the "foreign third-party bot" this audit was originally asked to check for via the `%enabled_wallets%` grep (that check came back clean — see below — but missed this because the leftover process's error messages don't contain that string).
+
+**This needs human verification, not more automated inference**: check the Railway project for more than one active service/deployment pointed at this database, and check whether a `master`-branch deploy is still running anywhere (a second Railway service, an old Render/Heroku dyno, a background systemd unit — this repo has systemd references in the "watchdog fixed" log line below). If confirmed, kill the stale process — beyond wasted compute, it's writing error-severity log rows into shared tables on every cycle and could plausibly be the "foreign writer" this audit's original `%enabled_wallets%` check was designed to catch, just presenting differently than expected.
+
+### C1 follow-up — the outage was a real ~7h45m engine stall, not just an audit-tooling problem
+The `system`-type `Cycle: {...}` summary log (the current engine's own heartbeat) has a gap from **13:32:25 to 21:15:05 UTC** — 7h43m, matching this audit's tracked Supabase-outage window almost exactly. At 21:15:05 a watchdog fired and self-healed:
+```
+watchdog fixed: engine not cycling (age=Nonem) -> systemctl restart polybot.service | ALERTS: signal-stats check failed: APIError
+```
+Confirms the original audit's C1 hypothesis directly: the engine's own DB-dependent cycle loop stalled for the full outage window (consistent with `engine.py`'s `except Exception: log.exception("cycle: modules query failed"); return summary` path hanging or erroring every attempt), and — importantly — **there IS a watchdog that detects and restarts a non-cycling engine automatically** (`systemctl restart polybot.service`), which is a good defensive control CLAUDE.md doesn't currently document. It took until Supabase itself recovered for the watchdog's restart to actually take hold (`age=Nonem` suggests the watchdog's own age-check was also blind during the outage), so the watchdog is DB-dependent too and can't shorten an outage of this kind — worth noting as a residual gap, not a bug.
+
+### Approval health (7 days)
+57,947 signals, 5,003 approved (**8.6%** overall) — not the "~0" pathology this audit was watching for, but badly skewed by one module:
+
+| module | signals_7d | approved_7d | approval rate |
+|---|---|---|---|
+| Arb Scanner | 34,323 | 38 | **0.11%** |
+| Market Maker | 23,460 | 4,878 | 20.8% |
+| Sports Sweep | 111 | 34 | 30.6% |
+| S2 Basket-Hold | 42 | 42 | 100% |
+| Copytrader | 11 | 11 | 100% |
+| Mirror Trader | 0 | 0 | inactive |
+| LP Rewards | 0 | 0 | inactive |
+
+Top rejection reasons (7d): `module_budget_cap_500` (24,871), `duplicate_resting_order` (18,597), various `spread_X>tol_Y` (~5,000 combined), `circuit_breaker` (1,154), `no_spread_data` (121). The top two alone are 75% of all signals.
+
+**M3 (new) — Arb Scanner is generating ~34K signals/week for a 0.11% approval rate**, almost entirely rejected on `module_budget_cap_500` / `duplicate_resting_order` — i.e. it keeps re-evaluating and re-emitting the same opportunity every cycle even when it already knows (or could cheaply check) it's at its $500 budget cap or already has a resting order out. Not a correctness bug — every one of those rejections is the risk gate doing its job — but it's ~34K needless signal-row writes/week from one module, and it makes the top-line approval-health number look far healthier than the one module that's actually churning. Recommend an early-exit in Arb Scanner's `evaluate()` (check own exposure/resting orders before scoring opportunities) purely for DB-write efficiency, not risk.
+
+### P&L (7-day and all-time, by module)
+
+| module | status | budget | realized P&L 7d | realized P&L all-time | open positions |
+|---|---|---|---|---|---|
+| Copytrader | paper | 500 | **-114.92** | **-264.74** | 0 |
+| S2 Basket-Hold | paper | 500 | — (no closes 7d) | **-300.22** | 0 |
+| Arb Scanner | paper | 500 | — | -78.10 | 6 |
+| Market Maker | paper | 500 | +1.51 | -38.32 | 2 |
+| Sports Sweep | paper | 500 | — | -5.68 | 0 |
+| Elon Late Arb | paper | 500 | — | — (no closes yet) | 0 |
+| Elon Reversion | paper | 500 | — | — (no closes yet) | 0 |
+| elon_tweets, truth_social, Mirror Trader, LP Rewards | inactive | 0 | — | — | 0 |
+
+**M4 (new) — two persistent losers worth flagging**: **Copytrader** is down -114.92 in just the last 7 days (-23% of its $500 budget in a week) and -264.74 all-time (-53% of budget). **S2 Basket-Hold** is down -300.22 all-time (-60% of budget), though currently flat with 0 open positions. Both are still in `paper` status so no real capital is at risk, but per CLAUDE.md's "persistent losers" ask, these are the two candidates for review before any live-mode promotion.
+
+### Module health
+All 4 `inactive` modules (`elon_tweets`, `truth_social`, `LP Rewards`, `Mirror Trader`) correctly show `budget: 0` and zero recent signals — no module is silently active-but-starved or active-but-never-approved beyond the Arb Scanner churn noted above (M3). No module shows an obviously bad `inactive_reason` in the fields queried (status/strategy/budget only — `inactive_reason` wasn't in the column set returned, worth a follow-up if that field exists).
+
+### Engine liveness
+Newest `Cycle:` log at time of this check: **2026-08-17 21:20:45 UTC**, well within the 20-minute staleness threshold. Engine is currently live and cycling normally (confirmed by a second cycle at 21:23:59 during this same check-in).
+
+### Foreign-writer check (`%enabled_wallets%`)
+Matches, but **not a foreign bot** — this is this bot's own `log_type='decision'` cycle line (`"Cycle: enabled_wallets=0 shadow_mode=False"`), logged every ~5 minutes as part of normal operation (`enabled_wallets` is a copytrader config count, currently 0). Originally flagged as a check-worth-doing; conclusion is it's a false-positive-by-substring, not evidence of a legacy writer. See C2 above for the actual leftover-process finding this check was meant to catch.
+
+### Circuit breaker / global halt
+`circuit_breaker`: 69 cumulative trips, cooldown last ended 2026-08-14 (not currently tripped) — but 1,154 breaker rejections in the last 7 days alone is elevated activity worth a baseline comparison in a future audit. `global_halt`: not halted (`reason: "selftest_done"`).
+
+## What could not be checked (even after recovery)
+- Whether a second Railway service / stale deployment is actually the source of C2 — needs a human check of Railway's dashboard, not something queryable from Supabase or git.
+- Historical baseline for "is 1,154 breaker trips/week normal" — no prior-week comparison was pulled.
+- `inactive_reason` field on `modules` (not in the columns queried this pass).
 
 ---
 _Generated by an automated weekly audit routine._
