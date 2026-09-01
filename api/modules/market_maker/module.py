@@ -50,10 +50,20 @@ class Module(BaseModule):
         max_inv = cfg["max_inventory_usd"]
         signals: list[Signal] = []
 
+        min_width = cfg.get("min_book_spread_cents", 0.0) * C
+        skipped_tight = 0
         for t in universe:
             mid, tick = t["mid"], t["tick"]
             if not (cfg["min_price"] <= mid <= cfg["max_price"]):
                 continue
+            # Width gate: no spread to capture => do not quote (see config).
+            # Applies to the BID side only; an ASK that offers inventory we
+            # already hold must still be allowed to work out of the position.
+            bb, ba = t.get("best_bid"), t.get("best_ask")
+            book_width = (ba - bb) if (bb is not None and ba is not None) else None
+            too_tight = book_width is not None and book_width < min_width
+            if too_tight:
+                skipped_tight += 1
             pos = held.get(t["token"])
             held_notional = (float(pos["size"]) * float(pos["avg_price"])) if pos else 0.0
             inv_frac = held_notional / max_inv if max_inv > 0 else 1.0
@@ -62,7 +72,8 @@ class Module(BaseModule):
                                     best_bid=t["best_bid"], best_ask=t["best_ask"])
 
             # BID side (accumulate) - only if room + inside reward band (if any)
-            if q["bid"] is not None and cfg["min_price"] <= q["bid"] <= cfg["max_price"]:
+            if (not too_tight and q["bid"] is not None
+                    and cfg["min_price"] <= q["bid"] <= cfg["max_price"]):
                 if market_making.reward_band_ok(q["bid"], mid, t.get("rewards_max_spread")):
                     size = int(cfg["quote_size_usd"] / q["bid"]) if q["bid"] > 0 else 0
                     if size >= 5 and size * q["bid"] >= cfg["min_notional"]:
@@ -80,7 +91,8 @@ class Module(BaseModule):
                     signals.append(self._mk(module_id, t, "SELL", ask,
                                             int(float(pos["size"])), mid, inv_frac, pos,
                                             is_exit=True, position_id=pos["id"]))
-        log.info("market_maker: universe=%d -> %d quote signal(s)", len(universe), len(signals))
+        log.info("market_maker: universe=%d (%d too tight to make) -> %d quote signal(s)",
+                 len(universe), skipped_tight, len(signals))
         return signals
 
     def _mk(self, module_id, t, side, price, size, mid, inv_frac, pos,

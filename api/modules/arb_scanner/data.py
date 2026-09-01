@@ -12,6 +12,7 @@ import httpx
 log = logging.getLogger(__name__)
 
 GAMMA = "https://gamma-api.polymarket.com"
+CLOB = "https://clob.polymarket.com"
 
 
 def _markets_from_event(e: dict) -> list[dict]:
@@ -52,3 +53,19 @@ def scan_tag_events(tag_id: int, limit: int = 100) -> list[dict]:
         if mkts:
             out.append({"slug": e.get("slug"), "title": e.get("title"), "markets": mkts})
     return out
+
+
+def token_book(token_id: str) -> dict:
+    """Live top-of-book for ONE token. Needed to unwind a position whose event
+    is no longer in the scan window - the Gamma scan only covers live legs."""
+    try:
+        r = httpx.get(f"{CLOB}/book", params={"token_id": token_id}, timeout=15)
+        r.raise_for_status()
+        b = r.json() or {}
+        bids = b.get("bids") or []
+        asks = b.get("asks") or []
+        return {"best_bid": max((float(x["price"]) for x in bids), default=None),
+                "best_ask": min((float(x["price"]) for x in asks), default=None)}
+    except Exception:
+        log.exception("book fetch failed for %s", token_id[:16])
+        return {"best_bid": None, "best_ask": None}

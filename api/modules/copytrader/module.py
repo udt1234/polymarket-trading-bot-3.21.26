@@ -116,9 +116,18 @@ class CopytraderModule(BaseModule):
                 duration_type=auction["duration_type"], remaining_hours=remaining_h)
             dist = fair_value.bracket_distribution(
                 projection, count, [b["label"] for b in auction["brackets"]], remaining_h)
+            # Bracket-count cap per auction (see max_brackets_per_auction): count
+            # what we already hold or rest in THIS auction, then stop adding.
+            auction_keys = {(b["condition_id"], b["label"]) for b in auction["brackets"]}
+            in_auction = len((resting_keys | held_keys) & auction_keys)
+            max_brackets = cfg["max_brackets_per_auction"]
             for b in targets:
                 if (b["condition_id"], b["label"]) in resting_keys | held_keys:
                     continue
+                if in_auction >= max_brackets:
+                    log.info("copytrader: %s at bracket cap (%d) - skipping rest",
+                             auction["slug"], max_brackets)
+                    break
                 fair = dist.get(b["label"], 0.0)
                 price = snap_price(fair - cfg["bid_margin_below_fair"], b["tick"])
                 if price < b["tick"]:
@@ -137,6 +146,7 @@ class CopytraderModule(BaseModule):
                 if size * price < 1.0 or size < 5:
                     continue
                 basket_sum += price
+                in_auction += 1
                 signals.append(Signal(
                     module_id=module_id, market_id=b["condition_id"],
                     bracket=b["label"], side="BUY", price=price, size=size,

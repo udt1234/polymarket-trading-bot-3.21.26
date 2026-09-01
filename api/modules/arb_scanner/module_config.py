@@ -17,6 +17,13 @@ DEFAULT_CONFIG: dict = {
     "pair_margin": 0.02,             # complement-pair fires when locked profit >= this
     "max_legs": 40,
     "per_arb_max_usd": 25.0,
+    # A complement pair only locks profit when BOTH legs fill. When one does and the
+    # other never does, we hold a naked directional bag - and because the duplicate
+    # guard only blocks a RESTING order, the module re-bought the same leg every
+    # cycle until four legs compounded to ~$100 each and pinned the $500 module
+    # budget for 39 days (2,273 module_budget_cap rejects/24h, 2026-09-01).
+    "max_held_usd_per_leg": 25.0,   # never re-enter a leg we already hold this much of
+    "orphan_unwind_hours": 6.0,     # after this long with no partner leg, quote out
     "min_leg_price": 0.02,
     "max_leg_price": 0.98,
     "max_signals": 20,

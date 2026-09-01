@@ -12,6 +12,12 @@ DEFAULT_CONFIG: dict = {
     "max_bet_pct": 0.05,
     "min_edge_threshold": 0.02,
     "aggregate_price_ceiling": 0.65,
+    # The aggregate ceiling only guarantees a winner when the basket covers EVERY
+    # bracket. Applied to a PARTIAL basket it is not a hedge, it is a concentrated
+    # bet: 8 brackets of one auction summing 0.639 all resolved worthless on
+    # 2026-08-04 (-$35.99 in a day) because the winner sat outside the set. Bound
+    # how much of one auction the whale can pull us into.
+    "max_brackets_per_auction": 3,
     "whale_perf_gate_roi": -0.30,  # bench the whale if last-10 ROI worse than this
 }
 

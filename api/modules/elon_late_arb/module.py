@@ -113,12 +113,20 @@ class Module(BaseModule):
             shares = int((stake / pair)) if pair > 0 else 0
             if shares < 5 or shares * yb < cfg["min_notional"] or shares * nb < cfg["min_notional"]:
                 continue
-            for tok, px, leg in ((b["yes_token"], yb, "YES"), (b["no_token"], nb, "NO")):
+            # Each leg carries ITS OWN book. The risk gate rejects any signal with
+            # spread/best_ask None as "no_spread_data" (fail closed), so leaving
+            # these blank made every complement-pair leg unapprovable (2026-09-01).
+            for tok, px, leg, lb, la in (
+                    (b["yes_token"], yb, "YES", b["yes_bid"], b["yes_ask"]),
+                    (b["no_token"], nb, "NO", b["no_bid"], b["no_ask"])):
+                if la is None:
+                    continue
                 signals.append(Signal(
                     module_id=module_id, market_id=b["condition_id"], bracket=b["label"],
                     side="BUY", price=px, size=shares, token_id=tok,
                     fair_value=None, edge=round(locked / 2, 4), auction_slug=slug,
-                    spread=None, best_bid=None, best_ask=None,
+                    spread=round(la - lb, 4) if lb is not None else None,
+                    best_bid=lb, best_ask=la,
                     metadata={"strategy": "elon_late_arb", "arb_type": "complement_pair_maker",
                               "pair_leg": leg, "pair_sum": round(pair, 4),
                               "locked_profit": round(locked, 4), "remaining_h": round(remaining_h, 2),

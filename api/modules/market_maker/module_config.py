@@ -19,6 +19,12 @@ DEFAULT_CONFIG: dict = {
     # optional slug allowlist to narrow "tweets" (empty = all we have L2 for)
     "tweet_slug_allow": [],
     "half_spread_cents": 2.0,        # quote this many cents either side of mid
+    # Only make on books at least this wide. Quoting mid-2c into a 1c-wide Elon
+    # book rests us BELOW the best bid: the quote can never fill, but it still
+    # burns the budget cap and re-quotes every cycle (33 approved / 0 fills in
+    # 24h, 2026-09-01). Spread capture needs width - this is the module's own
+    # thesis made mechanical. Default = 2 x half_spread (our own quoted width).
+    "min_book_spread_cents": 4.0,
     "skew_cents": 3.0,               # push both quotes down this many cents at full inventory
     "max_inventory_usd": 40.0,       # per-token inventory cap (adverse-selection bound)
     "min_markup_cents": 1.0,         # never offer inventory below cost + this

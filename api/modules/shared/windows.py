@@ -17,10 +17,16 @@ _MONTHS = {m: i + 1 for i, m in enumerate(
     ["january", "february", "march", "april", "may", "june", "july",
      "august", "september", "october", "november", "december"])}
 
+# Polymarket appends a 4-digit year to newer tweet slugs
+# (elon-musk-of-tweets-august-31-september-2-2026). The year is OPTIONAL and,
+# when present, constrains which candidate window we pick - without it the
+# regex anchored on the day and matched nothing, so every 2026 slug parsed as
+# None and every count-gated module went silent (2026-09-01).
 _SLUG_RE = re.compile(
     r"(january|february|march|april|may|june|july|august|september|october|"
     r"november|december)-(\d{1,2})-(january|february|march|april|may|june|"
-    r"july|august|september|october|november|december)-(\d{1,2})$")
+    r"july|august|september|october|november|december)-(\d{1,2})"
+    r"(?:-(\d{4}))?$")
 
 
 def _noon_et(year: int, month: int, day: int) -> datetime:
@@ -28,16 +34,20 @@ def _noon_et(year: int, month: int, day: int) -> datetime:
 
 
 def parse_slug_window(slug: str, now: datetime | None = None) -> tuple[datetime, datetime] | None:
-    """Parse '...-july-3-july-10' into (start, end) noon-ET datetimes.
-    Years are inferred so the window lands nearest to `now` (slugs carry no
-    year). Returns None when the slug has no date pair (e.g. monthly)."""
+    """Parse '...-july-3-july-10' or '...-august-31-september-2-2026' into
+    (start, end) noon-ET datetimes. A trailing 4-digit year is optional; when
+    absent the year is inferred so the window lands nearest to `now`. Returns
+    None when the slug has no date pair (e.g. monthly)."""
     m = _SLUG_RE.search(slug.strip().strip("/").split("/")[-1])
     if not m:
         return None
     now = now or datetime.now(ET)
     sm, sd, em, ed = _MONTHS[m.group(1)], int(m.group(2)), _MONTHS[m.group(3)], int(m.group(4))
+    slug_year = int(m.group(5)) if m.group(5) else None
+    years = ((slug_year - 1, slug_year, slug_year + 1) if slug_year
+             else (now.year - 1, now.year, now.year + 1))
     best = None
-    for start_year in (now.year - 1, now.year, now.year + 1):
+    for start_year in years:
         try:
             start = _noon_et(start_year, sm, sd)
             end_year = start_year + 1 if (em, ed) < (sm, sd) else start_year
@@ -45,6 +55,10 @@ def parse_slug_window(slug: str, now: datetime | None = None) -> tuple[datetime,
         except ValueError:
             continue
         if end <= start:
+            continue
+        # A year in the slug may name either end of a window that straddles
+        # New Year, so accept a candidate touching it and let distance decide.
+        if slug_year is not None and slug_year not in (start.year, end.year):
             continue
         mid = start + (end - start) / 2
         dist = abs((mid - now).total_seconds())

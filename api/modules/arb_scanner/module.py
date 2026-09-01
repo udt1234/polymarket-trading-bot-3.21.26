@@ -40,12 +40,78 @@ class ArbScannerModule(BaseModule):
         return {"min_edge": cfg.get("gate_min_edge", 0.0),
                 "spread_tol": cfg.get("gate_spread_tol", 0.30)}
 
+    def _orphan_exits(self, module_id: str, cfg: dict) -> list[Signal]:
+        """Quote OUT of any leg we hold with no partner leg beside it.
+
+        A complement pair is riskless only when both legs fill. A lone leg is a
+        directional position that nothing else in this module ever closes, so it
+        holds its notional against the module budget until the market resolves
+        (four of them held $384 for 39 days). Exits are post-only makers one tick
+        inside the ask - MAKER-ONLY is locked, so we never cross to get out."""
+        from datetime import datetime, timedelta, timezone
+
+        from api.services.position_manager import open_positions
+
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=cfg["orphan_unwind_hours"])
+        positions = open_positions(module_id)
+        by_market: dict[str, list[dict]] = {}
+        for p in positions:
+            by_market.setdefault(p.get("market_id") or "", []).append(p)
+
+        exits: list[Signal] = []
+        for p in positions:
+            # both legs of the same market held => the pair is complete, hold it
+            if len({q.get("token_id") for q in by_market[p.get("market_id") or ""]}) > 1:
+                continue
+            opened = p.get("opened_at") or p.get("created_at")
+            if not opened:
+                continue
+            if datetime.fromisoformat(str(opened).replace("Z", "+00:00")) > cutoff:
+                continue
+            size = float(p.get("size") or 0)
+            if size < 1:
+                continue
+            book = data.token_book(p.get("token_id") or "")
+            bid, ask = book["best_bid"], book["best_ask"]
+            if ask is None:
+                continue
+            tick = 0.01
+            price = round(max(tick, ask - tick), 4)
+            if bid is not None and price <= bid:
+                price = round(bid + tick, 4)   # never cross: stay a maker
+            if not (0 < price < 1):
+                continue
+            exits.append(Signal(
+                module_id=module_id, market_id=p.get("market_id") or "",
+                bracket=p.get("bracket") or "", side="SELL", price=price, size=size,
+                token_id=p.get("token_id") or "", fair_value=None, edge=None,
+                spread=round(ask - bid, 4) if bid is not None else None,
+                best_bid=bid, best_ask=ask, is_exit=True,
+                metadata={"strategy": "arb_scanner", "arb_type": "orphan_unwind",
+                          "position_id": p.get("id"), "opened_at": str(opened),
+                          "entry_price": p.get("avg_price")}))
+        if exits:
+            log.warning("arb_scanner: unwinding %d orphaned leg(s)", len(exits))
+        return exits
+
     async def _evaluate_async(self, module_id: str) -> list:
+        from api.services.position_manager import open_positions
+
         cfg = self.get_config(module_id)
         events = data.scan_tag_events(cfg["scan_tag"], cfg["scan_limit"])
-        signals: list[Signal] = []
+        signals: list[Signal] = self._orphan_exits(module_id, cfg)
         gate = self._gate(cfg)
         set_found = pair_found = 0
+
+        # Notional already held per leg. The duplicate-order guard only blocks a
+        # RESTING order, so without this the same leg is re-bought every cycle and
+        # compounds without limit (see max_held_usd_per_leg in module_config).
+        held_usd: dict[tuple[str, str], float] = {}
+        for p in open_positions(module_id):
+            key = (p.get("market_id") or "", p.get("token_id") or "")
+            held_usd[key] = held_usd.get(key, 0.0) + (
+                float(p.get("size") or 0) * float(p.get("avg_price") or 0))
+        cap = cfg["max_held_usd_per_leg"]
 
         for ev in events:
             if len(signals) >= cfg["max_signals"]:
@@ -66,6 +132,8 @@ class ArbScannerModule(BaseModule):
                         price = snap_price(m["yes_ask"], m["tick"])
                         size = int((stake / len(asks)) / price) if price > 0 else 0
                         if size < 5 or size * price < cfg["min_notional"]:
+                            continue
+                        if held_usd.get((m["condition_id"], m["yes_token"]), 0.0) >= cap:
                             continue
                         signals.append(Signal(
                             module_id=module_id, market_id=m["condition_id"], bracket=m["label"],
@@ -98,6 +166,8 @@ class ArbScannerModule(BaseModule):
                 if shares < 5 or shares * q_yes < cfg["min_notional"] or shares * q_no < cfg["min_notional"]:
                     continue
                 for tok, px, leg in ((m["yes_token"], q_yes, "YES"), (m["no_token"], q_no, "NO")):
+                    if held_usd.get((m["condition_id"], tok), 0.0) >= cap:
+                        continue
                     signals.append(Signal(
                         module_id=module_id, market_id=m["condition_id"], bracket=m["label"],
                         side="BUY", price=px, size=shares, token_id=tok,
