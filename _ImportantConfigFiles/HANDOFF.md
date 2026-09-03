@@ -1,5 +1,33 @@
 # PolyMarket Bot — Handoff
 
+## 🗄️ Tracker migrated Sheets → Supabase (2026-08-27) — RETIRE THE SHEET
+MyPolyTracker (tracker.xagency.com / `PolyPulse_Web`) is now **Supabase-first**, off the Google Sheet in the live path. Store = `PolyMarket Bot` Supabase (`xdonwowgqvmtrduikaon`), `tracker_*` tables, fed 24/7 by Railway service **`tracker-poller`** (project Polymarket-Manual-2026, `PolyPulse_Web/poller/poll.py`). Counts, auctions, pacing/odds/edge, order book, prices, volume, resolved auctions from Supabase; account/positions/portfolio from the bot's `daily_pnl`/`positions`. `buildDashboard` reads the sheet ONLY as fallback. Full detail: `PolyPulse_Web/MIGRATION.md`.
+
+### ⏳ TODO — retire the sheet + Apps Script
+1. ✅ DONE 2026-08-27: Supabase path confirmed live — `/api/data` `_source` reports `supabase` (fully off the sheet in the request path). Watch it stays `supabase` day-to-day.
+2. ✅ DONE 2026-08-27: `PolyBackup_TweetCounts` Apps Script triggers DELETED (ran `removeAllTriggers` from the editor; Triggers page shows "No results"). The sheet no longer receives writes. Re-install if ever needed via `setupAll`.
+3. Optionally archive the `❗PolyMarket // Tracker` sheet read-only for reference.
+4. Remove the sheet-fallback path from `PolyPulse_Web/app/lib/sheet.ts` `buildDashboard` + the `GOOGLE_SERVICE_ACCOUNT_JSON` Vercel env var (safe now that Apps Script is off — do after a few days of stable `_source: supabase`).
+5. Backfill remaining priors / monthly history if longer averages are wanted (canonical parquet).
+
+## ⏸️ PAUSED MID-RUN (2026-07-26): post-cadence pattern discovery
+Sir paused for a machine restart. Nothing is broken, nothing is live, no results were produced yet.
+
+**Where it stopped:** `@backtest-builder` was building the pattern-discovery study and was stopped cleanly during its smoke test. It had written 3 scripts, none validated, none run to completion:
+`_DataMetricPulls/pacing_backtest/pattern_discovery_2026-07-26.py`, `pattern_discovery_lib.py`, `pattern_discovery_methods.py`.
+
+**The contract it must obey:** `_DataMetricPulls/pacing_backtest/prereg/pattern_discovery_2026-07-26.md` (written BEFORE any sealed data was opened; fixes the wall dates, the 7 methods, the 4 baselines, the scoring, the trial count and the success criteria).
+
+**To resume:** re-invoke `@backtest-builder` pointing at the prereg + the 3 existing scripts, then `@backtest-auditor`. Two addenda were sent mid-run and must be restated: (1) no silently substituting heuristics for the declared HMM / hazard / Hawkes methods, mark UNVERIFIED instead, and report the exact estimator + hyperparameters + convergence per method; (2) respect the small-sample complexity caps (tree depth 4, k<=8, HMM states<=4).
+
+**Targets locked:** Elon daily = research substrate (300 clean days, 2025-09-01 to 2026-06-27). Elon 2-day = primary tradeable test (68 auctions, 10 brackets). Trump 7-day = independent confirmation (52 auctions, 11 brackets; Trump has NO 2-day market). Elon 7-day = reported, not leaned on (80 usable, 26 brackets).
+
+**Standing rules set this session:** all past strategy conclusions are HISTORY (unverified) and may not be used to skip work; `@backtest-builder` builds and `@backtest-auditor` audits by default, always named out loud. See `CLAUDE.md` § "Backtest Agents Are The Default" and `lessons.md` 2026-07-26.
+
+## 📣 Related repo: polymarket-telegram-alerts (Sir's MANUAL account)
+Separate Railway service (`Polymarket-Manual-2026` → `telegram-alerts`), separate repo (`udt1234/polymarket-telegram-alerts`), separate wallet (`0x2eEF3A…8eAca`). Runs 24/7 as Sir's manual-trade cockpit: fills, P&L tiers, mode-shift, direction-change, whale detection, Elon post auto-buy, Elon calendar events. All sell/buy actions fire via inline Telegram buttons through the CF Worker proxy (`polymarket-proxy.darwin-38f.workers.dev`) using `polymarket-client==0.1.0b13` SecureClient (`place_limit_order(post_only=False)` at top-of-book). Full detail: `../polymarket-telegram-alerts/HANDOFF.md`. Auto-bot build below is a **different** wallet + **different** service and does not share code, state, or credentials with the alerter.
+- **Command + button reference (2026-08-05):** full Telegram command list + inline-button behavior documented in the **"Telegram Alerts"** tab of the Backtest workbook: https://docs.google.com/spreadsheets/d/1aApOzCaK7nbg2PRrNW_N1apVv1GWxjd6BHJZD9L7Feg/edit#gid=1565168051 . Bot `@PolymarketActivitiesBot`. Commands: `/sell` (sweep positions in auctions ending soon; window arg like `/sell 2h`, `/sell 30m`; LIMIT at top-of-book, 100% = 3-tier ladder 50/30/20), `/exit` (alias), `/positions` + `/pos` (open positions + P&L, manual wallet only; bot wallet view-only), `/help`, `/start`. Inline buttons (Sell 25/50/75% single limit at best bid, Sell 100% 3-tier ladder, Skip; two-tap confirm) auto-attach to `sell_dip` / `sell_convergence` / `sell_time_decay` / `mode_shift` / `direction_change` alerts for manual-wallet positions only.
+
 ## 🚧 BUILD PROGRESS (PART J of BUILD_SPEC.md) — updated 2026-07-06
 All on branch `feat/newbot-step1-skeleton` (steps 1-6, one commit each). Migrations 022 (orders lifecycle) + 023 (positions 'closing') APPLIED to prod Supabase.
 - **Step 1 Skeleton: DONE** — boot + registry + unauth healthz. ACCEPT PASS.

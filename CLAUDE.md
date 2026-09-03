@@ -136,6 +136,15 @@ elon_may = pd.read_parquet(CANON/"prices/elonmusk/2026-05.parquet")
 3. **Filter `counts_for_auction = True` on posts** before counting toward an auction.
 4. **Filter `confidence in ('high','medium')` on auctions** to skip unresolved/ambiguous.
 5. **Treat the underlying `trump_posts_raw.parquet` / `elon_posts_raw.parquet` as inputs, not data.** They feed the canonical builder.
+6. **`@backtest-builder` BUILDS it. `@backtest-auditor` AUDITS it. Never hand-write a backtest.** See "Backtest Agents Are The Default" below.
+
+## Backtest Agents Are The Default (Non-Negotiable)
+- **`@backtest-builder` is the ONLY way a backtest gets written.** Any request meaning "backtest / simulate / what if / test this strategy / find patterns in the history / measure this model" routes to the builder FIRST. Claude does not hand-write the script.
+- **`@backtest-auditor` is the ONLY way a backtest result gets trusted.** Every builder output goes to the auditor before a number is quoted, a model is locked, or a param is changed. No exceptions, including negative results.
+- **Applies to forecast-accuracy and calibration studies too**, not just P&L. The auditor scope-gates the diagnostic case (`.claude/agents/backtest-auditor.md` line 13).
+- **Name the agent out loud, every time.** Say "invoking @backtest-builder to build X" and "invoking @backtest-auditor to audit X", and attribute every reported number to the agent that produced it. The user must never have to guess who wrote the code behind a number.
+- **Only exception:** a one-line throwaway probe (row count, date range, column check) may run inline. The moment it fits a model, splits train/test, or produces a number the user might act on, it goes to the builder.
+- Claude's role is scoping the question, pre-registering the rule list and held-out span, relaying the verdict, and recommending the next move.
 
 ## Non-Negotiable Rules
 - **ALWAYS limit orders** — NEVER market orders. Every order specifies a `price`.
