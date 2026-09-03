@@ -1,0 +1,134 @@
+[
+ {
+  "address": "0x204f72f35326db932158cba6adff0b9a1da95e14",
+  "archetype": "market_maker",
+  "label": "swisstony",
+  "evidence": "lb-api /profit?window=all rank #2 all-time, $22,033,021 realized. /value $221,878 live holdings. /activity (500 fills) = high-frequency two-sided quoting across dozens of SA soccer/tennis/MLB micro-markets, mid-range 0.25-0.85 fills = quoting around fair value. Textbook proven-profit MM."
+ },
+ {
+  "address": "0xe90bec87d9ef430f27f9dcfe72c34b76967d5da2",
+  "archetype": "market_maker",
+  "label": "gmanas",
+  "evidence": "lb-api /profit?window=all rank #23, $4,955,880 realized. Volume rank #9 ($537.4M) = 0.92% margin (thin-edge MM signature). /activity 106/108 mid-priced two-sided fills; /value 0 (flat inventory). Proven profitable."
+ },
+ {
+  "address": "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+  "archetype": "market_maker",
+  "label": "RN1",
+  "evidence": "lb-api /profit?window=all rank #4, $11,640,631 realized. Volume rank #2 ($961.7M) = 1.21% margin. /value $211,476 live. /activity 301 records (287 TRADE + 14 REDEEM). Proven profitable turnover-driven MM."
+ },
+ {
+  "address": "0x507e52ef684ca2dd91f90a9d26d149dd3288beae",
+  "archetype": "market_maker",
+  "label": "GamblingIsAllYouNeed",
+  "evidence": "lb-api /profit rank #28 $4,496,093 realized; volume rank #17 ($444.6M) = 1.01% margin. /activity shows MAKER_REBATE + TAKER_REBATE + MERGE transaction types (direct MM signals). /value $25 (flat book). Proven profitable MM."
+ },
+ {
+  "address": "0xe9076a87c5ed90ef16e6fe6529c943baeca0cff6",
+  "archetype": "market_maker",
+  "label": "suntori",
+  "evidence": "PROFIT UNPROVEN \u00e2\u20ac\u201d absent from /profit top-1000 (floor ~$2.8M). Positive signals only: rank #7 all-time volume $641.6M, $473,919 live holdings. Track as high-volume maker exemplar; realized edge is spread+rebates not captured by the P&L leaderboard, so absence is not proof of loss."
+ },
+ {
+  "address": "0xc8ab97a9089a9ff7e6ef0688e6e591a066946418",
+  "archetype": "market_maker",
+  "label": "ArmageddonRewardsBilly",
+  "evidence": "PROFIT UNPROVEN \u00e2\u20ac\u201d not in /profit top-1000. Volume rank #13 ($498.8M), /value $1,849,549 live. /activity 62 BUY / 38 SELL across 51 distinct markets, prices 0.001-0.999 = broad two-sided quoting (reward-farm MM footprint, 'Rewards' in name). Exemplar of reward-earning MM pattern, not proven profit."
+ },
+ {
+  "address": "0x63ce342161250d705dc0b16df89036c8e5f9ba9a",
+  "archetype": "lp_reward",
+  "label": "Deep-Condor / 0x8dxd",
+  "evidence": "data-api /v1/leaderboard?category=CRYPTO&timePeriod=ALL&orderBy=PNL rank #1: pnl $2,382,769, vol $199.1M (~1.2% margin). /activity 100+ two-sided fills on crypto 5-min 'BTC/ETH Up or Down' maker scalping. Also polyscalping maker-rebate #48 ($71,309). /value 0 (flat scalper book). Proven-profit crypto LP farmer."
+ },
+ {
+  "address": "0xd0d6053c3c37e727402d84c14069780d360993aa",
+  "archetype": "lp_reward",
+  "label": "k9Q2mX4L8A7ZP3R (bot)",
+  "evidence": "data-api /v1/leaderboard CRYPTO rank #4: pnl $1,720,272, vol $208.4M (0.83% margin). Random-string bot handle. /value 0 (churn-and-collect). /activity exclusively short-window crypto Up/Down markets (BTC/XRP/SOL 5-15min) + 24 immediate REDEEMs. Proven-profit high-volume LP/MM bot."
+ },
+ {
+  "address": "0xeebde7a0e019a63e6b476eb425505b7b3e6eba30",
+  "archetype": "lp_reward",
+  "label": "Bonereaper",
+  "evidence": "data-api /v1/leaderboard CRYPTO rank #5: pnl $1,212,199, vol $204.8M. /value $13,182 live. 492 recent trades all BTC/ETH intraday Up-or-Down markets. Proven-profit intraday crypto LP farmer."
+ },
+ {
+  "address": "0xb27bc932bf8110d8f78e55da7d5f0497a18b5b82",
+  "archetype": "lp_reward",
+  "label": "Confidential-Sole",
+  "evidence": "data-api /v1/leaderboard CRYPTO rank #18: pnl $770,925, vol $212.9M = 0.36% margin (ultra-thin, non-directional). /value $132 (profits withdrawn). /activity all July-24 5-min BTC/ETH up-down markets. Proven-profit ultra-thin crypto maker."
+ },
+ {
+  "address": "0x21d0a97aac03917e752857a551bbe5103a00e8d7",
+  "archetype": "lp_reward",
+  "label": "PBot-6 (Tangible-Friendship)",
+  "evidence": "polyscalping.org maker-rebate leaderboard rank #100, $43,556 cumulative maker rebates (on-chain Transfer events from Polymarket's rebate distributor since Jan 2026 = independent blockchain-verified reward proof). /value $413 (near-zero standing inventory, LP-farmer signature). Purest LP-reward farmer exemplar."
+ },
+ {
+  "address": "0xee613b3fc183ee44f9da9c05f53e2da107e3debf",
+  "archetype": "arbitrage",
+  "label": "sovereign2013",
+  "evidence": "lb-api /profit?window=all pseudonym 'sovereign2013', $3,588,720 realized (top-50 all-time). /value 0 (flat/redeemed). Proven-profit binary complement-pair arbitrageur."
+ },
+ {
+  "address": "0x2c335066fe58fe9237c3d3dc7b275c2a034a0563",
+  "archetype": "arbitrage",
+  "label": "anon 2c335066 (MM/arb hybrid)",
+  "evidence": "PROVEN PROFIT: lb-api /profit rank #16 all-time $7,127,584; 30d rank #10 $2,132,349 (currently profitable). /value $8,180,745 live. /activity 500 events = 453 TRADE all BUY, 0 directional sells, +41 REDEEM +2 MERGE +MAKER/TAKER_REBATE. 23/57 markets bought two-sided; locked pairs sum <$1 (VIT/Liquid 0.98, Liquid/Vitality 0.99, G2/Movistar 0.72) closed via MERGE/REDEEM = riskless complete-set arb. Deduped to arbitrage (also a valid MM)."
+ },
+ {
+  "address": "0xfe787d2da716d60e8acff57fb87eb13cd4d10319",
+  "archetype": "arbitrage",
+  "label": "ferrariChampions2026",
+  "evidence": "PROFIT INFERRED (not on /profit leaderboard). Volume rank #6 all-time $640.2M; /value $345,468 live positive. /activity 92 BUY / 0 SELL + 11 MERGE ops = textbook complete-set arb (buy both legs <$1, MERGE to $1). Confirmed locked pairs: Rockies 0.60+Brewers 0.36=0.96, FURIA 0.13+NRG 0.83=0.96. Riskless-by-construction; medium confidence on profit."
+ },
+ {
+  "address": "0xd218e474776403a330142299f7796e8ba32eb5c9",
+  "archetype": "arbitrage",
+  "label": "cigarettes",
+  "evidence": "PROFIT INFERRED (not in /profit top-250). /value $323,806 live positive. /activity confirms complete-set arb: MERGE ops present, REDEEM present, both-side buying on multiple markets (FURIA+NRG Valorant, Over+Under soccer total, both players ATP) \u00e2\u20ac\u201d you can only MERGE holding both legs. Rank #8 all-time volume $572.5M. Medium confidence profit, strong archetype fit. Deduped to arbitrage."
+ },
+ {
+  "address": "0xe8dd7741ccb12350957ec71e9ee332e0d1e6ec86",
+  "archetype": "arbitrage",
+  "label": "influenz.eth",
+  "evidence": "PROFIT NOT PROVEN. /value $743 live; not on profit leaderboard. Collects MAKER_REBATE, REWARD, YIELD, heavy REFERRAL_REWARD; runs negative-risk multi-outcome conversions (riskless-by-construction). Archetype fit is the strength, not proven profit. Track as negative-risk/conversion-arb exemplar."
+ },
+ {
+  "address": "0xa59c570a9eca148da55f6e1f47a538c0c600bb62",
+  "archetype": "tweet",
+  "label": "Prexpect",
+  "evidence": "user-pnl-api lifetime PnL +$150,790 (1000 daily points from 2024-11-28). /positions: 24 of 31 open in 'Will Elon Musk post N tweets' weekly bucket markets. Canonical Elon tweet-count trader, profitable specialist."
+ },
+ {
+  "address": "0x1e1aed3928a9617e7c7ae674c4fa7aebbd9d7690",
+  "archetype": "tweet",
+  "label": "Bitgod",
+  "evidence": "user-pnl-api lifetime PnL $84,067 (interval=all, monotonically rising). /value $20,909 live capital deployed. Pure Elon tweet-count trader, verified 2026-07-24."
+ },
+ {
+  "address": "0x6864204009ba1e137989983eafee8644cb3f294b",
+  "archetype": "tweet",
+  "label": "hetacz",
+  "evidence": "user-pnl-api lifetime PnL $40,361; /value $37,958 live. Both endpoints strongly positive. Elon tweet-count trader."
+ },
+ {
+  "address": "0x8eab0c46127830072631db88e9dbaeb0b953a56d",
+  "archetype": "tweet",
+  "label": "LinaBell (Every-Reform)",
+  "evidence": "user-pnl-api lifetime PnL $39,721 (500 daily points); /value $5,236 live. /positions all 40 open = 'Will Elon Musk post N-M tweets' bracket markets (Jul 17-28 2026 weekly auctions, 5k-10k shares each). /activity ~95%+ Elon tweet-count. Pure specialist."
+ },
+ {
+  "address": "0x590ed3d1a14ba08cad23f5c513bad6301772e43d",
+  "archetype": "tweet",
+  "label": "smalltimezzz",
+  "evidence": "user-pnl-api lifetime cumulative PnL +$10,457 (interval=all). Positive, verified live 2026-07-24. Pure Elon tweet-count trader."
+ },
+ {
+  "address": "0x7db5452784044466615b3542703fd95c9696cf18",
+  "archetype": "tweet",
+  "label": "wakuwaku3",
+  "evidence": "user-pnl-api lifetime PnL $8,675 (365 daily points). /value $916 live. /positions 31/31 Elon tweet-count markets; /activity ~100% Elon tweet-count. Real, profitable, strict tweet-count specialist."
+ }
+]
