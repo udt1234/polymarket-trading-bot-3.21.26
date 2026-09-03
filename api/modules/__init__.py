@@ -7,15 +7,15 @@ log = logging.getLogger(__name__)
 
 _registry: dict[str, BaseModule] = {}
 
-
 _NON_MODULE_DIRS = {"base", "shared"}
 
 
 class ModuleRegistry:
     def discover(self):
-        """Idempotent — names already in the registry are kept (not replaced).
-        Skips `base` and `shared` packages explicitly; they are infrastructure,
-        not trading modules."""
+        """Idempotent - names already in the registry are kept (not replaced).
+        Skips `base` and `shared` packages; they are infrastructure, not
+        trading modules. Adding a strategy is drop-in: create the folder,
+        implement BaseModule, export `Module` from __init__.py."""
         import api.modules as pkg
         for importer, name, ispkg in pkgutil.iter_modules(pkg.__path__):
             if not ispkg or name in _NON_MODULE_DIRS:
@@ -25,8 +25,6 @@ class ModuleRegistry:
                 if hasattr(mod, "Module"):
                     instance = mod.Module()
                     if instance.name in _registry:
-                        # Keep the existing instance so any in-flight cycles
-                        # holding a reference to it stay valid across restarts.
                         continue
                     _registry[instance.name] = instance
                     log.info(f"Discovered module: {instance.name}")
@@ -46,9 +44,9 @@ class ModuleRegistry:
         """Map a Supabase modules table row to its BaseModule instance.
 
         Resolution priority:
-        1. strategy field matches a registered module name (e.g. 'spike_rider')
-        2. Display name contains a module's get_display_keywords()
-        Returns None when no module matches — caller should skip the row.
+        1. strategy field matches a registered module name
+        2. display name contains a module's get_display_keywords()
+        Returns None when no module matches - caller should skip the row.
         """
         if not module_row:
             return None

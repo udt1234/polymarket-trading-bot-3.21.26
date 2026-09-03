@@ -169,18 +169,18 @@ Estimate fair value: for each bracket, its probability of being the winner given
 - One-time on-chain: approve the V2 CTF Exchange + V2 Negative Risk Exchange for pUSD + ERC-1155 conditional tokens (addresses in the appendix).
 - Optional sub-wallets (one per live strategy) for risk isolation. Do NOT build nonce-sequencing (V2 removed the nonce).
 
-## E2. Signing orders (CLOB V2)
-- CLOB V2 live 2026-04-28. EIP-712 typed data. EXCHANGE domain version = "2"; AUTH ClobAuthDomain stays "1" (crossing them = immediate auth failure).
-- NO nonce field. Uniqueness = a millisecond timestamp in the signed struct. Signing V1 -> `order_version_mismatch` (hard reject).
-- Use py_clob_client. Typed dataclasses: `OrderArgs(token_id, price, size, side)`, `ApiCreds(api_key, api_secret, api_passphrase)`. Dicts crash later with AttributeError.
-- Struct asymmetry: nonce, feeRateBps, taker, expiration are REMOVED from the signed struct; taker + expiration must still be passed in the outer JSON body of POST /order.
-- GTD expiration = `now + 60 + N` seconds (60s minimum safety threshold).
+## E2. Signing orders (CORRECTED 2026-07-06 - verified live from Dublin)
+- **py_clob_client is ARCHIVED and NON-FUNCTIONAL for orders**: every version (incl. latest 0.34.6) signs an order the CLOB rejects with `invalid order version`. Verified with a real signed order 2026-07-06.
+- **Use the official unified SDK `polymarket-client` (github.com/Polymarket/py-sdk, beta)**: `SecureClient.create(private_key=..., wallet=<deposit wallet>)` derives L2 credentials automatically, auto-detects wallet type (EOA/proxy/safe), and resolves tick size + neg-risk per token. `create_limit_order(..., post_only=True)` signs without posting (the pre-sign loop); `place_limit_order(...)` signs + posts; `post_orders([...])` fires a pre-signed batch; `cancel_market_orders(market=...)` is the hot-path batch cancel.
+- GTD expiration must be a Unix timestamp >= 3 MINUTES in the future (SDK-enforced), not the old 60s rule.
+- Acceptance PASS 2026-07-06 from the Dublin box: post-only rest -> user-WS PLACEMENT -> cancel -> CANCELLATION, orders row lifecycle correct.
 
 ## E3. Post-only limit orders (our only order type)
 - Set `post_only = true` on every order. Would-cross -> rejected `INVALID_POST_ONLY_ORDER` (never takes). With FOK/FAK -> `INVALID_POST_ONLY_ORDER_TYPE`. Works only with GTC/GTD.
 - Validate all three CLOB minimums at build time: >=5 shares, >=$1 notional, price on the tick (1c standard; 0.001 neg-risk). `shares = round(notional / price)`. Snap price to tick.
 
-## E4. Heartbeat (mandatory)
+## E4. Heartbeat (CORRECTED 2026-07-06: OPT-IN, currently dormant)
+- The cancel-on-missed-heartbeat only applies once heartbeats are STARTED (old SDK docstring). The unified polymarket-client SDK exposes NO exchange heartbeat method, so the bot does NOT send heartbeats (daemon dormant) - starting then missing them would cancel the whole book. Re-verify at Step 7; original spec below for when it returns.
 - Send a heartbeat every 2 to 3 seconds (field heartbeat_id, empty on first), in an isolated lightweight thread. No valid heartbeat within 10s (+5s buffer) -> ALL open orders cancelled (5s leaves only a one-miss buffer; 2-3s is safer).
 - MATCHING-ENGINE RESTARTS (verified): during a restart the CLOB returns HTTP 425 (Too Early), then runs POST-ONLY for ~2 minutes (cancels accepted, non-post-only rejected with 503). Announced ~2 days ahead via Discord/Telegram; no fixed public schedule. Handle 425 with exponential-backoff retry and pause new entries. The 2-min post-only window FAVORS us (we are already post-only while takers are locked out).
 
@@ -275,7 +275,7 @@ All backtests read only from `_DataMetricPulls/canonical/` (posts, auctions, pri
 ## I1. Network stack (Dublin, gated)
 - Optional VPS in AWS eu-west-1 (Dublin), ~2ms from London (eu-west-2). Bypasses the geoblock (UK + US datacenter IPs blocked; Dublin allowed). Only needed for a microsecond FIFO race (crypto sweep).
 - Warm keep-alive pooled HTTPS to the CLOB (cold ~85ms, warm ~23ms) with TCP_NODELAY. Local caching DNS resolver (dnsmasq/systemd-resolved) so lookups are <1ms.
-- Interim geoblock fix (free): route all Polymarket traffic through a Cloudflare Worker proxy via a boot-time httpx monkey-patch. Env: POLYMARKET_PROXY_URL + POLYMARKET_PROXY_KEY.
+- Cloudflare Worker proxy (boot-time httpx monkey-patch, env POLYMARKET_PROXY_URL + POLYMARKET_PROXY_KEY): READS ONLY as of 2026-07-06 - order POSTs through it get the region 403 (see PART M). Keep it for Gamma/xTracker/CLOB reads from geo-awkward hosts; do not rely on it for trading.
 
 ## I2. Railway services + deploy
 - API + worker services each deploy from a GitHub repo. Deploy by git push to master (production, no preview env). Verify it landed via the Railway dashboard + Supabase log behavior, not just a merge.
@@ -304,10 +304,11 @@ Read-only web terminal to watch everything in real time. NEVER places orders. Ne
 - Data path: reads Supabase + a lightweight WebSocket relay from the API service pushes live book/fill updates to the browser (real-time without hammering the DB).
 - Access control: behind Supabase auth (a login), not public (it shows wallet P&L).
 
-# PART M: Hosting decision
-- Dublin VPS is GATED/optional (only for the microsecond crypto sweep). The maker bot reacts sub-second and does not need it.
-- Now: Railway region EU-West (Amsterdam), closest to London, + the Cloudflare Worker proxy for the geoblock. Good enough.
-- Later (crypto sweep only): rent an AWS eu-west-1 (Ireland) instance and run just the execution worker there.
+# PART M: Hosting decision (CORRECTED 2026-07-06 - verified by live test)
+- **Railway CANNOT place orders from ANY of its regions.** Verified 2026-07-06 with a real signed post-only order: Railway europe-west4 (Amsterdam = Netherlands, a Polymarket-restricted country) returns the region 403. us-west/us-east are US (blocked); asia-southeast1 is Singapore (blocked). The old "Railway Amsterdam is good enough" line is FALSE for trading.
+- **The Cloudflare Worker proxy no longer bypasses the ORDER geoblock** (verified 2026-07-06: signed order POST through the worker from a US client returns the region 403). It still works for reads (Gamma/xTracker/CLOB GETs). Treat the worker as a read proxy only.
+- **Live trading therefore REQUIRES a host in an allowed country from day one: the Dublin VPS (AWS eu-west-1, Ireland) is no longer optional/gated - it is the execution host.** Railway remains fine for the recorder, alerter, dashboard, and any read-only worker.
+- Everything up to Step 4 (paper) runs anywhere; Step 2's live rest/cancel acceptance and Steps 5+ live execution run on the Dublin box.
 
 # PART N: Additional pre-build items (gaps closed 2026-07-03)
 - Paper vs production isolation: run paper against a SEPARATE Supabase project (or schema), so paper never competes with the live engine for jobs/rows.

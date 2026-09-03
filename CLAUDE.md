@@ -124,8 +124,12 @@ elon_may = pd.read_parquet(CANON/"prices/elonmusk/2026-05.parquet")
 - `scripts/canonical/01_audit_sources.py` — re-scan for source inventory (read-only)
 - `scripts/canonical/02_build_posts.py` — rebuild posts from raw parquets
 - `scripts/canonical/03_build_auctions.py` — rebuild auctions from whale_analysis
-- `scripts/canonical/04_build_prices.py` — rebuild hourly OHLC + proxies
+- `scripts/canonical/04_build_prices.py` — rebuild hourly OHLC + proxies (prints winner-coverage at the end)
 - `scripts/canonical/05_nuclear_delete.py` — clean up non-canonical sources (dry-run by default)
+- `scripts/canonical/14_repair_bracket_coverage.py` — pull brackets Gamma lists but raw is missing/truncated
+- `scripts/canonical/15_verify_winner_coverage.py` — coverage gate; exit 1 below 95%; `--demote` to exclude the rest
+
+**Order matters: anything that touches `_raw_imports/` must be followed by `04_build_prices.py`.** `prices` is derived; leaving it stale is what produced the 2026-07 winner-coverage bug.
 
 ### Canonical QA Sheet
 - [PolyMarket Canonical Data — Source Inventory](https://docs.google.com/spreadsheets/d/1bXBnXz4a1Nn44ZLORNo2cNqZx6pnqER3rcoTUZMC1Q8/edit) — sample tabs for posts/auctions/prices both handles, plus the legacy source inventory
@@ -136,6 +140,16 @@ elon_may = pd.read_parquet(CANON/"prices/elonmusk/2026-05.parquet")
 3. **Filter `counts_for_auction = True` on posts** before counting toward an auction.
 4. **Filter `confidence in ('high','medium')` on auctions** to skip unresolved/ambiguous.
 5. **Treat the underlying `trump_posts_raw.parquet` / `elon_posts_raw.parquet` as inputs, not data.** They feed the canonical builder.
+6. **`@backtest-builder` BUILDS it. `@backtest-auditor` AUDITS it. Never hand-write a backtest.** See "Backtest Agents Are The Default" below.
+7. **Never substitute a floor for a missing price — EXCLUDE the auction.** If the WINNING bracket has no price row at time T, that auction is inadmissible for any model-vs-market comparison. Defaulting it to `1e-6`/epsilon/uniform fabricates the market's log loss and inverts the result. Run `15_verify_winner_coverage.py` before quoting any model-vs-market number, and report admissible n separately from full n.
+
+## Backtest Agents Are The Default (Non-Negotiable)
+- **`@backtest-builder` is the ONLY way a backtest gets written.** Any request meaning "backtest / simulate / what if / test this strategy / find patterns in the history / measure this model" routes to the builder FIRST. Claude does not hand-write the script.
+- **`@backtest-auditor` is the ONLY way a backtest result gets trusted.** Every builder output goes to the auditor before a number is quoted, a model is locked, or a param is changed. No exceptions, including negative results.
+- **Applies to forecast-accuracy and calibration studies too**, not just P&L. The auditor scope-gates the diagnostic case (`.claude/agents/backtest-auditor.md` line 13).
+- **Name the agent out loud, every time.** Say "invoking @backtest-builder to build X" and "invoking @backtest-auditor to audit X", and attribute every reported number to the agent that produced it. The user must never have to guess who wrote the code behind a number.
+- **Only exception:** a one-line throwaway probe (row count, date range, column check) may run inline. The moment it fits a model, splits train/test, or produces a number the user might act on, it goes to the builder.
+- Claude's role is scoping the question, pre-registering the rule list and held-out span, relaying the verdict, and recommending the next move.
 
 ## Non-Negotiable Rules
 - **ALWAYS limit orders** — NEVER market orders. Every order specifies a `price`.
@@ -182,6 +196,8 @@ See `_ImportantConfigFiles/MODULE_ARCHITECTURE.md` for the full guide. Quick rul
 - `@strategy-reviewer` — before committing signal/pacing/projection changes
 - `@risk-auditor` — before going live, audit all money-touching code
 - `@verify-bot` — end-to-end paper trading verification (NOT a backtester)
+- `@backtest-builder` — **writes Polymarket-native backtests that pass the auditor BY CONSTRUCTION** (canonical data, noon-ET window, event-driven, real-L2 maker fills, taker-fee truth, THE WALL, imports `locked_pace`, emits RUN_META). The auditor's twin: builder proposes, auditor disposes. Hands off to `@backtest-auditor` for the verdict; never certifies its own result. Use for any "backtest this / simulate / what if".
+- `@backtest-auditor` — **catches WRONG backtests before you trust the number.** Invoke after writing/changing any backtest, before quoting a P&L/ROI/win-rate, or before locking a model/param. 4 adversarial passes (A data-integrity / B metric-validity / C instruction-compliance / D statistical-honesty), re-runs the headline number to reproduce it, BLOCKS on fatal, writes an audit log to `_DataMetricPulls/pacing_backtest/audits/`. In the /pre-commit chain when backtest files change. It returns a verdict, it does NOT certify a strategy works.
 
 **Periodic deep sweeps (NOT per-PR — invoke on demand):**
 - `@qa-code-quality` — orphan code, duplicates, hotfix layering, bloat, bad abstractions. Run weekly or before major refactors.

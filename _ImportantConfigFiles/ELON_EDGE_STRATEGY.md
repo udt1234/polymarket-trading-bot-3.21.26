@@ -26,6 +26,20 @@ Backtests (all in `_DataMetricPulls/pacing_backtest/`, obey `BACKTEST_RULES.md`)
 `l2_edge_backtest.py` (arb+fade), `l2_speed_backtest.py` (speed), `pace_reconstruction.py`
 (reverse-pace), `regime_test.py`, `divergence_test.py`, `layered_pacing_test.py` (model compare).
 
+## 1.5) LOCKED PACE MODEL (2026-07-06) - `Ensemble+CAP1.5`
+Chosen by `pacing_leaderboard.py` (walk-forward, 144 resolved auctions, 3 iterations, scored on
+bracket-HIT + count-ERROR + worst-over-projection). **Do not substitute another pacing model.**
+1. `kal = o + (rmean + K*(o/elapsed_h - rmean)) * remaining_h`   (Kalman, walk-forward priors)
+2. `acc = o / share[elapsed_hour]`                                (AccrualCurve, walk-forward share curve)
+3. `ens = (1-elapsed_frac)*kal + elapsed_frac*acc`                (trust Kalman early, Accrual late)
+4. **CAP:** `our = o + min((ens-o)/remaining_h, 1.5*rmean) * remaining_h`
+
+Leaderboard: base model barely matters (Kalman 36.5% / K+Sleep 35.9% / Ensemble 36.8% hit). The
+**rate cap** is the fix: worst-over-projection 1.75x -> **1.49x**, blow-up rate 53% -> 41%, accuracy
+slightly UP (37.3%). Over-damped models (Bayes/EWMA/low-gain) were stable but lost accuracy.
+Top 3: `Ens+CAP1.5` > `Ens+CAPtv` > `Ens+CAP2`. Honest ceiling ~37% hit; the market still forecasts
+better at most horizons, so this is a stable fair-value ANCHOR, not a market-beating oracle.
+
 ## 2) THE TWO FAIR-VALUE TOOLS (the brain)
 - **Kalman pacing (ours):** projects final count from the live count + walk-forward priors.
   Best model = **Kalman + Particle-Filter ensemble (Ens_KPF)**, best-calibrated (Brier ~0.37).

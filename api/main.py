@@ -1,166 +1,51 @@
+"""FastAPI entry point (BUILD_SPEC B3).
+
+The Polymarket proxy patch MUST be installed before any SDK / httpx-using
+module is imported, so every Polymarket-bound request is transparently
+routed through the Cloudflare Worker when POLYMARKET_PROXY_URL is set.
+"""
 import logging
-import traceback
-from contextlib import asynccontextmanager
-from fastapi import Depends, FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
-logging.basicConfig(level=logging.INFO)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("hpack").setLevel(logging.WARNING)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-from api.config import get_settings
-from api.dependencies import get_supabase
-from api.middleware import require_auth
-from api.routers import auth, dashboard, modules, portfolio, trades, analytics, logs, settings as settings_router, data_explorer, webhooks
-from api.routers.backtest import router as backtest_router
-from api.services.engine import engine
-from api.services.snapshots import start_snapshot_scheduler, stop_snapshot_scheduler
-from api.services.retention import start_retention_scheduler, stop_retention_scheduler
-from api.services.polymarket_proxy import install_httpx_proxy_patch, is_httpx_patched, proxy_enabled
-from api.ws.feeds import router as ws_router
+from api.services.polymarket_proxy import install_httpx_proxy_patch
+from api.services.net_tuning import enable_tcp_nodelay
 
-# Install Polymarket -> Cloudflare Worker URL rewriter on httpx BEFORE any
-# module imports kick off network calls. Idempotent + no-op when proxy is
-# disabled. Must run before `engine.start()` so the first cycle's HTTP
-# clients already see the patched httpx.send.
 install_httpx_proxy_patch()
-if proxy_enabled():
-    logging.info(f"Polymarket proxy ENABLED (httpx patched={is_httpx_patched()})")
-else:
-    logging.info("Polymarket proxy DISABLED — calls go direct to polymarket.com")
+enable_tcp_nodelay()
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from api.modules import ModuleRegistry
+from api.routers import health
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+log = logging.getLogger("api.main")
+
+registry = ModuleRegistry()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        settings = get_settings()
-        engine.start(interval=settings.default_interval)
-        start_snapshot_scheduler()
-        start_retention_scheduler()
-    except Exception as e:
-        logging.error(f"Startup error (non-fatal): {e}")
+    registry.discover()
+    log.info(
+        "Boot complete - %d module(s) registered: %s",
+        len(registry.all_modules()),
+        ", ".join(m.name for m in registry.all_modules()) or "(none)",
+    )
+    from api.services.engine import Engine
+    engine = Engine(registry)
+    app.state.engine = engine
+    engine.start()
+    from api.services import tweet_collector
+    tweet_collector.start()
     yield
-    try:
-        engine.stop()
-        stop_snapshot_scheduler()
-        stop_retention_scheduler()
-    except Exception:
-        pass
-
-
-app = FastAPI(title="PolyMarket Bot", version="0.1.0", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_settings().cors_origins.split(","),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logging.error(f"Unhandled: {type(exc).__name__}: {exc}\n{traceback.format_exc()}")
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
-
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"], dependencies=[Depends(require_auth)])
-app.include_router(modules.router, prefix="/api/modules", tags=["modules"], dependencies=[Depends(require_auth)])
-app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"], dependencies=[Depends(require_auth)])
-app.include_router(trades.router, prefix="/api/trades", tags=["trades"], dependencies=[Depends(require_auth)])
-app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"], dependencies=[Depends(require_auth)])
-app.include_router(logs.router, prefix="/api/logs", tags=["logs"], dependencies=[Depends(require_auth)])
-app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"], dependencies=[Depends(require_auth)])
-app.include_router(backtest_router, prefix="/api/backtest", tags=["backtest"], dependencies=[Depends(require_auth)])
-app.include_router(data_explorer.router, prefix="/api/data-explorer", tags=["data-explorer"], dependencies=[Depends(require_auth)])
-# Webhooks: NO auth middleware. Each endpoint authenticates via shared secret in URL.
-app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
-app.include_router(ws_router)
-
-
-@app.get("/api/healthz")
-async def healthz():
-    """Unauthenticated liveness probe for Railway/load-balancer healthchecks.
-
-    Returns 200 with minimal info as long as the FastAPI process is responding.
-    Does NOT touch Supabase or any downstream service so transient outages
-    don't cause Railway to bounce the container.
-
-    KNOWN ISSUE that prompted this endpoint: PR #18 (2026-04-27) added
-    `Depends(require_auth)` to /api/engine/status, which silently broke the
-    Railway healthcheck path defined in railway.toml. Every deploy from then
-    until 2026-05-02 failed the healthcheck with 401 and Railway kept the
-    pre-PR-#18 container running — so 7 merged PRs (CNN archive, exit fixes,
-    config validation, etc.) were not actually live. Lesson: healthcheck
-    endpoints must remain unauthenticated AND there must be an integration
-    test that hits the literal path Railway calls.
-    """
-    return {"status": "ok", "running": engine._running}
-
-
-@app.get("/api/engine/status", dependencies=[Depends(require_auth)])
-async def engine_status():
-    return engine.status
-
-
-@app.get("/api/engine/health", dependencies=[Depends(require_auth)])
-async def engine_health(module_id: str | None = None):
-    """Bot health snapshot for the dashboard banner.
-    Returns one of: trading | watching | paused | killed.
-
-    When `module_id` is supplied, returns per-module health: global states
-    (engine stopped, circuit breaker, stale data) still apply, but recent
-    error noise is filtered to that module so one feed's hiccup doesn't
-    paint every module page red.
-    """
-    if module_id:
-        try:
-            sb = get_supabase()
-            row = sb.table("modules").select("name").eq("id", module_id).single().execute()
-            module_name = (row.data or {}).get("name") or module_id
-        except Exception:
-            module_name = module_id
-        return engine.health_for_module(module_name)
-    return engine.health
-
-
-@app.post("/api/engine/stop", dependencies=[Depends(require_auth)])
-async def engine_stop():
-    sb = get_supabase()
+    tweet_collector.stop()
     engine.stop()
-    from datetime import datetime as _dt, timezone as _tz
-    now_iso = _dt.now(_tz.utc).isoformat()
-    open_positions = sb.table("positions").select("id,module_id,bracket,size,avg_price").eq("status", "open").execute()
-    closed_count = 0
-    for pos in (open_positions.data or []):
-        sb.table("positions").update({
-            "status": "closed",
-            "exit_price": pos["avg_price"],
-            "realized_pnl": 0,
-            "closed_at": now_iso,
-        }).eq("id", pos["id"]).execute()
-        closed_count += 1
-    sb.table("logs").insert({
-        "log_type": "system",
-        "severity": "critical",
-        "message": f"GLOBAL KILL SWITCH: engine stopped, {closed_count} positions closed",
-        "metadata": {"action": "global_kill", "positions_closed": closed_count},
-    }).execute()
-    try:
-        from api.services.alerts import notify_bot_paused
-        await notify_bot_paused(
-            reason="Manual global kill switch",
-            scope="engine",
-            details={"positions_closed": closed_count},
-        )
-    except Exception:
-        pass
-    return {"ok": True, "engine_stopped": True, "positions_closed": closed_count}
 
 
-@app.post("/api/engine/start", dependencies=[Depends(require_auth)])
-async def engine_start():
-    settings = get_settings()
-    engine.start(interval=settings.default_interval)
-    return {"ok": True, "status": engine.status}
+app = FastAPI(title="Polymarket Maker Bot", lifespan=lifespan)
+app.include_router(health.router)

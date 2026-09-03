@@ -1,0 +1,10 @@
+[Unit]
+Description=Polybot whale movement tracker
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+User=polybot
+WorkingDirectory=/home/polybot/bot
+EnvironmentFile=/home/polybot/bot/.env
+ExecStart=/home/polybot/venv/bin/python scripts/track_whales.py

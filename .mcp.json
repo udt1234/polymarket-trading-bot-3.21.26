@@ -2,8 +2,19 @@
   "mcpServers": {
     "polymarket": {
       "command": "python",
-      "args": ["mcp-polymarket/server.py"],
+      "args": [
+        "mcp-polymarket/server.py"
+      ],
       "cwd": "C:\\Users\\darwi\\OneDrive\\Desktop\\Claude Code\\PolyMarket"
+    },
+    "railway": {
+      "command": "railway",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "RAILWAY_API_TOKEN": "${RAILWAY_API_TOKEN}"
+      }
     }
   }
 }

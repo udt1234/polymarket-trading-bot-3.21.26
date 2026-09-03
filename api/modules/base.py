@@ -1,75 +1,60 @@
 import asyncio
 import logging
-from abc import ABC, abstractmethod
-from api.services.risk_manager import Signal
+from abc import ABC
 
 log = logging.getLogger(__name__)
 
 
 class BaseModule(ABC):
-    """All trading modules inherit from this. Methods marked abstract MUST be
-    implemented; concrete defaults can be overridden when needed.
+    """All trading modules inherit from this (BUILD_SPEC F1).
 
-    The engine and routers should NEVER branch on module name. If they need
-    info about a module, add a method here.
+    Modules are sealed: no imports from any other strategy module; shared
+    math lives in api/modules/shared/. The engine and routers must NEVER
+    branch on a module name - if they need info about a module, add a
+    method here.
     """
 
     # Canonical module name. Must match the directory name under api/modules/.
     name: str = "base"
     enabled: bool = True
 
-    # Whether this module gates entry decisions on the detected regime
-    # (TRANSITION / SURGE / etc). Ensemble pacing modules (truth_social,
-    # elon_tweets) do — they skip entries during TRANSITION. Spike Trading
-    # does NOT — its lottery-ticket ladder runs regardless of regime, so
-    # the dashboard should not show "Watching — regime in transition" for
-    # it. Used by the modules-list endpoint + dashboard timeline.
-    gates_by_regime: bool = True
-
-    def evaluate(self) -> list[Signal]:
-        """Sync entry point used by the engine cycle. Default: wrap the
-        module's async impl (_evaluate_async) for use from synchronous
-        scheduler callbacks. Override only if you have a fully-sync strategy.
-
-        Three identical implementations in truth_social/elon_tweets/spike_trading
-        were collapsed here 2026-05-16 (audit P2).
-
-        Modules that implement strategy in async should override
-        `_evaluate_async()` instead of `evaluate()`."""
+    def evaluate(self, module_id: str) -> list:
+        """Sync entry point used by the engine cycle. module_id is ALWAYS
+        threaded down from the engine's Supabase modules row - modules must
+        never resolve their own row by display name. Wraps the async impl
+        for use from synchronous scheduler callbacks."""
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Engine cycle is async-unfriendly — run in a worker thread
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    return pool.submit(
-                        lambda: asyncio.run(self._evaluate_async())
-                    ).result(timeout=60)
-            return loop.run_until_complete(self._evaluate_async())
+            return asyncio.run(self._evaluate_async(module_id))
         except RuntimeError:
-            return asyncio.run(self._evaluate_async())
+            # Called from inside a running loop (e.g. a FastAPI route) -
+            # run the coroutine on a worker thread with its own loop.
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(
+                    lambda: asyncio.run(self._evaluate_async(module_id))
+                ).result(timeout=120)
 
-    async def _evaluate_async(self) -> list[Signal]:
-        """Async strategy implementation. Override this on async modules.
-        BaseModule.evaluate() handles the sync/async bridging."""
+    async def _evaluate_async(self, module_id: str) -> list:
+        """Async strategy implementation. Returns a list of
+        risk_manager.Signal. Override per module."""
         return []
 
-    @abstractmethod
     def get_status(self) -> dict:
-        """Return current module state for the dashboard."""
-        ...
+        """Current module state for the dashboard."""
+        return {"name": self.name, "enabled": self.enabled}
 
     def get_handle(self) -> str:
-        """The social handle this module tracks (e.g. 'realDonaldTrump')."""
+        """The social handle this module tracks (e.g. 'elonmusk').
+        Return '' for handle-less modules."""
         raise NotImplementedError(f"{self.name} must implement get_handle()")
 
     def get_platform(self) -> str:
-        """The xTracker platform identifier ('truthsocial', 'x', etc.)."""
+        """Platform identifier ('x', 'truthsocial', ...)."""
         raise NotImplementedError(f"{self.name} must implement get_platform()")
 
     def get_display_keywords(self) -> list[str]:
-        """Keywords matched against module display names in Supabase.
-        Used by the registry to map DB rows to module instances. Lowercase."""
+        """Lowercase keywords matched against module display names in
+        Supabase. Used by the registry to map DB rows to instances."""
         return [self.name]
 
     def get_config(self, module_id: str) -> dict:
@@ -78,155 +63,16 @@ class BaseModule(ABC):
         return {}
 
     def save_config(self, module_id: str, config: dict) -> None:
-        """Persist a partial config update for this module. Override to wire
-        up the module's own module_config.save_module_config()."""
+        """Persist a partial config update (MERGE, never overwrite)."""
         raise NotImplementedError(f"{self.name} must implement save_config()")
 
-    def get_auction_title_filter(self) -> str:
-        """Substring used to filter xTracker auction titles for this module's
-        market type. Default returns empty string = no filter."""
-        return ""
-
     def get_auction_window_days(self) -> float | None:
-        """If set, only auctions whose tracking window matches this length
-        (within ±0.15d) are considered this module's. None = no length filter
-        (default — accepts any window size). Spike Trading uses 2.0 to filter
-        Elon's many concurrent series (1d/2d/7d/monthly) down to just 2-day."""
+        """If set, only auctions whose window matches this length (±0.15d)
+        belong to this module. None = accepts any window size."""
         return None
 
     def get_config_schema(self) -> list[dict]:
-        """Return a list of field descriptors describing this module's config.
-
-        Powers the dynamic config form on the dashboard. Each item:
-          {
-            "key": str,                    # cfg dict key
-            "label": str,                  # display label
-            "type": "number"|"boolean"|"string"|"select"|"number_list_2",
-            "section": "general"|"buy"|"sell"|"risk"|"advanced",  # optional, default "general"
-            "help": str,                   # tooltip
-            "min"/"max"/"step": float,     # number constraints
-            "options": list[str|number],   # for type=select
-            "length": int,                 # for number_list_2 (rows × 2)
-            "labels": list[str],           # column labels for number_list_2
-          }
-        Default returns [] which means "no editable schema" (read-only fallback)."""
+        """Field descriptors driving the auto-generated settings form.
+        Each item: {key, label, type, section, help, min, max, step,
+        options, length, labels}. Default [] = no editable schema."""
         return []
-
-    def supports_direct_post_count(self) -> bool:
-        """True if this module can count posts directly (bypassing xTracker)."""
-        return False
-
-    async def count_posts_in_window(self, window_start, window_end) -> dict:
-        """Direct post-count implementation. Only required when
-        supports_direct_post_count() returns True."""
-        raise NotImplementedError(f"{self.name} does not support direct post counting")
-
-    # --- Bracket Analysis card support (spec: WHALE_BRACKET_CARDS_SPEC.md) ---
-
-    def get_brackets(self) -> list[str]:
-        """Bracket labels this module trades, in display order.
-
-        Used by the Bracket Analysis card to render rows even when no
-        signals exist yet. Override per-module. Default empty list -> the
-        card derives brackets from observed signal data instead."""
-        return []
-
-    # Bracket-card config defaults. Per-module overrides go in the
-    # module's module_config.DEFAULT_CONFIG; these are the fallbacks the
-    # endpoint applies when a module hasn't customised them.
-    BRACKET_CARD_DEFAULTS: dict = {
-        "bracket_card_window": "last_10",   # last_5 | last_10 | all_time
-        "bracket_card_mode": "all_signals", # all_signals | spike_only
-        "bracket_card_reserve_pct": 25,     # 0-100, integer percent
-    }
-
-    def get_bracket_card_config(self, module_id: str) -> dict:
-        """Resolved bracket-card config (own config overrides class defaults)."""
-        cfg = {}
-        try:
-            cfg = self.get_config(module_id) or {}
-        except Exception:
-            pass
-        out = dict(self.BRACKET_CARD_DEFAULTS)
-        for k in out:
-            if k in cfg and cfg[k] is not None:
-                out[k] = cfg[k]
-        return out
-
-    def get_auction_slug_patterns(self) -> list[str]:
-        """Substrings used by the dashboard to filter wallet-history auctions
-        to those that belong to this module. Returned as lowercase keywords.
-
-        Default: derive from get_handle() (lowercased). Override per-module
-        when a single handle isn't enough — e.g. Trump module returns both
-        `truth-social` and `trump` so we capture market slugs from either era.
-        """
-        try:
-            h = (self.get_handle() or "").lower()
-        except (NotImplementedError, Exception):
-            return []
-        return [h] if h else []
-
-    def supports_post_count_divergence(self) -> bool:
-        """True if the dashboard should render the 'xTracker vs Direct'
-        post-count divergence card for this module. Defaults False;
-        override on modules that have a direct post-count source separate
-        from xTracker (currently: truth_social via TruthSocial Direct)."""
-        return False
-
-    def get_buy_order_ttl_hours(self) -> float:
-        """How long a resting BUY limit order stays live before the engine
-        cancels it. Default 5min (5/60h ≈ 0.083h) — most ensembles fill near
-        top-of-book quickly. Override on modules with deep-ladder strategies
-        (spike: 24h) so the engine doesn't yank limits that need patience."""
-        return 5.0 / 60.0
-
-    def get_strategy_metadata(self) -> list[dict]:
-        """Strategy plugin info surfaced to the dashboard for module-config
-        editors that have multiple strategy choices. Default []. Override
-        only when the module has selectable strategy plugins (spike_trading)."""
-        return []
-
-    def archive_resolved_auction(self, module_id: str, auction_slug: str) -> dict | None:
-        """Hook for modules to supply a custom auction_archive row.
-
-        Default behavior: return None — the auction_archiver service falls
-        back to the generic Gamma-event row builder. Override only if the
-        module wants to add custom metrics (regime, pace_zscore, etc.) to
-        the row's `metrics` JSONB.
-
-        Should return a dict matching the auction_archive schema, OR a
-        partial dict (auction_archiver merges it with the generic builder).
-        Return None to use the generic builder unchanged."""
-        return None
-
-    # --- Whale Watching card support (spec: WHALE_BRACKET_CARDS_SPEC.md Phase 2) ---
-
-    def get_market_universe(self, window_days: float | None = None) -> list[str]:
-        """Auction slugs this module's whales should be measured against.
-
-        Used by the /whales endpoint to look up which whale_snapshots rows
-        belong to this module. Default implementation returns auction_slugs
-        from auction_archive matching this module's handle + window_days.
-        Override to customize."""
-        try:
-            from api.dependencies import get_supabase
-            sb = get_supabase()
-            handle = self.get_handle()
-        except NotImplementedError:
-            return []
-        except Exception:
-            return []
-        if not handle:
-            return []
-        win = window_days if window_days is not None else self.get_auction_window_days()
-        q = sb.table("auction_archive").select("auction_slug").eq("handle", handle)
-        if win is not None:
-            q = q.gte("window_days", float(win) - 0.5).lte(
-                "window_days", float(win) + 0.5
-            )
-        try:
-            res = q.order("end_date", desc=True).limit(50).execute()
-        except Exception:
-            return []
-        return [r["auction_slug"] for r in (res.data or []) if r.get("auction_slug")]

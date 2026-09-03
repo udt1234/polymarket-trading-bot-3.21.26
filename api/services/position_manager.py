@@ -1,139 +1,136 @@
+"""Position lifecycle (BUILD_SPEC E5). Positions open/close ONLY on
+confirmed fills, never on order submission. Realized P&L ACCUMULATES on
+close (existing + new), never overwrites. closed_at is always set."""
 import logging
 from datetime import datetime, timezone
+
 from api.dependencies import get_supabase
 
 log = logging.getLogger(__name__)
 
 
-def open_position(module_id: str, market_id: str, bracket: str, side: str, size: float, price: float, token_id: str | None = None):
-    """Insert or merge into an open BUY position. `token_id` is the
-    ERC-1155 CLOB token ID needed for the SELL leg — store it on first
-    insert so exit_manager can resubmit a sell without re-fetching Gamma.
-    """
-    sb = get_supabase()
-    existing = (
-        sb.table("positions")
-        .select("*")
-        .eq("module_id", module_id)
-        .eq("market_id", market_id)
-        .eq("bracket", bracket)
-        .eq("status", "open")
-        .execute()
-    )
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-    if existing.data:
-        pos = existing.data[0]
-        old_size = pos["size"]
-        old_avg = pos["avg_price"]
+
+def apply_buy_fill(*, module_id: str | None, market_id: str, bracket: str,
+                   token_id: str, price: float, size: float) -> dict:
+    """Open or grow a position from a confirmed BUY fill (volume-weighted
+    average price on top-ups)."""
+    sb = get_supabase()
+    q = (sb.table("positions").select("*").eq("market_id", market_id)
+         .eq("bracket", bracket).eq("status", "open"))
+    if module_id is not None:
+        q = q.eq("module_id", module_id)
+    res = q.limit(1).execute()
+    row = (res.data or [None])[0]
+    if row:
+        old_size = float(row["size"]); old_avg = float(row["avg_price"])
         new_size = old_size + size
-        new_avg = ((old_avg * old_size) + (price * size)) / new_size if new_size != 0 else 0
-        upd = {"size": new_size, "avg_price": new_avg}
-        # Backfill token_id on existing positions written before this column was set.
-        if token_id and not pos.get("token_id"):
-            upd["token_id"] = token_id
-        sb.table("positions").update(upd).eq("id", pos["id"]).execute()
-    else:
-        row = {
-            "module_id": module_id,
-            "market_id": market_id,
-            "bracket": bracket,
-            "side": side,
-            "size": size,
-            "avg_price": price,
-            "status": "open",
-        }
-        if token_id:
-            row["token_id"] = token_id
-        sb.table("positions").insert(row).execute()
+        new_avg = (old_size * old_avg + size * price) / new_size if new_size else 0
+        sb.table("positions").update({"size": new_size, "avg_price": new_avg}) \
+            .eq("id", row["id"]).execute()
+        row.update({"size": new_size, "avg_price": new_avg})
+        return row
+    ins = {"module_id": module_id, "market_id": market_id, "bracket": bracket,
+           "side": "BUY", "size": size, "avg_price": price, "status": "open",
+           "token_id": token_id}
+    return (sb.table("positions").insert(ins).execute().data or [ins])[0]
 
 
-def find_open_position(module_id: str, market_id: str, bracket: str) -> dict | None:
-    """Look up the single open BUY position matching this module/market/bracket.
-    Returns None if none found. Used by exit paths to discover what to close.
-    Bot is BUY-side-only today; if SELL-entry is ever added, this needs updating.
-    """
+def claim_for_exit(position_id: str) -> bool:
+    """Atomic claim to prevent double-sells: only one caller wins the
+    open -> closing transition."""
     sb = get_supabase()
-    res = (
-        sb.table("positions")
-        .select("*")
-        .eq("module_id", module_id)
-        .eq("market_id", market_id)
-        .eq("bracket", bracket)
-        .eq("side", "BUY")
-        .eq("status", "open")
-        .limit(1)
-        .execute()
-    )
-    return (res.data or [None])[0]
-
-
-def claim_position_for_exit(position_id: str) -> bool:
-    """Atomically transition a position from 'open' -> 'closing' to claim it.
-
-    Two concurrent exit cycles racing on the same position: only one will see
-    rowcount > 0. The loser aborts before placing an order. Required because
-    Supabase doesn't expose row locking — this is the cheapest safe alternative.
-    """
-    sb = get_supabase()
-    res = (
-        sb.table("positions")
-        .update({"status": "closing"})
-        .eq("id", position_id)
-        .eq("status", "open")
-        .execute()
-    )
+    res = (sb.table("positions").update({"status": "closing"})
+           .eq("id", position_id).eq("status", "open").execute())
     return bool(res.data)
 
 
-def release_position_after_failed_exit(position_id: str):
-    """Roll a 'closing' position back to 'open' if the order didn't fill,
-    so the next exit cycle can retry."""
+def apply_sell_fill(position_id: str, sell_price: float, sold_size: float) -> dict | None:
+    """Close (or shrink) a position from a confirmed SELL fill. Realized
+    P&L accumulates; full close sets closed_at."""
     sb = get_supabase()
-    sb.table("positions").update({"status": "open"}).eq("id", position_id).eq("status", "closing").execute()
-
-
-def partial_close_position(position_id: str, sold_size: float, exit_price: float):
-    """Reduce position size by `sold_size`. Used when a SELL fill was capped
-    by depth and the remaining inventory should stay open. Realized PnL on
-    the sold portion is recorded; the residual stays at the original avg_price."""
-    sb = get_supabase()
-    pos = sb.table("positions").select("*").eq("id", position_id).single().execute()
-    if not pos.data:
+    res = sb.table("positions").select("*").eq("id", position_id).limit(1).execute()
+    row = (res.data or [None])[0]
+    if not row:
+        log.error("apply_sell_fill: position %s missing", position_id)
         return None
-    p = pos.data
-    remaining = max((p.get("size") or 0) - sold_size, 0)
-    realized = (exit_price - (p.get("avg_price") or 0)) * sold_size
-    if p.get("side") == "SELL":
-        realized = -realized
-    sb.table("positions").update({
-        "status": "open",
-        "size": remaining,
-        "realized_pnl": (p.get("realized_pnl") or 0) + realized,
-    }).eq("id", position_id).execute()
-    return realized
+    size = float(row["size"]); avg = float(row["avg_price"])
+    sold = min(sold_size, size)
+    pnl_delta = (sell_price - avg) * sold
+    remaining = size - sold
+    patch = {"realized_pnl": float(row.get("realized_pnl") or 0) + pnl_delta,
+             "size": remaining, "exit_price": sell_price}
+    if remaining <= 1e-9:
+        patch.update({"status": "closed", "closed_at": _now(), "size": 0})
+    else:
+        patch["status"] = "open"  # partial exit re-opens the remainder
+    sb.table("positions").update(patch).eq("id", row["id"]).execute()
+    row.update(patch)
+    if patch.get("status") == "closed":
+        try:
+            from api.services.breaker import record_trade_result
+            record_trade_result(float(row["realized_pnl"]))
+        except Exception:
+            log.exception("breaker update failed on close")
+    return row
 
 
-def close_position(position_id: str, exit_price: float):
+def apply_sell_fill_by_market(*, market_id: str, bracket: str, token_id: str,
+                              module_id: str | None, sell_price: float,
+                              sold_size: float) -> dict | None:
+    """Fallback for a confirmed SELL that lost its metadata.position_id (e.g. a
+    reconciled/external order): find the matching OPEN/closing position by
+    (market_id, bracket, token_id[, module_id]) and apply the fill so P&L and the
+    breaker still update instead of the position going stale (risk-audit F3, 2026-07-22)."""
     sb = get_supabase()
-    pos = sb.table("positions").select("*").eq("id", position_id).single().execute()
-    if not pos.data:
-        return
+    q = (sb.table("positions").select("id")
+         .eq("market_id", market_id).eq("bracket", bracket)
+         .eq("token_id", token_id).in_("status", ["open", "closing"]))
+    if module_id is not None:
+        q = q.eq("module_id", module_id)
+    row = (q.limit(1).execute().data or [None])[0]
+    if not row:
+        log.error("apply_sell_fill_by_market: no open position for %s/%s/%s",
+                  market_id, bracket, token_id[:12])
+        return None
+    return apply_sell_fill(row["id"], sell_price, sold_size)
 
-    p = pos.data
-    pnl = (exit_price - p["avg_price"]) * p["size"]
-    if p["side"] == "SELL":
-        pnl = -pnl
 
-    # Accumulate any previously-recorded realized P&L from earlier partial
-    # closes on this position. Without this, a partial-fill sequence loses
-    # the first tranche's P&L when the residual finally fully closes.
-    total_realized = float(p.get("realized_pnl") or 0) + pnl
+def resolve_at(position_id: str, settle_price: float) -> dict | None:
+    """Resolution settlement: winning bracket -> 1.00, losers -> 0.00.
+    Uses the same atomic claim as exits - if another exit is in flight
+    ('closing'), skip now; the resolution sweep retries next cycle after
+    sweep_stuck_closing() releases abandoned claims."""
+    sb = get_supabase()
+    res = sb.table("positions").select("size,status").eq("id", position_id).limit(1).execute()
+    row = (res.data or [None])[0]
+    if not row or row["status"] == "closed":
+        return None
+    if not claim_for_exit(position_id):
+        log.info("resolve_at: %s is %s - retry next sweep", position_id, row["status"])
+        return None
+    return apply_sell_fill(position_id, settle_price, float(row["size"]))
 
-    sb.table("positions").update({
-        "status": "closed",
-        "exit_price": exit_price,
-        "realized_pnl": total_realized,
-        "closed_at": datetime.now(timezone.utc).isoformat(),
-    }).eq("id", position_id).execute()
 
-    return total_realized
+def open_positions(module_id: str | None = None) -> list[dict]:
+    sb = get_supabase()
+    q = sb.table("positions").select("*").eq("status", "open")
+    if module_id:
+        q = q.eq("module_id", module_id)
+    return q.execute().data or []
+
+
+def sweep_stuck_closing(max_age_min: int = 30) -> int:
+    """Rows stuck in 'closing' longer than N minutes revert to 'open'
+    (the SELL never confirmed) so exits can retry."""
+    from datetime import timedelta
+    sb = get_supabase()
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=max_age_min)).isoformat()
+    res = (sb.table("positions").update({"status": "open"})
+           .eq("status", "closing").lt("updated_at", cutoff).execute())
+    n = len(res.data or [])
+    if n:
+        log.warning("swept %d stuck 'closing' positions back to open", n)
+    return n

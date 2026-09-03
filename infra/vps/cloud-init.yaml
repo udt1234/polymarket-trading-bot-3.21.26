@@ -1,0 +1,36 @@
+#cloud-config
+# Dublin execution host (BUILD_SPEC Part M corrected 2026-07-06).
+# Paste this file into the AWS EC2 launch wizard -> Advanced details ->
+# User data. Region MUST be eu-west-1 (Ireland). AMI: Ubuntu 24.04 LTS.
+# Instance: t3.small (or t3.micro on the free tier).
+#
+# It creates user `polybot`, installs Python 3.12 + git + chrony (UTC/NTP,
+# required for the ~30s CLOB V2 signing horizon), clones the repo, and
+# installs the systemd service. The operator's laptop key below gets SSH.
+
+users:
+  - name: polybot
+    groups: sudo
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHozOTCHUNbWxpvRaC5GQ1QJ+RDBjn7bfFBB7ZoO6lzy polybot-dublin
+
+package_update: true
+packages: [git, python3.12, python3.12-venv, python3-pip, chrony, ufw]
+
+timezone: Etc/UTC
+
+runcmd:
+  - ufw allow OpenSSH
+  - ufw --force enable
+  - systemctl enable --now chrony
+  - sudo -u polybot git clone https://github.com/udt1234/polymarket-trading-bot-3.21.26.git /home/polybot/bot
+  - cd /home/polybot/bot && sudo -u polybot git checkout feat/newbot-step1-skeleton
+  - sudo -u polybot python3.12 -m venv /home/polybot/venv
+  - sudo -u polybot /home/polybot/venv/bin/pip install -r /home/polybot/bot/api/requirements.txt || true
+  - sudo -u polybot /home/polybot/venv/bin/pip install fastapi uvicorn pydantic-settings py-clob-client httpx websockets supabase apscheduler
+  - cp /home/polybot/bot/infra/vps/polybot.service /etc/systemd/system/polybot.service
+  - systemctl daemon-reload
+  # NOT enabled on first boot on purpose: /home/polybot/bot/.env must be
+  # populated first (infra/vps/README.md step 4), then: systemctl enable --now polybot

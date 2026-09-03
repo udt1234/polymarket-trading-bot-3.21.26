@@ -5,28 +5,50 @@ _env_file = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
+    # Wallet / CLOB auth (BUILD_SPEC I3)
     polymarket_api_key: str = ""
     polymarket_secret: str = ""
     polymarket_passphrase: str = ""
     polymarket_private_key: str = ""
+    polymarket_wallet_address: str = ""
+    polymarket_signer_address: str = ""
 
+    # Database
     supabase_url: str = ""
     supabase_anon_key: str = ""
     supabase_service_key: str = ""
 
-    paper_mode: bool = True
+    # Live-money guards (BUILD_SPEC G3): real trading requires BOTH a module
+    # status flip in Supabase AND this env backstop. A single DB row flip
+    # must never route real money.
     environment: str = "development"
-    default_interval: int = 300
-
-    # Belt-and-suspenders live-trade safety. Even with module.status='active'
-    # in Supabase, live trades require allow_live_trading=true at the env
-    # level. Without this, a single Supabase row flip in production would
-    # immediately route real money. Default: FALSE = paper-only regardless
-    # of module status (functional audit finding 2026-05-23).
+    paper_mode: bool = True
     allow_live_trading: bool = False
 
-    # Risk defaults
+    # Feeds / proxy
+    twitterapi_io_key: str = ""
+    enable_tweet_collector: bool = True   # listen-only tweet-latency diagnostic
+    polymarket_proxy_url: str = ""
+    polymarket_proxy_key: str = ""
+    polygon_rpc_url: str = ""
+
+    # Admin (manual kill switch endpoint auth). Empty = endpoint refuses all calls.
+    admin_token: str = ""
+
+    # Alerts
+    slack_webhook_url: str = ""
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
+    # Engine cadence (seconds) - slow path (BUILD_SPEC B6)
+    default_interval: int = 300
+    # unfilled resting BUY orders older than this are cancelled each cycle so
+    # they stop eating the exposure cap forever (froze the bench 6d, 2026-07)
+    stale_order_hours: int = 6
+
+    # Risk defaults (BUILD_SPEC G1/D4)
     bankroll: float = 1000.0
+    gas_reserve_pol: float = 5.0
     max_portfolio_exposure: float = 0.5
     max_single_market_exposure: float = 0.15
     max_correlated_exposure: float = 0.30
@@ -36,27 +58,18 @@ class Settings(BaseSettings):
     min_edge_threshold: float = 0.02
     slippage_tolerance: float = 0.05
     kelly_fraction: float = 0.25
-    # Global floor for the per-auction aggregate price ceiling. Modules may RAISE
-    # this in their config (more strict) but cannot LOWER it below this floor.
-    # Set to 0 to disable the global floor (modules then control entirely).
+    max_book_depth_fraction: float = 0.30
+    # Per-auction aggregate price ceiling floor: modules may go stricter,
+    # never looser (BUILD_SPEC D4).
     auction_aggregate_price_ceiling_floor: float = 0.65
 
-    # Circuit breaker
+    # Circuit breaker (BUILD_SPEC G2)
     circuit_breaker_enabled: bool = True
     circuit_breaker_max_consecutive_losses: int = 5
-    circuit_breaker_cooldown_minutes: int = 30
+    circuit_breaker_cooldown_minutes: int = 60
 
-    # Auto-kill: pause module after N consecutive losses (0 = disabled)
-    auto_kill_consecutive_losses: int = 5
-
-    # CORS
+    # CORS (dashboard)
     cors_origins: str = "http://localhost:3010"
-
-    # LunarCrush
-    lunarcrush_api_key: str = ""
-
-    # Anthropic (for news regime classification)
-    anthropic_api_key: str = ""
 
     model_config = {"env_file": str(_env_file), "env_file_encoding": "utf-8", "extra": "ignore"}
 

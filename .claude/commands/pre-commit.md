@@ -6,6 +6,7 @@ Run in sequence. STOP and report if critical issues found:
 2. @strategy-reviewer — if any files in api/modules/ or api/services/risk* changed
 3. @risk-auditor — if any files touching orders, execution, or positions changed
 4. @verify-bot — if trading logic changed, run full verification
+5. @backtest-auditor — if any files under _DataMetricPulls/**/*.py changed OR the commit quotes a P&L / ROI / win-rate number OR locks a model/param. FATAL findings BLOCK the commit.
 
 Only proceed to commit if all checks pass.
 Report a summary of findings before committing.

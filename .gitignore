@@ -86,3 +86,23 @@ NEW_BOT_CREDENTIALS.md
 # analysis log backups (data, local only)
 *.csv.bak
 _DataMetricPulls/pacing_backtest/audit_out/
+*.env.local.bak*
+
+# Backtest OUTPUT dirs (regenerable from the tracked scripts; no *_out/ dir has ever been tracked)
+_DataMetricPulls/pacing_backtest/audit_out*/
+_DataMetricPulls/pacing_backtest/pattern_discovery_out*/
+_DataMetricPulls/pacing_backtest/regime_out*/
+_DataMetricPulls/pacing_backtest/rules_out/
+_DataMetricPulls/pacing_backtest/combo_out/
+_DataMetricPulls/pacing_backtest/kelly_out/
+
+# Recorder / API caches (same class as _DataMetricPulls/recordings/)
+_DataMetricPulls/pmxt_mlb_cache/
+_DataMetricPulls/weather_recordings/
+
+# Run logs + scratch API dumps
+_DataMetricPulls/pacing_backtest/crypto_sweep/*.out
+_DataMetricPulls/pacing_backtest/crypto_sweep/*.txt
+_DataMetricPulls/pacing_backtest/scratch_test.txt
+book.json
+cryptoevents.json

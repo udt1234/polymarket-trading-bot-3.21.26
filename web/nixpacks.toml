@@ -1,0 +1,9 @@
+# Railway build for the read-only dashboard (Next.js). Root directory = web/.
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start"

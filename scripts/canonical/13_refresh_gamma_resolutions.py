@@ -18,6 +18,18 @@ This script, for each demoted/unresolved auction:
   5. Only upgrade when exactly one YES winner is found AND it is in the set;
      otherwise leave the row flagged (no silent guesses).
 
+CORRECTION 2026-07-30: step 4 originally restored confidence='high' whether or
+not the winning bracket had any price rows. Knowing WHO won is not the same as
+HAVING market data for them, and this script's own reasoning above conflates the
+two. Restoring 'high' erased the only signal downstream backtests had, and 134
+of 244 Elon auctions silently entered the admissible set with no market price
+for the bracket that won. A row is now only upgraded to 'high' when prices
+actually covers the winner; otherwise it keeps confidence='low' and is tagged
+'_no_winner_price', so the documented `confidence in ('high','medium')` filter
+still excludes it. The winner fields are written either way -- the label is
+correct, it is the market data that is missing. Repair the data with
+14_repair_bracket_coverage.py + 04_build_prices.py, then re-run this.
+
 Idempotent. Rate-limited. Backs up the handle's auction dir before writing.
 
 Usage: python -u scripts/canonical/13_refresh_gamma_resolutions.py [elonmusk]
@@ -27,12 +39,14 @@ import json, sys, time, shutil, urllib.error, urllib.request
 from pathlib import Path
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[2]
-CANON = ROOT / "_DataMetricPulls" / "canonical"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _canon import CANON, ROOT, load_partitioned, normalize_bucket  # noqa: E402
+
 AUCTIONS_DIR = CANON / "auctions"
 GAMMA = "https://gamma-api.polymarket.com"
 RATE = 0.5
 TARGET_STATUSES = ("resolved_yes_gamma_bracket_mismatch", "unresolved")
+NO_PRICE_SUFFIX = "_no_winner_price"
 
 
 def http_get(url: str, tries: int = 4):
@@ -109,7 +123,15 @@ def main(handle: str = "elonmusk") -> int:
     targets = df[df["resolution_status"].isin(TARGET_STATUSES)].copy()
     print(f"[13] {handle}: {len(df)} auctions, {len(targets)} to re-resolve (statuses {TARGET_STATUSES})")
 
-    fixed = failed = still_flagged = 0
+    # Confirming the winner from Gamma does not conjure market data for it.
+    # Look up what prices ACTUALLY covers so an upgrade cannot outrun the data.
+    prc = load_partitioned("prices", handle)
+    covered: dict[str, set[str]] = {}
+    if len(prc):
+        covered = prc.assign(bucket=prc["bucket"].map(normalize_bucket)) \
+                     .groupby("auction_slug")["bucket"].agg(set).to_dict()
+
+    fixed = no_price = failed = still_flagged = 0
     for i, (idx, row) in enumerate(targets.iterrows(), 1):
         slug = row["auction_slug"]
         r = resolve(slug); time.sleep(RATE)
@@ -135,12 +157,20 @@ def main(handle: str = "elonmusk") -> int:
         df.at[idx, "winner_condition_id"] = w["cid"]
         df.at[idx, "winner_asset_yes_token_id"] = w["yes"]
         df.at[idx, "winner_asset_no_token_id"] = w["no"]
-        df.at[idx, "resolution_status"] = "resolved_yes_gamma"
-        df.at[idx, "confidence"] = "high"
         df.at[idx, "gamma_resolution_source"] = "gamma_refresh_13"
-        fixed += 1
+        if normalize_bucket(w["label"]) in covered.get(slug, set()):
+            df.at[idx, "resolution_status"] = "resolved_yes_gamma"
+            df.at[idx, "confidence"] = "high"
+            fixed += 1
+        else:
+            # winner is known but has no price row -- admissible for "who won"
+            # questions, NOT for anything scored against the market.
+            df.at[idx, "resolution_status"] = "resolved_yes_gamma" + NO_PRICE_SUFFIX
+            df.at[idx, "confidence"] = "low"
+            no_price += 1
         if i % 10 == 0:
-            print(f"  {i}/{len(targets)} fixed={fixed} last={slug[:36]} -> {w['label']}")
+            print(f"  {i}/{len(targets)} fixed={fixed} no_price={no_price} "
+                  f"last={slug[:36]} -> {w['label']}")
 
     # re-partition write
     for p in files:
@@ -153,7 +183,11 @@ def main(handle: str = "elonmusk") -> int:
         sub.drop(columns=["_part"]).to_parquet(out, index=False)
 
     after = df["confidence"].value_counts().to_dict()
-    print(f"\n[13] DONE. fixed={fixed} still_flagged={still_flagged} failed={failed}")
+    print(f"\n[13] DONE. fixed={fixed} no_winner_price={no_price} "
+          f"still_flagged={still_flagged} failed={failed}")
+    if no_price:
+        print(f"  !! {no_price} auctions have a confirmed winner with NO price row. "
+              f"Run 14_repair_bracket_coverage.py -> 04_build_prices.py -> re-run this.")
     print(f"  confidence BEFORE: {before}")
     print(f"  confidence AFTER:  {after}")
     print(f"  resolution_status AFTER: {df['resolution_status'].value_counts().to_dict()}")
