@@ -48,6 +48,53 @@ def _clob_resolved_winner(cid: str, token: str) -> bool | None:
     return None
 
 
+STREAK_KEY = "daily_verify_break_streak"
+
+
+def _log(sb, severity: str, message: str, metadata: dict) -> None:
+    try:
+        sb.table("logs").insert({"log_type": "system", "severity": severity,
+                                 "message": message, "metadata": metadata}).execute()
+    except Exception:
+        print(f"[daily_verify] log write failed: {message}")
+
+
+def _alert_all(text: str) -> bool:
+    """Telegram AND Slack, not Telegram-else-Slack. The money-path alert has to
+    survive one channel being muted or drowned in routine alerter traffic."""
+    from api.config import get_settings
+    from api.services.notifications import notify
+    ok = notify(text)
+    s = get_settings()
+    if s.slack_webhook_url:
+        try:
+            ok = httpx.post(s.slack_webhook_url, json={"text": text},
+                            timeout=15).status_code == 200 or ok
+        except Exception:
+            print("[daily_verify] slack send failed")
+    return ok
+
+
+def _bump_streak(sb) -> int:
+    """Consecutive days broken, so a persistent break escalates instead of
+    reading like today's routine noise."""
+    try:
+        rows = (sb.table("settings").select("value").eq("key", STREAK_KEY)
+                .limit(1).execute().data) or []
+        n = int((rows[0]["value"] or {}).get("days", 0)) + 1 if rows else 1
+        sb.table("settings").upsert({"key": STREAK_KEY, "value": {"days": n}}).execute()
+        return n
+    except Exception:
+        return 1
+
+
+def _reset_streak(sb) -> None:
+    try:
+        sb.table("settings").upsert({"key": STREAK_KEY, "value": {"days": 0}}).execute()
+    except Exception:
+        pass
+
+
 def main() -> None:
     sb = get_supabase()
     now = dt.datetime.now(dt.timezone.utc)
@@ -95,19 +142,20 @@ def main() -> None:
     msg = ("daily_verify: ALL MODULES OK | " if not problems
            else "daily_verify PROBLEMS: " + " ; ".join(problems) + " || ")
     msg += " | ".join(report)
-    try:
-        sb.table("logs").insert({
-            "log_type": "system", "severity": "error" if problems else "info",
-            "message": msg[:900], "metadata": {"problems": problems, "report": report}}).execute()
-    except Exception:
-        pass
+    _log(sb, "error" if problems else "info", msg[:900],
+         {"problems": problems, "report": report})
     if problems:
-        try:
-            from api.services.notifications import notify
-            notify("🔎 Daily verify found broken module money-paths:\n- "
-                   + "\n- ".join(problems))
-        except Exception:
-            pass
+        streak = _bump_streak(sb)
+        delivered = _alert_all(
+            f"🚨 POLYBOT MONEY PATH BROKEN - day {streak} 🚨\n- "
+            + "\n- ".join(problems))
+        # A swallowed alert is how 22 days of zero fills went unreported
+        # (2026-09-04). Record delivery so undelivered != silent.
+        _log(sb, "info" if delivered else "error",
+             f"daily_verify alert delivered={delivered} streak={streak}",
+             {"delivered": delivered, "streak": streak})
+    else:
+        _reset_streak(sb)
     print(msg)
 
 
