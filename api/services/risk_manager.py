@@ -193,10 +193,14 @@ def check(signal: Signal, breaker_tripped: bool = False) -> RiskVerdict:
         sb = get_supabase()
 
         # Duplicate-signal guard: never stack a second resting BUY on the
-        # same (module, market, bracket).
+        # same (module, market, bracket, TOKEN). Token is load-bearing: a
+        # complement pair rests YES and NO of ONE market under the SAME bracket
+        # label, so keying on bracket alone rejected every second leg and left
+        # the arb permanently one-legged (0 pairs completed, 2026-09-04).
         dup = (sb.table("orders").select("id", count="exact")
                .eq("module_id", signal.module_id).eq("market_id", signal.market_id)
                .eq("bracket", signal.bracket).eq("side", "BUY")
+               .eq("token_id", signal.token_id)
                .in_("status", ["submitted", "open", "partially_filled"])
                .execute().count) or 0
         if dup:
