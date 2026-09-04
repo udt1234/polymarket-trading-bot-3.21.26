@@ -1,5 +1,27 @@
 # PolyMarket Bot — Handoff
 
+## 🚀 2026-09-04 — Dublin box was 100 commits stale; fills restored
+
+**What was wrong:** the bot placed ZERO fills for 22 days (last fill 2026-08-13 10:46 UTC). Root cause was not logic: `polybot@34.245.42.217:~/bot` was sitting on `0f23f10` / branch `feat/newbot-step1-skeleton` (2026-07-26), **100 commits behind master**. The 2026-09-01 nightly-QA fixes (slug year regex, four silent modules, SELL sweep) were merged and never deployed.
+
+**Fixed this session:**
+- Box redeployed to `master` (`c093f67`), deps reinstalled, `polybot` restarted. Box hotfix diff saved at `~/prehotfix-20260904.patch` (both hotfixes were already in master).
+- Purged 8,448 zombie paper SELL orders (2026-07-10 → 2026-08-20) that the 6h stale sweep never touched.
+- RLS enabled on `whale_movements`, `tracker_posts`, `ghost_trap{,2,3}` (Supabase critical advisory). `tracker_posts` keeps a public SELECT policy so the tracker dashboard still reads it; anonymous writes are now blocked.
+- PR #102: `risk_manager` duplicate-BUY guard now includes `token_id` (complement-pair arbs were permanently one-legged); `daily_verify` alert now goes to Telegram AND Slack, records `delivered=` in `logs`, and escalates with a consecutive-broken-days streak. `SLACK_WEBHOOK_URL` added to the box `.env`.
+
+**Verified after deploy:** `signals=28 approved=12 paper_fills=4`, then `signals=20 approved=4 paper_fills=7`. S2 Basket-Hold and Copytrader quoting again after weeks of silence; S2 took 2 partial fills, Copytrader 1.
+
+### 👻 Ghost writer IDENTIFIED — needs ONE click from Sir
+Supabase `edge_logs` names it exactly: IP `152.55.180.100` (ASN Railway, Ashburn), key prefix `sb_secret_6ZhCH…`, ~870 writes/day to `logs`, `settings`, `daily_pnl`, `positions`, `orders`. That is the **original `default` secret key** — the 2026-07-29 rotation created `polybot_rotated_20260729` but never DELETED `default`, which is why the August rotation did not kill it. Verified safe to delete: no Railway service and no local config uses it (bot + web + alerter = `sb_secret_CqMB`, tracker-poller = `sb_secret_gDRk`), and legacy JWT keys are already disabled.
+**Action:** Supabase → project `xdonwowgqvmtrduikaon` → Settings → API Keys → Secret keys → row `default` → ⋮ → Delete API key → type `default`. Then re-point this repo's local `.env` `SUPABASE_SERVICE_KEY` at a freshly minted key. This also fixes `daily_pnl`, whose `portfolio_value` the ghost has been decrementing by the full cumulative realized P&L every day (now reading -$19,184 on a $10k bankroll).
+
+### Still open after this session
+- `polybot-mlb-recorder` volume is FULL — "No space left on device: /data/mlb" every 30s. Recorder has no pruning; needs retention or a bigger volume.
+- TwitterAPI.io **WebSocket** returns HTTP 403 on connect (the REST key is valid, 1.8M credits). Hot-path tweet stream is dormant; the 5-min xTracker slow path is unaffected.
+- Test suite is stale from the PR #95 rewrite: `test_copy_trading/test_engine/test_risk_manager` fail to import, 9 more fail in `test_executor`/`test_signals`. 70 pass. Same on clean master.
+- Arb Scanner still emits ~1,000 signals/day that are rejected on `spread>tol_0.3` for keyword markets with empty books (bid `None`, ask 0.001). Consider gating on a two-sided book before scoring edge.
+
 ## 🗄️ Tracker migrated Sheets → Supabase (2026-08-27) — RETIRE THE SHEET
 MyPolyTracker (tracker.xagency.com / `PolyPulse_Web`) is now **Supabase-first**, off the Google Sheet in the live path. Store = `PolyMarket Bot` Supabase (`xdonwowgqvmtrduikaon`), `tracker_*` tables, fed 24/7 by Railway service **`tracker-poller`** (project Polymarket-Manual-2026, `PolyPulse_Web/poller/poll.py`). Counts, auctions, pacing/odds/edge, order book, prices, volume, resolved auctions from Supabase; account/positions/portfolio from the bot's `daily_pnl`/`positions`. `buildDashboard` reads the sheet ONLY as fallback. Full detail: `PolyPulse_Web/MIGRATION.md`.
 
