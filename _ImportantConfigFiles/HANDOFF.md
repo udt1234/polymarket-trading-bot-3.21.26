@@ -12,9 +12,16 @@
 
 **Verified after deploy:** `signals=28 approved=12 paper_fills=4`, then `signals=20 approved=4 paper_fills=7`. S2 Basket-Hold and Copytrader quoting again after weeks of silence; S2 took 2 partial fills, Copytrader 1.
 
-### 👻 Ghost writer IDENTIFIED — needs ONE click from Sir
-Supabase `edge_logs` names it exactly: IP `152.55.180.100` (ASN Railway, Ashburn), key prefix `sb_secret_6ZhCH…`, ~870 writes/day to `logs`, `settings`, `daily_pnl`, `positions`, `orders`. That is the **original `default` secret key** — the 2026-07-29 rotation created `polybot_rotated_20260729` but never DELETED `default`, which is why the August rotation did not kill it. Verified safe to delete: no Railway service and no local config uses it (bot + web + alerter = `sb_secret_CqMB`, tracker-poller = `sb_secret_gDRk`), and legacy JWT keys are already disabled.
-**Action:** Supabase → project `xdonwowgqvmtrduikaon` → Settings → API Keys → Secret keys → row `default` → ⋮ → Delete API key → type `default`. Then re-point this repo's local `.env` `SUPABASE_SERVICE_KEY` at a freshly minted key. This also fixes `daily_pnl`, whose `portfolio_value` the ghost has been decrementing by the full cumulative realized P&L every day (now reading -$19,184 on a $10k bankroll).
+### 👻 Ghost writer FOUND AND KILLED (2026-09-07)
+It was **Sir's own Railway account all along**: project `JaxBot`, service `JaxBot`, deployment `6d1fbc46` created 2026-07-26. The service is *configured* as n8n (image `n8nio/n8n`, start command `n8n start`, n8n/Postgres/Redis env only) but had the OLD PolyMarket bot pushed into it, almost certainly a `railway up` from this repo against the wrong linked service. It ran `TradingEngine._run_cycle` every 5 min and `_run_instabuy_check` every 1 min against production Supabase for six weeks.
+
+**Why three key rotations never killed it:** a running container keeps the environment it started with. Rotating the key in Railway, or minting a new one for our own services, does nothing to a process that already holds the old value in memory. Nothing was ever revoked and nothing was ever restarted, so it just kept going.
+
+**Fix applied:** `deploymentRemove(6d1fbc46-6cd0-4be8-b25f-ceefc194fc67)`. No Supabase key deletion was needed and no third party was involved.
+
+**Correction to the 2026-09-04 note:** the earlier claim that the ghost was a FOREIGN deploy not in Sir's Railway was wrong. It came from enumerating Railway with `RAILWAY_API_TOKEN`, which is a **project-scoped** token that only sees 5 projects and cannot even query `me`. Use the account-authed CLI instead: `env -u RAILWAY_API_TOKEN railway list --json` (logged in as darwin@xagency.com). Then log-check EVERY service, including ones whose name has nothing to do with the app.
+
+**Side effect Sir should know:** JaxBot's n8n has therefore been down since 2026-07-26, and the project's Postgres and Redis deployments are also REMOVED. If n8n is wanted back it needs rebuilding.
 
 ### Still open after this session
 - `polybot-mlb-recorder` volume is FULL — "No space left on device: /data/mlb" every 30s. Recorder has no pruning; needs retention or a bigger volume.
