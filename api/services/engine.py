@@ -46,6 +46,12 @@ class Engine:
         self._scheduler.add_job(run_retention_cleanup, "cron",
                                 hour=3, minute=30, timezone="UTC",
                                 id="retention-cleanup")
+        # daily_pnl feeds the tracker's account panel + equity curve and had NO
+        # writer in the rebuilt bot (2026-09-07). Hourly + upsert-on-date keeps
+        # today's row live without creating duplicates.
+        from api.services.pnl import snapshot as pnl_snapshot
+        self._scheduler.add_job(pnl_snapshot, "interval", minutes=60,
+                                id="daily-pnl-snapshot")
         self._scheduler.start()
         log.info("engine scheduler started (every %ss)", s.default_interval)
 
