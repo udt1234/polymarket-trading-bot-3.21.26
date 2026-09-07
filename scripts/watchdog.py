@@ -197,7 +197,8 @@ def main() -> None:
         # Never resurrect a module that was paused ON PURPOSE: decommissioned, or
         # paused because its THESIS is dead on this market (2026-07-23). Auto-
         # reviving a known-losing strategy is worse than leaving it off.
-        if (m.get("inactive_reason") or "").lower() in ("decommissioned", "dead_thesis"):
+        if (m.get("inactive_reason") or "").lower() in ("decommissioned", "dead_thesis",
+                                                        "paused_by_owner"):
             continue
         sb.table("modules").update({"status": "paper", "inactive_reason": None}) \
             .eq("id", m["id"]).execute()

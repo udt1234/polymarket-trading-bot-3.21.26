@@ -71,7 +71,7 @@ def apply_sell_fill(position_id: str, sell_price: float, sold_size: float) -> di
     if patch.get("status") == "closed":
         try:
             from api.services.breaker import record_trade_result
-            record_trade_result(float(row["realized_pnl"]))
+            record_trade_result(float(row["realized_pnl"]), row.get("module_id"))
         except Exception:
             log.exception("breaker update failed on close")
     return row

@@ -104,16 +104,15 @@ class Engine:
         except Exception:
             log.exception("price snapshot write failed")
 
-        breaker = self._breaker_tripped(sb)
         # Global manual halt: block ALL new entries (exits still run so positions
         # can close). Same shape as the breaker - it pauses entries, never exits.
+        # The BREAKER itself is per-module and evaluated inside the loop below.
         try:
             from api.services.halt import is_halted
-            if is_halted():
-                breaker = True
+            halted = is_halted()
         except Exception:
             log.exception("halt check failed - treating as halted (fail safe)")
-            breaker = True
+            halted = True
 
         # 3. Per-module evaluate -> risk -> executor. Exits run within each
         #    module's signal batch FIRST (E8) and bypass entry gates.
@@ -122,6 +121,9 @@ class Engine:
             if module is None:
                 continue
             summary["modules"] += 1
+            # One module's losing streak must not gate every other module's
+            # entries (it blocked 21 S2 and 1 Copytrader signal in a day, 2026-09-07).
+            breaker = halted or self._breaker_tripped(sb, row["id"])
             try:
                 signals: list[Signal] = module.evaluate(row["id"]) or []
                 signals.sort(key=lambda x: not x.is_exit)  # exits first (E8)
@@ -297,9 +299,9 @@ class Engine:
                 rows, on_conflict="module_id,bracket,snapshot_hour",
                 ignore_duplicates=True).execute()
 
-    def _breaker_tripped(self, sb) -> bool:
+    def _breaker_tripped(self, sb, module_id: str | None = None) -> bool:
         s = get_settings()
         if not s.circuit_breaker_enabled:
             return False
         from api.services.breaker import is_tripped
-        return is_tripped()
+        return is_tripped(module_id)
