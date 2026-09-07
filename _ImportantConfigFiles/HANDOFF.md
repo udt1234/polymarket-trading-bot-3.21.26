@@ -1,5 +1,31 @@
 # PolyMarket Bot — Handoff
 
+## ⏸️ 2026-09-07 — ALL MODULES PAUSED BY OWNER
+
+**Sir's instruction.** Every module on the bench is loss-making, so all 7 are `status='inactive'`, `inactive_reason='paused_by_owner'`. The watchdog now honours that reason and will NOT auto-revive them to paper. To resume, set a module back to `status='paper'` and clear `inactive_reason`.
+
+**Why (DATA FACT, computed 2026-09-07 from `positions`):** the bench is down **-$1,217 on a $10k bankroll (-12.2%)**. Not legacy damage from the 22-day dead window: since the 2026-09-04 redeploy it closed 29 positions for **-$182** at a 17% win rate, roughly -$60/day.
+
+| Module | Closed | Realized | Win % |
+|---|---|---|---|
+| S2 Basket-Hold | 62 | -$398.27 | 14.5% |
+| Copytrader | 89 | -$281.87 | 4.5% |
+| Arb Scanner | 25 | -$258.65 | 20.0% |
+| Market Maker | 4 | -$35.36 | 75.0% |
+| Sports Sweep | 10 | -$5.12 | 90.0% |
+
+**Retire the claim that S2 Basket-Hold is the validated survivor.** Live paper says it is the single biggest loser.
+
+### Shipped with the pause
+- **Budget freed.** The 4 orphaned Arb Scanner monthly legs opened 2026-07-24 were closed at the touch, realising **-$176.16** that had been sitting unrecognised in unrealised. They were holding $409 of a $500 budget and caused 1,907 `module_budget_cap_500` rejections in 24h. Their post-only unwind asks had been resting since July on books that never came to them, which is why the module's own `_orphan_exits` never cleared them.
+- **Circuit breaker fixed (PR #107).** It was ONE global counter, so Arb Scanner's losses blocked 21 S2 and 1 Copytrader signal in a day; state is now keyed `circuit_breaker:<module_id>` and evaluated per module. It also never concluded anything (87 trips, each a 60-min nap, for two months), so 5 trips in 24h now pauses the module with `dead_thesis` and alerts instead of another cooldown.
+- **`daily_pnl` is the bot's again (PR #106).** Nothing in the rebuilt bot ever wrote it; the only writer was the rogue JaxBot deploy, which walked `portfolio_value` to -$21,652 on a $10k bankroll. Now computed hourly from positions, unrealised marked to the bid we could actually hit, 62 days of history rebuilt.
+- All resting paper orders cancelled. 0 resting, 20 open positions left holding $152 notional.
+
+### State to be aware of
+- **20 open positions remain** ($152 notional). A paused module cannot exit its own positions, so they will sit until Sir either resumes a module or flattens them manually.
+- `module_health` is an empty table that nothing reads any more. Safe to drop.
+
 ## 🚀 2026-09-04 — Dublin box was 100 commits stale; fills restored
 
 **What was wrong:** the bot placed ZERO fills for 22 days (last fill 2026-08-13 10:46 UTC). Root cause was not logic: `polybot@34.245.42.217:~/bot` was sitting on `0f23f10` / branch `feat/newbot-step1-skeleton` (2026-07-26), **100 commits behind master**. The 2026-09-01 nightly-QA fixes (slug year regex, four silent modules, SELL sweep) were merged and never deployed.
