@@ -22,6 +22,7 @@ from api.dependencies import get_supabase  # noqa: E402
 
 STALE_MIN = 15         # an engine cycle older than this = the scheduler stalled
 RESTART_COOLDOWN_MIN = 8  # don't restart again within this window of a prior watchdog restart
+WARMUP_MIN = 10        # a fresh boot has no cycle yet; below this, age=None means warming up
 STARVE_HOURS = 6       # signals arriving but ZERO approved for this long = a gate is eating everything
 NO_ORDER_HOURS = 24    # no order placed by any paper/active module this long = bench is dead
 
@@ -38,6 +39,20 @@ def _last_cycle_age_min() -> float | None:
     try:
         dt = datetime.fromisoformat(lc.replace("Z", "+00:00"))
     except ValueError:
+        return None
+    return (datetime.now(timezone.utc) - dt).total_seconds() / 60.0
+
+
+def _service_uptime_min() -> float | None:
+    """Minutes since polybot.service last entered active, or None if unreadable."""
+    try:
+        out = subprocess.run(
+            ["systemctl", "show", "polybot.service", "-p", "ActiveEnterTimestamp",
+             "--value"], capture_output=True, text=True, check=False).stdout.strip()
+        if not out or out == "n/a":
+            return None
+        dt = datetime.strptime(out, "%a %Y-%m-%d %H:%M:%S %Z").replace(tzinfo=timezone.utc)
+    except Exception:
         return None
     return (datetime.now(timezone.utc) - dt).total_seconds() / 60.0
 
@@ -161,7 +176,16 @@ def main() -> None:
     #    restarted within RESTART_COOLDOWN_MIN, skip - restarting again would reset
     #    the first-cycle timer and cause a restart loop (qa-bug-hunter, 2026-07-22).
     age = _last_cycle_age_min()
-    if age is None or age > STALE_MIN:
+    # A fresh boot has last_cycle_at=None until its FIRST cycle lands 300s later,
+    # so age=None on a young process means "warming up", not "stalled". Restarting
+    # it there resets the first-cycle timer and can never let a cycle complete. The
+    # existing cooldown only covers the watchdog's OWN restarts, not a deploy's
+    # (2026-09-07: a manual deploy restart at 18:27 drew a needless one at 18:31).
+    uptime = _service_uptime_min()
+    warming_up = age is None and uptime is not None and uptime < WARMUP_MIN
+    if warming_up:
+        pass
+    elif age is None or age > STALE_MIN:
         if _recent_watchdog_restart(sb, RESTART_COOLDOWN_MIN):
             alerts.append(f"engine not cycling (age={age}m) but a watchdog restart "
                           f"fired <{RESTART_COOLDOWN_MIN}m ago - waiting for it to settle")
