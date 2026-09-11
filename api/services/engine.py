@@ -34,11 +34,10 @@ class Engine:
             "coalesce": True, "max_instances": 1, "misfire_grace_time": 60})
         self._scheduler.add_job(self.cycle, "interval",
                                 seconds=s.default_interval, id="engine-cycle")
-        from api.services.notifications import daily_heartbeat
-        self._scheduler.add_job(lambda: daily_heartbeat(self), "cron",
-                                hour="9,17", minute=0,
-                                timezone="America/New_York",
-                                id="daily-heartbeat")
+        # No 9am+5pm heartbeat job: the watchdog's daily digest already carries
+        # engine status, signals, fills, P&L, open positions and active modules,
+        # so this was a second and third near-duplicate message every day
+        # (Sir, 2026-09-11: "I get too many alerts").
         from api.services.resolution import run_resolution_sweep
         self._scheduler.add_job(run_resolution_sweep, "interval", minutes=30,
                                 id="resolution-sweep")
