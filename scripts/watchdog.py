@@ -25,6 +25,8 @@ RESTART_COOLDOWN_MIN = 8  # don't restart again within this window of a prior wa
 WARMUP_MIN = 10        # a fresh boot has no cycle yet; below this, age=None means warming up
 STARVE_HOURS = 6       # signals arriving but ZERO approved for this long = a gate is eating everything
 NO_ORDER_HOURS = 24    # no order placed by any paper/active module this long = bench is dead
+ALERT_REPEAT_HOURS = 24   # an UNCHANGED alert pings at most once per this window
+ALERT_SENT_KEY = "watchdog_alert_sent"
 
 
 def _last_cycle_age_min() -> float | None:
@@ -105,6 +107,45 @@ def _recent_watchdog_restart(sb, within_min: int) -> bool:
         return bool(rows)
     except Exception:
         return False  # fail toward allowing the restart (availability over churn-guard)
+
+
+def _active_module_count(sb) -> int:
+    """Modules expected to trade. Zero means silence is the CORRECT state."""
+    return len((sb.table("modules").select("id").neq("status", "inactive")
+                .execute().data) or [])
+
+
+def _alert_signature(text: str) -> str:
+    """Stable key for a repeating alert. 'ORDER DROUGHT: no order in 26h' and the
+    same line an hour later at 27h are ONE problem, so key on the part before the
+    colon and never on the changing number."""
+    return text.split(":", 1)[0].strip().lower()[:80]
+
+
+def _throttle(sb, signatures: list[str], hours: int = ALERT_REPEAT_HOURS) -> list[str]:
+    """Drop signatures already notified inside the window; record the rest.
+    The watchdog runs every 15 min, so an unfixed problem used to ping 96 times a
+    day (2026-09-11: 94 ORDER DROUGHT pings in 24h). A NEW problem still pings
+    immediately; only a repeat is held to once per window."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    try:
+        rows = (sb.table("settings").select("value").eq("key", ALERT_SENT_KEY)
+                .limit(1).execute().data) or []
+        sent = (rows[0].get("value") if rows else None) or {}
+    except Exception:
+        return signatures  # fail toward alerting
+    fresh = [s for s in signatures if (sent.get(_alert_signature(s)) or "") < cutoff]
+    if not fresh:
+        return []
+    now = datetime.now(timezone.utc).isoformat()
+    sent = {k: v for k, v in sent.items() if v > cutoff}
+    for s in fresh:
+        sent[_alert_signature(s)] = now
+    try:
+        sb.table("settings").upsert({"key": ALERT_SENT_KEY, "value": sent}).execute()
+    except Exception:
+        pass
+    return fresh
 
 
 DIGEST_HOUR_UTC = int(os.getenv("WATCHDOG_DIGEST_HOUR_UTC", "13"))  # ~9am ET
@@ -197,21 +238,29 @@ def main() -> None:
     #     but a gate rejecting 100% of them. Detect signals>0 & approved==0, and
     #     a total order drought. Cannot auto-fix (it's a config/logic call), so
     #     ALERT loudly instead of reporting "healthy".
-    try:
-        sigs, approved = _signal_approval_stats(sb, STARVE_HOURS)
-        if sigs > 0 and approved == 0:
-            why = _dominant_rejections(sb, STARVE_HOURS)
-            alerts.append(f"SIGNAL STARVATION: {sigs} signals in {STARVE_HOURS}h, "
-                          f"0 approved. Top gates: {why}")
-    except Exception as e:
-        alerts.append(f"signal-stats check failed: {type(e).__name__}")
-    try:
-        oh = _hours_since_last_order(sb)
-        if oh is None or oh > NO_ORDER_HOURS:
-            alerts.append(f"ORDER DROUGHT: no order placed in "
-                          f"{'ever' if oh is None else f'{oh:.0f}h'} - bench is not trading")
-    except Exception as e:
-        alerts.append(f"order-drought check failed: {type(e).__name__}")
+    # Both checks assume something is SUPPOSED to be trading. With every module
+    # paused there is nothing to starve and nothing to place an order, so firing
+    # them is a false positive: after Sir paused the bench on 2026-09-07 the
+    # drought alert pinged 94 times in 24h about the state he had just asked for.
+    n_active = _active_module_count(sb)
+    if n_active == 0:
+        alerts.append("BENCH PAUSED: 0 active modules - not trading by design")
+    else:
+        try:
+            sigs, approved = _signal_approval_stats(sb, STARVE_HOURS)
+            if sigs > 0 and approved == 0:
+                why = _dominant_rejections(sb, STARVE_HOURS)
+                alerts.append(f"SIGNAL STARVATION: {sigs} signals in {STARVE_HOURS}h, "
+                              f"0 approved. Top gates: {why}")
+        except Exception as e:
+            alerts.append(f"signal-stats check failed: {type(e).__name__}")
+        try:
+            oh = _hours_since_last_order(sb)
+            if oh is None or oh > NO_ORDER_HOURS:
+                alerts.append(f"ORDER DROUGHT: no order placed in "
+                              f"{'ever' if oh is None else f'{oh:.0f}h'} - bench is not trading")
+        except Exception as e:
+            alerts.append(f"order-drought check failed: {type(e).__name__}")
 
     # 2. Any expected module wrongly paused? Re-activate to PAPER (safe - never
     #    to 'active'). Skip intentionally decommissioned modules.
@@ -250,14 +299,20 @@ def main() -> None:
         pass
     # Telegram ping when we FIXED something OR when there's an unfixable ALERT
     # (silence must never again mean "assumed fine").
-    if actions or alerts:
+    # Throttled to once per signature per day. A NEW problem still pings on the
+    # very next run; an unchanged one waits out ALERT_REPEAT_HOURS and rides the
+    # daily digest instead. The Supabase log above is written EVERY run regardless,
+    # so the dashboard keeps full resolution.
+    new_actions = _throttle(sb, actions)
+    new_alerts = _throttle(sb, alerts)
+    if new_actions or new_alerts:
         try:
             from api.services.notifications import notify
             parts = []
-            if actions:
-                parts.append("🐕 Polybot watchdog fixed:\n- " + "\n- ".join(actions))
-            if alerts:
-                parts.append("🚨 Polybot watchdog ALERT (needs you):\n- " + "\n- ".join(alerts))
+            if new_actions:
+                parts.append("🐕 Polybot watchdog fixed:\n- " + "\n- ".join(new_actions))
+            if new_alerts:
+                parts.append("🚨 Polybot watchdog ALERT (needs you):\n- " + "\n- ".join(new_alerts))
             notify("\n\n".join(parts))
         except Exception:
             pass
