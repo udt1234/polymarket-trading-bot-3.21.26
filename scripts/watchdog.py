@@ -210,6 +210,7 @@ def main() -> None:
     sb = get_supabase()
     actions: list[str] = []
     alerts: list[str] = []  # things it CANNOT auto-fix but MUST surface (no silent "healthy")
+    notes: list[str] = []   # expected states worth recording but NEVER worth a ping
 
     # 1. Engine cycling? Restart the service if the scheduler stalled (or the
     #    API is unreachable / has never cycled). COOLDOWN: a fresh restart takes up
@@ -244,7 +245,9 @@ def main() -> None:
     # drought alert pinged 94 times in 24h about the state he had just asked for.
     n_active = _active_module_count(sb)
     if n_active == 0:
-        alerts.append("BENCH PAUSED: 0 active modules - not trading by design")
+        # A NOTE, never an alert. A permanent red "needs a human" on the state Sir
+        # deliberately asked for is exactly what makes a real alert invisible.
+        notes.append("bench paused: 0 active modules, not trading by design")
     else:
         try:
             sigs, approved = _signal_approval_stats(sb, STARVE_HOURS)
@@ -286,6 +289,9 @@ def main() -> None:
     elif actions:
         msg = "watchdog fixed: " + "; ".join(actions)
         sev = "warning"
+    elif notes:
+        msg = "watchdog: healthy (" + "; ".join(notes) + ")"
+        sev = "info"
     else:
         msg = "watchdog: all healthy"
         sev = "info"
@@ -293,7 +299,8 @@ def main() -> None:
         sb.table("logs").insert({
             "log_type": "system", "severity": sev,
             "message": msg,
-            "metadata": {"actions": actions, "alerts": alerts, "engine_age_min": age},
+            "metadata": {"actions": actions, "alerts": alerts, "notes": notes,
+                         "engine_age_min": age},
         }).execute()
     except Exception:
         pass
