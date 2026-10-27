@@ -118,7 +118,7 @@ class Cfg:
         self.name, self.strict, self.rebate = name, strict, rebate
 
 
-def simulate(ts, p, cand, is_winner, cfg: Cfg):
+def simulate(ts, p, cand, is_winner, cfg: Cfg, w_end):
     """Walk candidate signal indices in tape order. Returns (orders, n_skipped_busy).
 
     ts/p are already truncated to < window end. is_winner: True/False/None(ambiguous).
@@ -153,7 +153,7 @@ def simulate(ts, p, cand, is_winner, cfg: Cfg):
                        rebate=2 * cfg.rebate * SIZE, excluded=False)
             busy_until = te
         else:
-            rec.update(exit="resolution", te=np.inf, spread=0.0, rebate=cfg.rebate * SIZE)
+            rec.update(exit="resolution", te=w_end, spread=0.0, rebate=cfg.rebate * SIZE)
             if is_winner is None:
                 rec.update(resolution=0.0, excluded=True)       # Rule 7: never fabricate
             else:
@@ -164,7 +164,7 @@ def simulate(ts, p, cand, is_winner, cfg: Cfg):
     return out, skipped
 
 
-def build_signals(ts, p, sz, w_start):
+def build_signals(ts, p, usd, w_start):
     """Returns (mom_price_mask, liq_ok_mask, mom_mask) per print - all causal (<= t)."""
     n = len(ts)
     j = np.searchsorted(ts, ts - LOOKBACK_S, side="right") - 1      # last print at-or-before t-60s
@@ -173,7 +173,7 @@ def build_signals(ts, p, sz, w_start):
     with np.errstate(divide="ignore", invalid="ignore"):
         ratio = p / ref
     mom = have & (ratio >= RATIO_MIN - EPS)
-    cs = np.concatenate([[0.0], np.cumsum(p * sz)])
+    cs = np.concatenate([[0.0], np.cumsum(usd)])
     lo = np.searchsorted(ts, ts - LIQ_WINDOW_S, side="right")
     idx = np.arange(n)
     liq = cs[idx + 1] - cs[lo]                                       # prints in (t-24h, t], index <= i
@@ -213,14 +213,14 @@ def drawdown(g: pd.DataFrame):
     if not len(g):
         return dict(max_dd_usd=0.0, max_dd_pct_of_peak_capital=None, max_dd_pct_of_peak_equity=None,
                     peak_capital_deployed=0.0), pd.DataFrame()
-    e = g.sort_values(["tf", "t"], kind="stable").reset_index(drop=True)
+    e = g.sort_values(["te", "tf", "t"], kind="stable").reset_index(drop=True)
     e["trade_pnl"] = e.spread + e.rebate + e.resolution
     e["cum_pnl"] = e.trade_pnl.cumsum()
     peak = np.maximum.accumulate(np.concatenate([[0.0], e.cum_pnl.to_numpy()]))[1:]
     e["drawdown"] = e.cum_pnl - peak
     dd = float(-e.drawdown.min())
-    # capital deployed: +pe at fill, -pe at close (exit ts, or +inf -> end of tape)
-    ev = [(r.tf, r.pe) for r in e.itertuples()] + [(r.te if np.isfinite(r.te) else r.tf + 1e12, -r.pe) for r in e.itertuples()]
+    # capital deployed: +pe at fill, -pe at close (exit ts, or window end for resolution holds)
+    ev = [(r.tf, r.pe) for r in e.itertuples()] + [(r.te, -r.pe) for r in e.itertuples()]
     ev.sort(key=lambda x: (x[0], x[1]))
     cur = mx = 0.0
     for _, d in ev:
@@ -325,6 +325,7 @@ def main():
         if df["t"].max() - df["t"].min() > 0 and (np.mod(df["t"].to_numpy(), 60) == 0).all():
             sys.exit(f"ABORT: {f.name} timestamps are all minute-aligned (coarser than 1s)")
         df["_bucket"] = df["_bucket"].map(norm_bucket)
+        df["usd"] = df["price"] * df["size"]
         df["yp"] = np.where(df["outcome"] == "Yes", df["price"], 1.0 - df["price"])
         univ["prints_total"] += len(df)
         inwin = df["t"] < w1                       # keep pre-start history for lookback; cap at window end
@@ -338,10 +339,10 @@ def main():
         univ["auctions_used"] += 1
         for b, g in df.groupby("_bucket", sort=False):
             g = g.sort_values("t", kind="stable")
-            ts, p, sz = g["t"].to_numpy(), g["yp"].to_numpy(), g["size"].to_numpy()
+            ts, p, usd = g["t"].to_numpy(), g["yp"].to_numpy(), g["usd"].to_numpy()
             tmin, tmax = min(tmin, ts[0]), max(tmax, ts[-1])
             univ["instruments_pre"] += 1
-            inb, liq_ok, mom, _ = build_signals(ts, p, sz, w0)
+            inb, liq_ok, mom, _ = build_signals(ts, p, usd, w0)
             if (inb & liq_ok).any():
                 univ["instruments_liq_ever"] += 1
             is_win = (b == wb) if winner_ok else None
@@ -357,7 +358,7 @@ def main():
                 c = cnt[k]
                 c["pre"] += len(cand_pre) if not is_ctrl else len(cand)
                 c["post"] += len(cand)
-                orders, skipped = simulate(ts, p, cand, is_win, cfg)
+                orders, skipped = simulate(ts, p, cand, is_win, cfg, w1)
                 c["skip"] += skipped
                 c["orders"] += len(orders)
                 c["cancel"] += sum(o["status"] == "cancelled" for o in orders)
