@@ -3,11 +3,13 @@
 ## ⚰️ 2026-10-27: Pure-maker momentum scalp: @backtest-auditor FAIL
 
 - Script `_DataMetricPulls/pacing_backtest/pure_maker_momentum_scalp.py` comes from branch `claude/polymarket-momentum-backtest-2IDby` (f1a8d85). It was not built by @backtest-builder. It was run on canonical `api_trades_v2`, and the audit log is `_DataMetricPulls/pacing_backtest/audits/pure_maker_momentum_scalp_2026-10-27.md`.
-- **Why it is dead:**
-  - The +1.114 headline is 100% booked maker rebate. Ex-rebate it is -4.446, with a 95% CI of [-8.19, -0.56] by auction, negative in every year.
-  - The problem is structural. Upside is capped at +0.07 against a 0.138 mean loss, so it needs 66.4% target hits and got 60.2%.
-  - The momentum trigger cannot be told apart from the zero-edge control.
-- **Branch state:** audit log + results json/md committed (ac0b116) and pushed on `claude/polymarket-momentum-backtest-2IDby`, PR https://github.com/udt1234/polymarket-trading-bot-3.21.26/pull/119 (record only, nothing deploys). Ledger and equity are gitignored.
+- **Why it is dead (numbers after the 3 Codex fixes, @backtest-builder rerun, @backtest-auditor FAIL unchanged):**
+  - Spec TOTAL +0.886 is below its own booked rebate (+10.190); never quote it. Ex-rebate it is -9.304, 95% CI [-13.823, -4.640] by auction (n=152), negative in 2024, 2025 and 2026.
+  - The problem is structural. 0 of 289 resolution holds won. Break-even needs 63.3% target hits and it got 55.8%.
+  - Per fill ex-rebate the trigger (-0.0142) is worse than the zero-edge control (-0.0059). Control "profit" +20.52 is +31.16 rebate on -10.64.
+  - Pre-fix numbers (ex-rebate -4.446, CI [-8.19, -0.56]) are superseded: the liquidity filter understated No-print USD, which cut the universe in half.
+- **Branch state:** fixes, regenerated results and the appended rerun audit section committed (27b6d04) and pushed on `claude/polymarket-momentum-backtest-2IDby`, PR https://github.com/udt1234/polymarket-trading-bot-3.21.26/pull/119 (record only, nothing deploys). All 3 Codex threads answered and resolved. Ledger and equity are gitignored.
+- **OPEN (owner vAI, low priority, record-only script): auditor leftovers on PR #119.** HIGH: `control_verdict` and the results.md header test control profit WITH rebate (lines 394 to 396), so the "FILL MODEL IS FANTASY" label is right for the wrong reason. MEDIUM: RUN_META `git_sha` is ac0b116 although the run came from a dirty tree, and `net_pnl_usdc` leads with the rebate-inflated 0.886. Fix through @backtest-builder only if the script is reused.
 - **DONE 2026-10-27: stale doc fixed.** CLAUDE.md named `_raw_imports/whale_analysis/` (969 files) as the frozen raw archive in three places. That directory does not exist; every canonical builder reads `_raw_imports/api_trades_v2/` (300 files).
   - CLAUDE.md was split from 258 to 142 lines so `context_budget_guard.py` allows edits. Detail moved verbatim to `_ImportantConfigFiles/SPIKE_BRACKETS.md`, `_ImportantConfigFiles/DATA_LAYER.md` (retention + canonical) and `_ImportantConfigFiles/MODULE_QUICK_RULES.md`, with one-line pointers left in CLAUDE.md.
   - All three whale_analysis references now point at `api_trades_v2`. Committed (86e2052) on `docs/claude-md-split`, PR https://github.com/udt1234/polymarket-trading-bot-3.21.26/pull/118. Merge it before editing CLAUDE.md on any other branch.
@@ -16,7 +18,8 @@
 - **OPEN (owner vAI, fix when next touched): two latent bugs in `bracket_hit_backtest.py:38`.**
   - It uses `start_utc` to get the year, which puts `january-1-january-3` and `january-2-january-9` a year early.
   - Gate any new tape-replay backtest on tape end before window end. 30 of 273 tapes stop more than 1h early.
-- **Only lead left:** the matched momentum-vs-non-momentum difference is +0.016 per fill, CI [+0.001, +0.029]. It is unstable, and dropping one auction flips its sign. It is a hypothesis only, worth a held-out test through @backtest-builder if Sir wants it.
+  - NEW from the rerun audit: the sibling-event regex `arch-|higher-bra|lower-bra` at `bracket_hit_backtest.py:35` matches "march-", so it drops every March auction.
+- **Lead gone:** the old matched momentum-vs-non-momentum +0.016 per fill did not survive the fixes. The rerun matched diagnostic is +0.0015 per order, CI [-0.0036, +0.0062], and its sign flips by band and by year. Do not re-open without a new information source.
 
 ## 🧪 2026-10-27: "Buy NO on the tail" study (IN PROGRESS)
 
