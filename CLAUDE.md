@@ -71,7 +71,7 @@ Tables, key columns, the raw trade archive, builder scripts and the QA Sheet are
 ## Module Architecture Rules (Non-Negotiable)
 **Goal: editing one module never breaks another. New modules drop in cleanly.**
 
-Read `_ImportantConfigFiles/MODULE_ARCHITECTURE.md` before creating, moving or refactoring any module. Its "Quick Rules" section holds the 8 rules: module folder layout, no cross-module imports, shared code in `api/modules/shared/`, no hardcoded module names in engine/router code, per-module settings and health, `@module-scaffolder` for new modules, and test scope on refactors.
+Read `_ImportantConfigFiles/MODULE_QUICK_RULES.md` before creating, moving or refactoring any module (full layout and BaseModule API: `MODULE_ARCHITECTURE.md`). It holds the 8 rules: module folder layout, no cross-module imports, shared code in `api/modules/shared/`, no hardcoded module names in engine/router code, per-module settings and health, `@module-scaffolder` for new modules, and test scope on refactors.
 
 ## Available Agents
 

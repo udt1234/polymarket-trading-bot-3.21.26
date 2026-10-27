@@ -46,7 +46,7 @@ Built 2026-05-28 by consolidating 113 messy parquet/csv/json sources into 3 clea
 - `prices.derived_spread`, `derived_fill_minutes`, `derived_depth_buy_low`, `derived_depth_sell_high`: trade-derived orderbook proxies (no L2 history exists pre-Mar 2026)
 
 ### Raw trade archive
-- `canonical/_raw_imports/api_trades_v2/`: one parquet per auction (300 files on 2026-10-27), the source for auctions + prices. Written only by the re-pull, recover and repair builders (09, 10, 11, 12, 14); never hand-edit. The old `whale_analysis/` folder no longer exists.
+- `canonical/_raw_imports/api_trades_v2/`: one parquet per auction (300 files on 2026-10-27), the source for auctions + prices. Written only by builders 10 (fresh rebuild), 11, 12 (recover) and 14 (repair); never hand-edit. Builder 09 (re-pull) writes `_raw_imports/api_trades/` instead, which 03 and 04 do NOT read (`_canon.RAW_DIR` is `api_trades_v2`): a 09 pull is ignored by every rebuild until it is copied into `api_trades_v2/`. The old `whale_analysis/` folder no longer exists.
 - `canonical/_audit/source_inventory.csv`: historical inventory of the 113 pre-canonical sources for reference.
 
 ### Reading canonical data
