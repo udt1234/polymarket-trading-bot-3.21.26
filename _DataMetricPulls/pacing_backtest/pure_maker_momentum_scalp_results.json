@@ -1,0 +1,208 @@
+{
+  "meta": {
+    "data_window_utc": [
+      "2024-06-14T20:20:16+00:00",
+      "2026-06-05T05:31:22+00:00"
+    ],
+    "universe": {
+      "auctions_total": 300,
+      "auctions_admissible_conf_high_medium": 297,
+      "files": 300,
+      "files_not_admissible": 3,
+      "files_dup_slug": 0,
+      "files_window_unparseable": 24,
+      "files_empty": 0,
+      "auctions_used": 273,
+      "instruments_pre": 4392,
+      "instruments_liq_ever": 643,
+      "prints_total": 8718952,
+      "prints_outside_window_dropped": 146716,
+      "auctions_winner_ambiguous": 3
+    },
+    "run_timestamp_utc": "2026-10-27T22:06:28.576448+00:00",
+    "git_sha": "ac0b116",
+    "seed": 20260101,
+    "raw_dir": "C:\\Users\\darwi\\OneDrive\\Desktop\\Claude Code\\Personal\\PolyMarket_Bot\\_DataMetricPulls\\canonical\\_raw_imports\\api_trades_v2",
+    "spec_deviations": [
+      "instrument = (auction file, _bucket) Yes-series; No prints mirrored as 1-price (files are per-auction, not per-contract)",
+      "auctions with unparseable noon-ET slug window are excluded (reported), prints >= window end dropped",
+      "signals only at ts >= window start; pre-start prints used for lookback only",
+      "rebate +0.01/leg is the PRE-REGISTERED non-default; ex-rebate total reported alongside"
+    ]
+  },
+  "control_verdict": "CONTROL PROFITABLE under spec fills -> FILL MODEL IS FANTASY; headline NOT VALID",
+  "results": {
+    "spec": {
+      "breakouts_pre_liquidity": 29351,
+      "breakouts_post_filter": 13735,
+      "orders_placed": 1834,
+      "skipped_busy": 11901,
+      "cancelled": 1180,
+      "filled_total": 654,
+      "excluded_n": 0,
+      "filled_scored": 654,
+      "limit_fill_rate_pct_of_breakouts": 4.761558063341828,
+      "limit_fill_rate_pct_of_orders": 35.659760087241004,
+      "win_rate_pct": 55.81039755351682,
+      "adverse_selection_rate": 0.4418960244648318,
+      "adverse_n": 289,
+      "wins": 365,
+      "pnl": {
+        "spread_capture_pnl": 25.55,
+        "rebate_pnl": 10.190000000000001,
+        "resolution_pnl": -34.854,
+        "total": 0.8860000000000028,
+        "total_ex_rebate": -9.303999999999998
+      },
+      "off_tick_entry_frac": 0.6559633027522935,
+      "drawdown": {
+        "max_dd_usd": 2.6049999999999995,
+        "max_dd_pct_of_peak_capital": 249.2822966507177,
+        "max_dd_pct_of_peak_equity": 99.88496932515315,
+        "peak_capital_deployed": 1.0449999999999997
+      },
+      "by_auction": {
+        "n_auctions": 152,
+        "total": 0.8860000000000012,
+        "boot_ci95_total": [
+          -4.386024999999998,
+          6.439100000000001
+        ],
+        "mean_per_trade": 0.0013547400611620803,
+        "jackknife_drop_best_auction_total": -0.2699999999999989,
+        "best_auction": "elon-musk-of-tweets-february-3-february-10",
+        "best_auction_pnl": 1.1560000000000001,
+        "ci_includes_zero": true
+      }
+    },
+    "hardened": {
+      "breakouts_pre_liquidity": 29351,
+      "breakouts_post_filter": 13735,
+      "orders_placed": 1880,
+      "skipped_busy": 11855,
+      "cancelled": 1251,
+      "filled_total": 629,
+      "excluded_n": 0,
+      "filled_scored": 629,
+      "limit_fill_rate_pct_of_breakouts": 4.579541317801238,
+      "limit_fill_rate_pct_of_orders": 33.45744680851064,
+      "win_rate_pct": 55.48489666136725,
+      "adverse_selection_rate": 0.4451510333863275,
+      "adverse_n": 280,
+      "wins": 349,
+      "pnl": {
+        "spread_capture_pnl": 24.43,
+        "rebate_pnl": 0.0,
+        "resolution_pnl": -33.982,
+        "total": -9.552,
+        "total_ex_rebate": -9.552
+      },
+      "off_tick_entry_frac": 0.6772655007949125,
+      "drawdown": {
+        "max_dd_usd": 9.736999999999952,
+        "max_dd_pct_of_peak_capital": 991.5478615071235,
+        "max_dd_pct_of_peak_equity": 5263.243243243219,
+        "peak_capital_deployed": 0.982
+      },
+      "by_auction": {
+        "n_auctions": 151,
+        "total": -9.552,
+        "boot_ci95_total": [
+          -14.121125000000001,
+          -5.002700000000004
+        ],
+        "mean_per_trade": -0.015186009538950714,
+        "jackknife_drop_best_auction_total": -10.358,
+        "best_auction": "elon-musk-of-tweets-february-3-february-10",
+        "best_auction_pnl": 0.806,
+        "ci_includes_zero": false
+      }
+    },
+    "control_spec": {
+      "breakouts_pre_liquidity": 771577,
+      "breakouts_post_filter": 771577,
+      "orders_placed": 33186,
+      "skipped_busy": 738391,
+      "cancelled": 31387,
+      "filled_total": 1799,
+      "excluded_n": 0,
+      "filled_scored": 1799,
+      "limit_fill_rate_pct_of_breakouts": 0.23315884221535893,
+      "limit_fill_rate_pct_of_orders": 5.4209606460555655,
+      "win_rate_pct": 73.20733740967204,
+      "adverse_selection_rate": 0.2679266259032796,
+      "adverse_n": 482,
+      "wins": 1317,
+      "pnl": {
+        "spread_capture_pnl": 92.19,
+        "rebate_pnl": 31.159999999999997,
+        "resolution_pnl": -102.831,
+        "total": 20.51899999999999,
+        "total_ex_rebate": -10.641000000000005
+      },
+      "off_tick_entry_frac": 0.5792106725958867,
+      "drawdown": {
+        "max_dd_usd": 3.1690000000000023,
+        "max_dd_pct_of_peak_capital": 87.18019257221468,
+        "max_dd_pct_of_peak_equity": 13.868102052426686,
+        "peak_capital_deployed": 3.6349999999999985
+      },
+      "by_auction": {
+        "n_auctions": 165,
+        "total": 20.519000000000002,
+        "boot_ci95_total": [
+          9.715774999999997,
+          31.631499999999974
+        ],
+        "mean_per_trade": 0.011405780989438575,
+        "jackknife_drop_best_auction_total": 19.124000000000002,
+        "best_auction": "elon-musk-of-tweets-january-9-january-16",
+        "best_auction_pnl": 1.395,
+        "ci_includes_zero": false
+      }
+    },
+    "control_hardened": {
+      "breakouts_pre_liquidity": 771577,
+      "breakouts_post_filter": 771577,
+      "orders_placed": 39659,
+      "skipped_busy": 731918,
+      "cancelled": 37936,
+      "filled_total": 1723,
+      "excluded_n": 0,
+      "filled_scored": 1723,
+      "limit_fill_rate_pct_of_breakouts": 0.22330888556812864,
+      "limit_fill_rate_pct_of_orders": 4.344537179454853,
+      "win_rate_pct": 72.43180499129426,
+      "adverse_selection_rate": 0.2756819500870575,
+      "adverse_n": 475,
+      "wins": 1248,
+      "pnl": {
+        "spread_capture_pnl": 87.35999999999999,
+        "rebate_pnl": 0.0,
+        "resolution_pnl": -102.035,
+        "total": -14.675000000000011,
+        "total_ex_rebate": -14.675000000000011
+      },
+      "off_tick_entry_frac": 0.6250725478816018,
+      "drawdown": {
+        "max_dd_usd": 15.587999999999798,
+        "max_dd_pct_of_peak_capital": 448.57553956833954,
+        "max_dd_pct_of_peak_equity": 1707.3384446878204,
+        "peak_capital_deployed": 3.475
+      },
+      "by_auction": {
+        "n_auctions": 164,
+        "total": -14.675000000000008,
+        "boot_ci95_total": [
+          -22.714475000000004,
+          -6.105800000000012
+        ],
+        "mean_per_trade": -0.00851712130005804,
+        "jackknife_drop_best_auction_total": -15.501000000000008,
+        "best_auction": "elon-musk-of-tweets-april-13-april-15",
+        "best_auction_pnl": 0.8259999999999997,
+        "ci_includes_zero": false
+      }
+    }
+  }
+}
