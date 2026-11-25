@@ -84,6 +84,7 @@ WantedBy=timers.target
 
 
 def main():
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     rc, out = ocsudo.run(
         'set -e\ncd %s\n[ -x venv/bin/python ] || python3 -m venv venv\n'
         'venv/bin/pip install -q pandas pyarrow numpy google-auth google-api-python-client\n' % REMOTE)
