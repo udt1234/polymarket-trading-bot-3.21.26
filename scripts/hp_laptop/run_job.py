@@ -50,7 +50,11 @@ def sentinel():
     bad = []
     for s in SENTINEL:
         f = BOT / "_DataMetricPulls/recordings_pulled" / f"{s}.parquet" / f"{day}.parquet"
-        if not f.exists() or pq.ParquetFile(f).metadata.num_rows == 0:
+        try:
+            ok = f.exists() and pq.ParquetFile(f).metadata.num_rows > 0
+        except Exception:
+            ok = False
+        if not ok:
             bad.append(s)
     return f"no {day} rows for {', '.join(bad)}" if bad else None
 

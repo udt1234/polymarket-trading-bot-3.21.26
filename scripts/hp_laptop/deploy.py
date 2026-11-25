@@ -89,6 +89,8 @@ def main():
         'set -e\ncd %s\n[ -x venv/bin/python ] || python3 -m venv venv\n'
         'venv/bin/pip install -q pandas pyarrow numpy google-auth google-api-python-client\n' % REMOTE)
     print('venv rc=%s %s' % (rc, out.strip()[-300:]))
+    if rc:
+        raise SystemExit('venv setup failed')
     put((HERE / 'run_job.py').read_bytes(), REMOTE + '/run_job.py', '750')
     put(PULL.read_bytes(), REMOTE + '/polymarket-tweet-recorder/pull_and_merge.py', '640')
     put((BOT / 'scripts/foretest/shadow_foretest.py').read_bytes(),
@@ -96,16 +98,28 @@ def main():
     put(env_text(), '/home/openclaw/.polymarket.env', '600')
     for name, body in (
             ('polymarket-recorder-pull.service', service('Polymarket recorder pull, main and thin', 'recorder-pull')),
-            ('polymarket-recorder-pull.timer', timer('Polymarket recorder pull, daily', '*-*-* 05:00:00')),
+            ('polymarket-recorder-pull.timer', timer('Polymarket recorder pull, daily',
+                                                     '*-*-* 05:00:00 America/New_York')),
             ('polymarket-foretest.service', service('Elon shadow foretest', 'foretest')),
-            ('polymarket-foretest.timer', timer('Elon shadow foretest, twice daily', '*-*-* 08,20:00:00'))):
+            ('polymarket-foretest.timer', timer('Elon shadow foretest, twice daily',
+                                                '*-*-* 08,20:00:00 America/New_York'))):
         put(body.encode('utf-8'), UNITS + name, '644')
     rc, out = ocsudo.run(
-        'export XDG_RUNTIME_DIR=/run/user/$(id -u)\n'
+        'set -e\nexport XDG_RUNTIME_DIR=/run/user/$(id -u)\n'
         'systemctl --user daemon-reload\n'
         'systemctl --user enable --now polymarket-recorder-pull.timer polymarket-foretest.timer\n'
         'systemctl --user list-timers --all --no-pager | grep -i polymarket\n')
     print('timers rc=%s\n%s' % (rc, out))
+    if rc:
+        raise SystemExit('timer install failed')
+    rc, out = ocsudo.run(
+        'set -e\ncd %s/PolyMarket_Bot/_DataMetricPulls\n'
+        'test -s pacing_backtest/elon_backfill_2025-09_to_now.parquet\n'
+        'ls canonical/auctions/elonmusk/*.parquet > /dev/null\n'
+        'test -s /home/openclaw/.claude/google-service-account.json\n' % REMOTE)
+    if rc:
+        raise SystemExit('foretest inputs missing on the HP Laptop: copy the X-API parquet, '
+                         'canonical/auctions/elonmusk and the service-account key (see HANDOFF.md)')
 
 
 if __name__ == '__main__':
