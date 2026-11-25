@@ -16,6 +16,7 @@ Rate limit: 0.5s between data-api calls.
 """
 from __future__ import annotations
 
+import gzip
 import json
 import sys
 import time
@@ -45,9 +46,13 @@ TRUMP_SLUG_PATTERNS = ["donald-trump-of-truth-social-posts", "donald-trump-of-tw
 def _http_get(url: str, timeout: int = 30):
     for attempt in range(MAX_RETRIES + 1):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (gamma-rebuild)"})
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (gamma-rebuild)",
+                                                       "Accept-Encoding": "gzip"})
             with urllib.request.urlopen(req, timeout=timeout) as r:
-                return json.loads(r.read())
+                b = r.read()
+                if r.headers.get("Content-Encoding") == "gzip":
+                    b = gzip.decompress(b)
+                return json.loads(b)
         except urllib.error.HTTPError as e:
             if e.code in RETRY_STATUSES and attempt < MAX_RETRIES:
                 time.sleep(2 ** attempt); continue
