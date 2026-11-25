@@ -107,10 +107,21 @@ def model_probs(proj, brackets, ratios):
 
 
 # ---------- live-ish data getters ----------
+def rec_read(columns, filters=None, recent_days=None):
+    """Read the recorder one day file at a time, only the needed columns and rows.
+    The full dataset is several GB; reading it whole runs out of memory."""
+    files = sorted(RECORDER.glob("[0-9]*.parquet"))
+    if recent_days:
+        files = files[-recent_days:]
+    parts = [pd.read_parquet(f, columns=columns, filters=filters) for f in files]
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=columns)
+
+
 def recorder_prices(slug, at_time):
     """Per-bracket YES mid from recorder BUY-side rows as-of at_time (else latest)."""
     if not RECORDER.exists(): return {}, None
-    d = pd.read_parquet(RECORDER)
+    d = rec_read(["slug", "event_type", "outcome", "side", "ts", "bucket", "best_bid", "best_ask", "price"],
+                 filters=[("slug", "==", slug)], recent_days=7)
     # YES book only (each bucket has YES+NO outcomes; we price the YES share)
     d = d[(d.slug == slug) & (d.event_type == "price_change")
           & (d.outcome == "YES") & (d.side == "BUY")].copy()
@@ -130,12 +141,15 @@ def recorder_prices(slug, at_time):
 
 def refresh_recorder():
     """Best-effort: pull the latest recorder chunks before snapshotting, so prices/token
-    maps are current. Token from ~/.credentials/shared.env. Silent no-op on any failure."""
+    maps are current. Token from $RECORDER_TOKEN, else ~/.credentials/shared.env.
+    Silent no-op on any failure."""
     import subprocess
     try:
+        tok = os.environ.get("RECORDER_TOKEN", "")
         cred = os.path.expanduser("~/.credentials/shared.env")
-        tok = next((l.split("=", 1)[1].strip().strip('"') for l in open(cred, encoding="utf-8")
-                    if l.startswith("RECORDER_TOKEN=")), "")
+        if not tok and os.path.exists(cred):
+            tok = next((l.split("=", 1)[1].strip().strip('"') for l in open(cred, encoding="utf-8")
+                        if l.startswith("RECORDER_TOKEN=")), "")
         if not tok:
             return
         pull = ROOT.parent/"polymarket-tweet-recorder"/"pull_and_merge.py"
@@ -153,7 +167,7 @@ def refresh_recorder():
 def yes_token_map(slug):
     """bucket -> YES token_id, discovered from the recorder parquet (tokens are stable)."""
     if not RECORDER.exists(): return {}
-    d = pd.read_parquet(RECORDER)
+    d = rec_read(["slug", "outcome", "bucket", "asset_id"], filters=[("slug", "==", slug)], recent_days=7)
     d = d[(d.slug == slug) & (d.outcome == "YES")]
     return {b: str(g.asset_id.iloc[0]) for b, g in d.groupby("bucket") if g.asset_id.notna().any()}
 
@@ -225,7 +239,7 @@ def sheet_count(ws, t):
     from google.oauth2 import service_account
     from googleapiclient.discovery import build
     creds = service_account.Credentials.from_service_account_file(
-        SA_KEY, scopes=["https://www.googleapis.com/auth/spreadsheets"], subject="darwin@xagency.com")
+        SA_KEY, scopes=["https://www.googleapis.com/auth/spreadsheets"], subject=os.environ["GOOGLE_DWD_SUBJECT"])
     sh = build("sheets", "v4", credentials=creds)
     v = sh.spreadsheets().values().get(spreadsheetId=SHEET_ID, range="Sheet1!A1:D5000").execute().get("values", [])
     rows = [r + [""]*(4-len(r)) for r in v]
@@ -252,7 +266,8 @@ def sheet_count(ws, t):
 # ---------- commands ----------
 def list_markets():
     if not RECORDER.exists(): print("no recorder data yet."); return
-    d = pd.read_parquet(RECORDER)
+    d = pd.concat([pd.read_parquet(f, columns=["slug", "bucket"]).drop_duplicates()
+                   for f in sorted(RECORDER.glob("[0-9]*.parquet"))]).drop_duplicates()
     now = pd.Timestamp.now(tz="UTC")
     print(f"now = {now}   (entry target = 50% of window)")
     for slug in sorted(d.slug.unique()):
@@ -320,7 +335,7 @@ def auto(lo=0.40, hi=0.70):
     """Hands-free: snapshot every LIVE 2-day market currently near its halfway mark
     that we haven't already logged in the last 18h. (Recorder file = 48h markets only.)"""
     if not RECORDER.exists(): print("no recorder data yet."); return
-    slugs = sorted(pd.read_parquet(RECORDER).slug.unique())
+    slugs = sorted(rec_read(["slug"], recent_days=3).slug.unique())
     now = pd.Timestamp.now(tz="UTC")
     logged = pd.read_parquet(LOG) if LOG.exists() else pd.DataFrame(columns=["slug", "logged_utc"])
     recent = set()
