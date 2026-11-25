@@ -66,6 +66,7 @@ _DataMetricPulls/l2_history/
 _DataMetricPulls/pmxt_pulled/
 _DataMetricPulls/legacy_sheets/
 _DataMetricPulls/foretest/*.parquet
+_DataMetricPulls/foretest/.stfolder/
 _DataMetricPulls/pacing_backtest/*.csv
 _DataMetricPulls/elon_schedule_analysis/*.parquet
 _DataMetricPulls/elon_schedule_analysis/*.csv
