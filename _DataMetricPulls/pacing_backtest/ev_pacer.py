@@ -22,7 +22,7 @@ Usage:
   python ev_pacer.py --positions pos.json     # pos.json: {"<20": {"shares":1000,"avg":0.005}, ...}
   python ev_pacer.py --dips                    # also flag seesaw dips vs recent price (slower)
 """
-import argparse, json, sys, urllib.request, urllib.parse, statistics
+import argparse, gzip, json, sys, urllib.request, urllib.parse, statistics
 from datetime import datetime, timezone
 
 try:
@@ -35,9 +35,12 @@ CLOB = "https://clob.polymarket.com"
 
 
 def gget(url, timeout=30):
-    r = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    r = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept-Encoding": "gzip"})
     with urllib.request.urlopen(r, timeout=timeout) as resp:
-        return json.loads(resp.read())
+        b = resp.read()
+        if resp.headers.get("Content-Encoding") == "gzip":
+            b = gzip.decompress(b)
+        return json.loads(b)
 
 
 def pick_market(slug):
